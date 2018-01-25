@@ -63,7 +63,10 @@ function santizeUrl(url) {
 function handleSource(req, res, next) {
     req.body.subscribed_url = santizeUrl(req.body.location);
     req.body.subscribed_referrer = santizeUrl(req.body.referrer);
-    if (validator.isEmpty(req.body.subscribed_referrer)) {
+    // A form submission will have a referer header. A direct submission via curl typically does not.
+    // The referrer to the page with the subscription form may be empty but must be present in the submitted form data.
+    if (validator.isEmpty(santizeUrl(req.get('referer') || '')) ||
+        req.body.referrer === undefined) {
         return next(new Error('Oops, something went wrong!'));
     }
     delete req.body.location;

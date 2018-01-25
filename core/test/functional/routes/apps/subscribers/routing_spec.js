@@ -44,10 +44,11 @@ describe('Subscriber: Routing', function () {
         it('[success]', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
                 .send({
                     email: 'test@ghost.org',
                     location: 'http://localhost:2368/about',
-                    referrer: 'http://localhost:2368',
+                    referrer: 'https://www.google.com/',
                     confirm: ''
                 })
                 .expect(200)
@@ -59,13 +60,51 @@ describe('Subscriber: Routing', function () {
                 });
         });
 
-        it('[error] email is invalid', function (done) {
+        it('[success] referrer is empty', function (done) {
+            request.post('/subscribe/')
+                .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
+                .send({
+                    email: 'test@ghost.org',
+                    location: 'http://localhost:2368/about',
+                    referrer: '',
+                    confirm: ''
+                })
+                .expect(200)
+                .end(function (err, res) {
+                    should.not.exist(err);
+                    res.text.should.containEql('Subscribed!');
+                    res.text.should.containEql('test@ghost.org');
+                    done();
+                });
+        });
+
+        it('[error] no referer header', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')
                 .send({
+                    email: 'test@ghost.org',
+                    location: 'http://localhost:2368/about',
+                    referrer: 'http://localhost:2368/',
+                    confirm: ''
+                })
+                .expect(200)
+                .end(function (err, res) {
+                    should.not.exist(err);
+                    res.text.should.not.containEql('Subscribed!');
+                    res.text.should.not.containEql('test@ghost.org');
+                    done();
+                });
+        });
+
+        it('[error] email is invalid', function (done) {
+            request.post('/subscribe/')
+                .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
+                .send({
                     email: 'alphabetazeta',
                     location: 'http://localhost:2368/about',
-                    referrer: 'http://localhost:2368',
+                    referrer: 'http://localhost:2368/',
                     confirm: ''
                 })
                 .expect(200)
@@ -81,6 +120,7 @@ describe('Subscriber: Routing', function () {
         it('[error] location is not defined', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
                 .send({
                     email: 'test@ghost.org',
                     referrer: 'http://localhost:2368',
@@ -98,6 +138,7 @@ describe('Subscriber: Routing', function () {
         it('[error] location does not resolve to a post', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
                 .send({
                     email: 'test@ghost.org',
                     location: '',
@@ -116,27 +157,10 @@ describe('Subscriber: Routing', function () {
         it('[error] referrer is not defined', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
                 .send({
                     email: 'test@ghost.org',
                     location: 'http://localhost:2368/about',
-                    confirm: ''
-                })
-                .expect(200)
-                .end(function (err, res) {
-                    should.not.exist(err);
-                    res.text.should.not.containEql('Subscribed!');
-                    res.text.should.not.containEql('test@ghost.org');
-                    done();
-                });
-        });
-
-        it('[error] referrer is empty', function (done) {
-            request.post('/subscribe/')
-                .set('Content-type', 'application/x-www-form-urlencoded')
-                .send({
-                    email: 'test@ghost.org',
-                    location: 'http://localhost:2368/about',
-                    referrer: '',
                     confirm: ''
                 })
                 .expect(200)
@@ -151,6 +175,7 @@ describe('Subscriber: Routing', function () {
         it('[error] confirm is not defined', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
                 .send({
                     email: 'test@ghost.org',
                     location: 'http://localhost:2368/about',
@@ -168,6 +193,7 @@ describe('Subscriber: Routing', function () {
         it('[error] confirm is not empty', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')
+                .set('Referer', 'http://localhost:2368/about')
                 .send({
                     email: 'test@ghost.org',
                     location: 'http://localhost:2368/about',

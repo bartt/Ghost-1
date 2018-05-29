@@ -1,12 +1,13 @@
-var SimpleDom = require('simple-dom'),
-    tokenizer = require('simple-html-tokenizer').tokenize,
-    parser;
-
 module.exports = {
-    name: 'card-html',
+    name: 'html',
     type: 'dom',
     render(opts) {
-        parser = new SimpleDom.HTMLParser(tokenizer, opts.env.dom, SimpleDom.voidMap);
-        return parser.parse('<div class="kg-card-html">' + opts.payload.html + '</div>');
+        if (!opts.payload.html) {
+            return '';
+        }
+
+        // use the SimpleDOM document to create a raw HTML section.
+        // avoids parsing/rendering of potentially broken or unsupported HTML
+        return opts.env.dom.createRawHTMLSection(opts.payload.html);
     }
 };

@@ -1,16 +1,14 @@
-'use strict';
-
 const debug = require('ghost-ignition').debug('importer:base'),
+    _ = require('lodash'),
+    Promise = require('bluebird'),
+    ObjectId = require('bson-objectid'),
     common = require('../../../../lib/common'),
     sequence = require('../../../../lib/promise/sequence'),
-    models = require('../../../../models'),
-    _ = require('lodash'),
-    Promise = require('bluebird');
+    models = require('../../../../models');
 
 class Base {
-    constructor(options) {
-        let self = this;
-
+    constructor(allDataFromFile, options) {
+        this.options = options;
         this.modelName = options.modelName;
 
         this.problems = [];
@@ -22,34 +20,51 @@ class Base {
         };
 
         this.legacyKeys = {};
-        this.legacyMapper = function legacyMapper(item) {
-            return _.mapKeys(item, function matchLegacyKey(value, key) {
-                return self.legacyKeys[key] || key;
+        this.legacyMapper = (item) => {
+            return _.mapKeys(item, (value, key) => {
+                return this.legacyKeys[key] || key;
             });
         };
 
         this.dataKeyToImport = options.dataKeyToImport;
-        this.dataToImport = _.cloneDeep(options[this.dataKeyToImport] || []);
+        this.dataToImport = _.cloneDeep(allDataFromFile[this.dataKeyToImport] || []);
+
+        this.importedDataToReturn = [];
         this.importedData = [];
 
-        // NOTE: e.g. properties are removed or properties are added/changed before importing
-        _.each(options, function (obj, key) {
-            if (options.requiredData.indexOf(key) !== -1) {
-                self[key] = _.cloneDeep(obj);
-            }
-        });
+        this.requiredFromFile = {};
+        this.requiredImportedData = {};
+        this.requiredExistingData = {};
 
-        if (!this.users) {
-            this.users = _.cloneDeep(options.users);
+        if (!this.options.requiredImportedData) {
+            this.options.requiredImportedData = ['users'];
+        } else {
+            this.options.requiredImportedData.push('users');
         }
+
+        if (!this.options.requiredExistingData) {
+            this.options.requiredExistingData = ['users'];
+        } else {
+            this.options.requiredExistingData.push('users');
+        }
+
+        if (!this.options.requiredFromFile) {
+            this.options.requiredFromFile = ['users'];
+        } else {
+            this.options.requiredFromFile.push('users');
+        }
+
+        _.each(this.options.requiredFromFile, (key) => {
+            this.requiredFromFile[key] = _.cloneDeep(allDataFromFile[key]);
+        });
     }
 
     /**
      * Never ever import these attributes!
      */
     stripProperties(properties) {
-        _.each(this.dataToImport, function (obj) {
-            _.each(properties, function (property) {
+        _.each(this.dataToImport, (obj) => {
+            _.each(properties, (property) => {
                 delete obj[property];
             });
         });
@@ -59,16 +74,14 @@ class Base {
      * Clean invalid values.
      */
     sanitizeValues() {
-        let temporaryDate, self = this;
-
-        _.each(this.dataToImport, function (obj) {
-            _.each(_.pick(obj, ['updated_at', 'created_at', 'published_at']), function (value, key) {
-                temporaryDate = new Date(value);
+        _.each(this.dataToImport, (obj) => {
+            _.each(_.pick(obj, ['updated_at', 'created_at', 'published_at']), (value, key) => {
+                let temporaryDate = new Date(value);
 
                 if (isNaN(temporaryDate)) {
-                    self.problems.push({
+                    this.problems.push({
                         message: 'Date is in a wrong format and invalid. It was replaced with the current timestamp.',
-                        help: self.modelName,
+                        help: this.modelName,
                         context: JSON.stringify(obj)
                     });
 
@@ -78,27 +91,38 @@ class Base {
         });
     }
 
+    generateIdentifier() {
+        _.each(this.dataToImport, (obj) => {
+            obj.id = ObjectId.generate();
+        });
+    }
+
+    fetchExisting() {
+        return Promise.resolve();
+    }
+
     beforeImport() {
         this.stripProperties(['id']);
         this.sanitizeValues();
+        this.generateIdentifier();
         return Promise.resolve();
     }
 
     handleError(errs, obj) {
-        let self = this, errorsToReject = [], problems = [];
+        let errorsToReject = [], problems = [];
 
         // CASE: validation errors, see models/base/events.js onValidate
         if (!_.isArray(errs)) {
             errs = [errs];
         }
 
-        _.each(errs, function (err) {
+        _.each(errs, (err) => {
             if (err.code && err.message.toLowerCase().indexOf('unique') !== -1) {
-                if (self.errorConfig.allowDuplicates) {
-                    if (self.errorConfig.returnDuplicates) {
+                if (this.errorConfig.allowDuplicates) {
+                    if (this.errorConfig.returnDuplicates) {
                         problems.push({
                             message: 'Entry was not imported and ignored. Detected duplicated entry.',
-                            help: self.modelName,
+                            help: this.modelName,
                             context: JSON.stringify(obj),
                             err: err
                         });
@@ -106,16 +130,16 @@ class Base {
                 } else {
                     errorsToReject.push(new common.errors.DataImportError({
                         message: 'Detected duplicated entry.',
-                        help: self.modelName,
+                        help: this.modelName,
                         context: JSON.stringify(obj),
                         err: err
                     }));
                 }
             } else if (err instanceof common.errors.NotFoundError) {
-                if (self.showNotFoundWarning) {
+                if (this.errorConfig.showNotFoundWarning) {
                     problems.push({
                         message: 'Entry was not imported and ignored. Could not find entry.',
-                        help: self.modelName,
+                        help: this.modelName,
                         context: JSON.stringify(obj),
                         err: err
                     });
@@ -125,7 +149,7 @@ class Base {
                     err = new common.errors.DataImportError({
                         message: err.message,
                         context: JSON.stringify(obj),
-                        help: self.modelName,
+                        help: this.modelName,
                         errorType: err.errorType,
                         err: err
                     });
@@ -148,21 +172,159 @@ class Base {
         return Promise.reject(errorsToReject);
     }
 
-    doImport(options) {
+    /**
+     * Data is now prepared. Last step is to replace identifiers.
+     *
+     * `dataToImport`: the objects to import (contain the new ID already)
+     * `requiredExistingData`: the importer allows you to ask for existing database objects
+     * `requiredFromFile`: the importer allows you to ask for data from the file
+     * `requiredImportedData`: the importer allows you to ask for already imported data
+     */
+    replaceIdentifiers() {
+        const ownerUserId = _.find(this.requiredExistingData.users, (user) => {
+            if (user.roles[0].name === 'Owner') {
+                return true;
+            }
+        }).id;
+
+        let userReferenceProblems = {};
+
+        const handleObject = (obj, key) => {
+            if (!obj.hasOwnProperty(key)) {
+                return;
+            }
+
+            // CASE: you import null, fallback to owner
+            if (!obj[key]) {
+                if (!userReferenceProblems[obj.id]) {
+                    userReferenceProblems[obj.id] = {obj: _.cloneDeep(obj), keys: []};
+                }
+
+                userReferenceProblems[obj.id].keys.push(key);
+                obj[key] = ownerUserId;
+                return;
+            }
+
+            // CASE: first match the user reference with in the imported file
+            let userFromFile = _.find(this.requiredFromFile.users, {id: obj[key]});
+
+            if (!userFromFile) {
+                // CASE: if user does not exist in file, try to lookup the existing db users
+                let existingUser = _.find(this.requiredExistingData.users, {id: obj[key].toString()});
+
+                // CASE: fallback to owner
+                if (!existingUser) {
+                    if (!userReferenceProblems[obj.id]) {
+                        userReferenceProblems[obj.id] = {obj: _.cloneDeep(obj), keys: []};
+                    }
+
+                    userReferenceProblems[obj.id].keys.push(key);
+
+                    obj[key] = ownerUserId;
+                    return;
+                } else {
+                    // CASE: user exists in the database, ID is correct, skip
+                    return;
+                }
+            }
+
+            // CASE: users table is the first data we insert. we have no access to the imported data yet
+            // Result: `this.requiredImportedData.users` will be empty.
+            // We already generate identifiers for each object in the importer layer. Accessible via `dataToImport`.
+            if (this.modelName === 'User' && !this.requiredImportedData.users.length) {
+                let userToImport = _.find(this.dataToImport, {slug: userFromFile.slug});
+
+                if (userToImport) {
+                    obj[key] = userToImport.id;
+                    return;
+                } else {
+                    // CASE: unknown
+                    return;
+                }
+            }
+
+            // CASE: user exists in the file, let's find his db id
+            // NOTE: lookup by email, because slug can change on insert
+            let importedUser = _.find(this.requiredImportedData.users, {email: userFromFile.email});
+
+            // CASE: found. let's assign the new ID
+            if (importedUser) {
+                obj[key] = importedUser.id;
+                return;
+            }
+
+            // CASE: user was not imported, let's figure out if the user exists in the database
+            let existingUser = _.find(this.requiredExistingData.users, {slug: userFromFile.slug});
+
+            if (!existingUser) {
+                // CASE: let's try by ID
+                existingUser = _.find(this.requiredExistingData.users, {id: userFromFile.id.toString()});
+
+                if (!existingUser) {
+                    if (!userReferenceProblems[obj.id]) {
+                        userReferenceProblems[obj.id] = {obj: _.cloneDeep(obj), keys: []};
+                    }
+
+                    userReferenceProblems[obj.id].keys.push(key);
+
+                    obj[key] = ownerUserId;
+                }
+            } else {
+                obj[key] = existingUser.id;
+            }
+        };
+
+        // Iterate over all possible user relations
+        _.each(this.dataToImport, (obj) => {
+            _.each([
+                'author_id',
+                'published_by',
+                'created_by',
+                'updated_by'
+            ], (key) => {
+                return handleObject(obj, key);
+            });
+        });
+
+        _.each(userReferenceProblems, (entry) => {
+            this.problems.push({
+                message: 'Entry was imported, but we were not able to resolve the following user references: ' +
+                entry.keys.join(', ') + '. The user does not exist, fallback to owner user.',
+                help: this.modelName,
+                context: JSON.stringify(entry.obj)
+            });
+        });
+    }
+
+    doImport(options, importOptions) {
         debug('doImport', this.modelName, this.dataToImport.length);
 
-        let self = this, ops = [];
+        let ops = [];
 
-        _.each(this.dataToImport, function forEachDataToImport(obj) {
-            ops.push(function addModel() {
-                return models[self.modelName].add(obj, options)
-                    .then(function (importedModel) {
-                        obj.model = importedModel.toJSON();
-                        self.importedData.push(obj.model);
+        _.each(this.dataToImport, (obj) => {
+            ops.push(() => {
+                return models[this.modelName].add(obj, options)
+                    .then((importedModel) => {
+                        obj.model = {
+                            id: importedModel.id
+                        };
+
+                        if (importOptions.returnImportedData) {
+                            this.importedDataToReturn.push(importedModel.toJSON());
+                        }
+
+                        // for identifier lookup
+                        this.importedData.push({
+                            id: importedModel.id,
+                            slug: importedModel.get('slug'),
+                            originalSlug: obj.slug,
+                            email: importedModel.get('email')
+                        });
+
                         return importedModel;
                     })
-                    .catch(function (err) {
-                        return self.handleError(err, obj);
+                    .catch((err) => {
+                        return this.handleError(err, obj);
                     })
                     .reflect();
             });
@@ -176,72 +338,6 @@ class Base {
          *       Promise.map(.., {concurrency: Int}) was not really improving the end performance for me.
          */
         return sequence(ops);
-    }
-
-    /**
-     * Update all user reference fields e.g. published_by
-     *
-     * Background:
-     *  - we never import the id field
-     *  - almost each imported model has a reference to a user reference
-     *  - we update all fields after the import (!)
-     */
-    afterImport(options) {
-        let self = this, dataToEdit = {}, oldUser, context;
-
-        debug('afterImport', this.modelName);
-
-        return models.User.getOwnerUser(options)
-            .then(function (ownerUser) {
-                return Promise.each(self.dataToImport, function (obj) {
-                    if (!obj.model) {
-                        return;
-                    }
-
-                    return Promise.each(['author_id', 'published_by', 'created_by', 'updated_by'], function (key) {
-                        // CASE: not all fields exist on each model, skip them if so
-                        if (!obj[key]) {
-                            return Promise.resolve();
-                        }
-
-                        oldUser = _.find(self.users, {id: obj[key]});
-
-                        if (!oldUser) {
-                            self.problems.push({
-                                message: 'Entry was imported, but we were not able to update user reference field: ' + key,
-                                help: self.modelName,
-                                context: JSON.stringify(obj)
-                            });
-
-                            return;
-                        }
-
-                        return models.User.findOne({
-                            email: oldUser.email,
-                            status: 'all'
-                        }, options).then(function (userModel) {
-                            // CASE: user could not be imported e.g. multiple roles attached
-                            if (!userModel) {
-                                userModel = {
-                                    id: ownerUser.id
-                                };
-                            }
-
-                            dataToEdit = {};
-                            dataToEdit[key] = userModel.id;
-
-                            // CASE: updated_by is taken from the context object
-                            if (key === 'updated_by') {
-                                context = {context: {user: userModel.id}};
-                            } else {
-                                context = {};
-                            }
-
-                            return models[self.modelName].edit(dataToEdit, _.merge({}, options, {id: obj.model.id}, context));
-                        });
-                    });
-                });
-            });
     }
 }
 

@@ -17,13 +17,22 @@ function onlyFixtures(slug) {
 describe('Tags API', function () {
     // Keep the DB clean
     before(testUtils.teardown);
-    afterEach(testUtils.teardown);
-    beforeEach(testUtils.setup('users:roles', 'perms:tag', 'perms:init', 'posts'));
+    after(testUtils.teardown);
+
+    before(testUtils.setup('settings', 'users:roles', 'perms:tag', 'perms:init'));
 
     should.exist(TagAPI);
 
     describe('Add', function () {
         var newTag;
+
+        beforeEach(function () {
+            return testUtils.fixtures.insertTags();
+        });
+
+        afterEach(function () {
+            return testUtils.truncate('tags');
+        });
 
         beforeEach(function () {
             newTag = _.clone(_.omit(testUtils.DataGenerator.forKnex.createTag(testUtils.DataGenerator.Content.tags[0]), 'id'));
@@ -50,6 +59,17 @@ describe('Tags API', function () {
                 }).catch(done);
         });
 
+        it('can add a tag (author)', function (done) {
+            TagAPI.add({tags: [newTag]}, testUtils.context.author)
+            .then(function (results) {
+                should.exist(results);
+                should.exist(results.tags);
+                results.tags.length.should.be.above(0);
+                results.tags[0].visibility.should.eql('public');
+                done();
+            }).catch(done);
+        });
+
         it('add internal tag', function (done) {
             TagAPI
                 .add({tags: [{name: '#test'}]}, testUtils.context.editor)
@@ -62,6 +82,15 @@ describe('Tags API', function () {
                     results.tags[0].slug.should.eql('hash-test');
                     done();
                 }).catch(done);
+        });
+
+        it('CANNOT add tag (contributor)', function (done) {
+            TagAPI.add({tags: [newTag]}, testUtils.context.contributor)
+            .then(function () {
+                done(new Error('Add tag is not denied for contributor.'));
+            }, function () {
+                done();
+            }).catch(done);
         });
 
         it('No-auth CANNOT add tag', function (done) {
@@ -88,6 +117,14 @@ describe('Tags API', function () {
     });
 
     describe('Edit', function () {
+        beforeEach(function () {
+            return testUtils.fixtures.insertTags();
+        });
+
+        afterEach(function () {
+            return testUtils.truncate('tags');
+        });
+
         var newTagName = 'tagNameUpdated',
             firstTag = testUtils.DataGenerator.Content.tags[0].id;
 
@@ -109,6 +146,15 @@ describe('Tags API', function () {
                     results.tags.length.should.be.above(0);
                     done();
                 }).catch(done);
+        });
+
+        it('CANNOT edit a tag (author)', function (done) {
+            TagAPI.edit({tags: [{name: newTagName}]}, _.extend({}, context.author, {id: firstTag}))
+            .then(function () {
+                done(new Error('Add tag is not denied for author.'));
+            }, function () {
+                done();
+            }).catch(done);
         });
 
         it('No-auth CANNOT edit tag', function (done) {
@@ -134,6 +180,14 @@ describe('Tags API', function () {
     });
 
     describe('Destroy', function () {
+        beforeEach(function () {
+            return testUtils.fixtures.insertTags();
+        });
+
+        afterEach(function () {
+            return testUtils.truncate('tags');
+        });
+
         var firstTag = testUtils.DataGenerator.Content.tags[0].id;
 
         it('can destroy Tag', function (done) {
@@ -147,10 +201,14 @@ describe('Tags API', function () {
     });
 
     describe('Browse', function () {
-        beforeEach(function (done) {
-            testUtils.fixtures.insertMoreTags().then(function () {
-                done();
-            });
+        before(function () {
+            return testUtils.fixtures.insertPostsAndTags();
+        });
+
+        after(testUtils.teardown);
+
+        before(function () {
+            return testUtils.fixtures.insertExtraTags();
         });
 
         it('can browse (internal)', function (done) {
@@ -327,6 +385,8 @@ describe('Tags API', function () {
     });
 
     describe('Read', function () {
+        before(testUtils.setup('users:roles', 'posts'));
+
         it('returns count.posts with include count.posts', function (done) {
             TagAPI.read({context: {user: 1}, include: 'count.posts', slug: 'kitchen-sink'}).then(function (results) {
                 should.exist(results);

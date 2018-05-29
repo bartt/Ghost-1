@@ -1,4 +1,3 @@
-/*jshint expr:true*/
 var Promise = require('bluebird'),
     _ = require('lodash'),
     fs = require('fs-extra'),
@@ -12,8 +11,8 @@ var Promise = require('bluebird'),
     KnexMigrator = require('knex-migrator'),
     ghost = require('../../server'),
     common = require('../../server/lib/common'),
-    db = require('../../server/data/db'),
     fixtureUtils = require('../../server/data/schema/fixtures/utils'),
+    db = require('../../server/data/db'),
     schema = require('../../server/data/schema').tables,
     schemaTables = Object.keys(schema),
     models = require('../../server/models'),
@@ -41,12 +40,14 @@ var Promise = require('bluebird'),
     unmockNotExistingModule,
     teardown,
     setup,
+    truncate,
     doAuth,
     createUser,
     createPost,
     login,
     togglePermalinks,
     startGhost,
+    configureGhost,
 
     initFixtures,
     initData,
@@ -59,77 +60,76 @@ require('./assertions');
 /** TEST FIXTURES **/
 fixtures = {
     insertPosts: function insertPosts(posts) {
-        return Promise.resolve(db.knex('posts').insert(posts));
+        return Promise.map(posts, function (post) {
+            return models.Post.add(post, module.exports.context.internal);
+        });
     },
 
     insertPostsAndTags: function insertPostsAndTags() {
-        return Promise.resolve(db.knex('posts').insert(DataGenerator.forKnex.posts)).then(function () {
-            return db.knex('tags').insert(DataGenerator.forKnex.tags);
+        return Promise.map(DataGenerator.forKnex.tags, function (tag) {
+            return models.Tag.add(tag, module.exports.context.internal);
         }).then(function () {
-            return db.knex('posts_tags').insert(DataGenerator.forKnex.posts_tags);
+            return Promise.map(_.cloneDeep(DataGenerator.forKnex.posts), function (post) {
+                let postTagRelations = _.filter(DataGenerator.forKnex.posts_tags, {post_id: post.id});
+                let postAuthorsRelations = _.filter(DataGenerator.forKnex.posts_authors, {post_id: post.id});
+
+                postTagRelations = _.map(postTagRelations, function (postTagRelation) {
+                    return _.find(DataGenerator.forKnex.tags, {id: postTagRelation.tag_id});
+                });
+
+                postAuthorsRelations = _.map(postAuthorsRelations, function (postAuthorsRelation) {
+                    return _.find(DataGenerator.forKnex.users, {id: postAuthorsRelation.author_id});
+                });
+
+                post.tags = postTagRelations;
+                post.authors = postAuthorsRelations;
+                return models.Post.add(post, module.exports.context.internal);
+            });
         });
     },
 
     insertMultiAuthorPosts: function insertMultiAuthorPosts(max) {
         /*jshint unused:false*/
-        var author,
-            authors,
-            i, j, k = postsInserted,
+        let i, j, k = 0,
             posts = [];
 
         max = max || 50;
+
         // insert users of different roles
         return Promise.resolve(fixtures.createUsersWithRoles()).then(function () {
-            // create the tags
-            return db.knex('tags').insert(DataGenerator.forKnex.tags);
+            return Promise.map(DataGenerator.forKnex.tags, function (tag) {
+                return models.Tag.add(tag, module.exports.context.internal);
+            });
         }).then(function () {
-            return db.knex('users').select('id');
+            return Promise.all([
+                models.User.fetchAll(_.merge({columns: ['id']}, module.exports.context.internal)),
+                models.Tag.fetchAll(_.merge({columns: ['id']}, module.exports.context.internal))
+            ]);
         }).then(function (results) {
-            authors = _.map(results, 'id');
+            let users = results[0],
+                tags = results[1];
+
+            tags = tags.toJSON();
+
+            users = users.toJSON();
+            users = _.map(users, 'id');
 
             // Let's insert posts with random authors
             for (i = 0; i < max; i += 1) {
-                author = authors[i % authors.length];
+                const author = users[i % users.length];
                 posts.push(DataGenerator.forKnex.createGenericPost(k, null, null, author));
                 k = k + 1;
             }
 
-            // Keep track so we can run this function again safely
-            postsInserted = k;
-
-            return sequence(_.times(posts.length, function (index) {
-                return function () {
-                    return db.knex('posts').insert(posts[index]);
-                };
-            }));
-        }).then(function () {
-            return Promise.all([
-                db.knex('posts').orderBy('id', 'asc').select('id'),
-                db.knex('tags').select('id')
-            ]);
-        }).then(function (results) {
-            var posts = _.map(results[0], 'id'),
-                tags = _.map(results[1], 'id'),
-                promises = [],
-                i;
-
-            if (max > posts.length) {
-                throw new Error('Trying to add more posts_tags than the number of posts. ' + max + ' ' + posts.length);
-            }
-
-            for (i = 0; i < max; i += 1) {
-                promises.push(DataGenerator.forKnex.createPostsTags(posts[i], tags[i % tags.length]));
-            }
-
-            return sequence(_.times(promises.length, function (index) {
-                return function () {
-                    return db.knex('posts_tags').insert(promises[index]);
-                };
-            }));
+            return Promise.map(posts, function (post, index) {
+                posts[index].authors = [{id: posts[index].author_id}];
+                posts[index].tags = [tags[Math.floor(Math.random() * (tags.length - 1))]];
+                return models.Post.add(posts[index], module.exports.context.internal);
+            });
         });
     },
 
-    insertMorePosts: function insertMorePosts(max) {
+    insertExtraPosts: function insertExtraPosts(max) {
         var lang,
             status,
             posts = [],
@@ -152,14 +152,22 @@ fixtures = {
         // Keep track so we can run this function again safely
         postsInserted = k;
 
-        return sequence(_.times(posts.length, function (index) {
-            return function () {
-                return db.knex('posts').insert(posts[index]);
-            };
-        }));
+        return models.User.getOwnerUser(module.exports.context.internal)
+            .then(function (ownerUser) {
+                return Promise.map(posts, function (post, index) {
+                    posts[index].authors = [ownerUser.toJSON()];
+                    return models.Post.add(posts[index], module.exports.context.internal);
+                });
+            });
     },
 
-    insertMoreTags: function insertMoreTags(max) {
+    insertTags: function insertTags() {
+        return Promise.map(DataGenerator.forKnex.tags, function (tag) {
+            return models.Tag.add(tag, module.exports.context.internal);
+        });
+    },
+
+    insertExtraTags: function insertExtraTags(max) {
         max = max || 50;
         var tags = [],
             tagName,
@@ -170,46 +178,44 @@ fixtures = {
             tags.push(DataGenerator.forKnex.createBasic({name: tagName, slug: tagName}));
         }
 
-        return sequence(_.times(tags.length, function (index) {
-            return function () {
-                return db.knex('tags').insert(tags[index]);
-            };
-        }));
+        return Promise.map(tags, function (tag, index) {
+            return models.Tag.add(tags[index], module.exports.context.internal);
+        });
     },
 
-    insertMorePostsTags: function insertMorePostsTags(max) {
+    insertExtraPostsTags: function insertExtraPostsTags(max) {
         max = max || 50;
 
         return Promise.all([
-            db.knex('posts').orderBy('id', 'asc').select('id'),
-            db.knex('tags').select('id', 'name')
+            models.Post.fetchAll(_.merge({columns: ['id'], withRelated: 'tags'}, module.exports.context.internal)),
+            models.Tag.fetchAll(_.merge({columns: ['id', 'name']}, module.exports.context.internal))
         ]).then(function (results) {
-            var posts = _.map(results[0], 'id'),
-                injectionTagId = _.chain(results[1])
+            let posts = results[0].toJSON();
+            let tags = results[1].toJSON();
+
+            const injectionTagId = _.chain(tags)
                     .filter({name: 'injection'})
                     .map('id')
-                    .value()[0],
-                promises = [],
-                i;
+                    .value()[0];
 
             if (max > posts.length) {
                 throw new Error('Trying to add more posts_tags than the number of posts.');
             }
 
-            for (i = 0; i < max; i += 1) {
-                promises.push(DataGenerator.forKnex.createPostsTags(posts[i], injectionTagId));
-            }
+            return Promise.map(posts.slice(0, max), function (post) {
+                post.tags = post.tags ? post.tags : [];
 
-            return sequence(_.times(promises.length, function (index) {
-                return function () {
-                    return db.knex('posts_tags').insert(promises[index]);
-                };
-            }));
+                return models.Post.edit({
+                    tags: post.tags.concat([_.find(DataGenerator.Content.tags, {id: injectionTagId})])
+                }, _.merge({id: post.id}, module.exports.context.internal));
+            });
         });
     },
 
     insertRoles: function insertRoles() {
-        return db.knex('roles').insert(DataGenerator.forKnex.roles);
+        return Promise.map(DataGenerator.forKnex.roles, function (role) {
+            return models.Role.add(role, module.exports.context.internal);
+        });
     },
 
     initOwnerUser: function initOwnerUser() {
@@ -218,65 +224,89 @@ fixtures = {
         user = DataGenerator.forKnex.createBasic(user);
         user = _.extend({}, user, {status: 'inactive'});
 
-        return db.knex('roles').insert(DataGenerator.forKnex.roles).then(function () {
-            return db.knex('users').insert(user);
+        return Promise.map(DataGenerator.forKnex.roles, function (role) {
+            return models.Role.add(role, module.exports.context.internal);
         }).then(function () {
-            return db.knex('roles_users').insert(DataGenerator.forKnex.roles_users[0]);
+            const userRolesRelation = _.cloneDeep(DataGenerator.forKnex.roles_users[0]);
+            user.roles = _.filter(DataGenerator.forKnex.roles, {id: userRolesRelation.role_id});
+            return models.User.add(user, module.exports.context.internal);
         });
     },
 
     insertOwnerUser: function insertOwnerUser() {
-        var user;
-
-        user = DataGenerator.forKnex.createUser(DataGenerator.Content.users[0]);
-
-        return db.knex('users').insert(user).then(function () {
-            return db.knex('roles_users').insert(DataGenerator.forKnex.roles_users[0]);
-        });
+        const user = _.cloneDeep(DataGenerator.forKnex.users[0]);
+        user.roles = [DataGenerator.forKnex.roles[3]];
+        return models.User.add(user, module.exports.context.internal);
     },
 
     overrideOwnerUser: function overrideOwnerUser(slug) {
-        var user;
-        user = DataGenerator.forKnex.createUser(DataGenerator.Content.users[0]);
+        return models.User.getOwnerUser(module.exports.context.internal)
+            .then(function (ownerUser) {
+                var user = DataGenerator.forKnex.createUser(DataGenerator.Content.users[0]);
 
-        if (slug) {
-            user.slug = slug;
-        }
+                if (slug) {
+                    user.slug = slug;
+                }
 
-        return db.knex('users')
-            .where('id', '=', DataGenerator.Content.users[0].id)
-            .update(user);
+                return models.User.edit(user, _.merge({id: ownerUser.id}, module.exports.context.internal));
+            });
     },
 
     changeOwnerUserStatus: function changeOwnerUserStatus(options) {
-        return db.knex('users')
-            .where('slug', '=', options.slug)
-            .update({
-                status: options.status
+        return models.User.getOwnerUser(module.exports.context.internal)
+            .then(function (user) {
+                return models.User.edit({status: options.status}, _.merge({id: user.id}, module.exports.context.internal));
             });
     },
 
     createUsersWithRoles: function createUsersWithRoles() {
-        return db.knex('roles').insert(DataGenerator.forKnex.roles).then(function () {
-            return db.knex('users').insert(DataGenerator.forKnex.users);
+        return Promise.map(DataGenerator.forKnex.roles, function (role) {
+            return models.Role.add(role, module.exports.context.internal);
         }).then(function () {
-            return db.knex('roles_users').insert(DataGenerator.forKnex.roles_users);
+            return Promise.map(_.cloneDeep(DataGenerator.forKnex.users), function (user) {
+                let userRolesRelations = _.filter(DataGenerator.forKnex.roles_users, {user_id: user.id});
+
+                userRolesRelations = _.map(userRolesRelations, function (userRolesRelation) {
+                    return _.find(DataGenerator.forKnex.roles, {id: userRolesRelation.role_id});
+                });
+
+                user.roles = userRolesRelations;
+                return models.User.add(user, module.exports.context.internal);
+            });
+        });
+    },
+
+    resetRoles: function resetRoles() {
+        return Promise.map(_.cloneDeep(DataGenerator.forKnex.users), function (user) {
+            let userRolesRelations = _.filter(DataGenerator.forKnex.roles_users, {user_id: user.id});
+
+            userRolesRelations = _.map(userRolesRelations, function (userRolesRelation) {
+                return _.find(DataGenerator.forKnex.roles, {id: userRolesRelation.role_id});
+            });
+
+            user.roles = userRolesRelations;
+            return models.User.edit(user, _.merge({id: user.id}, module.exports.context.internal));
         });
     },
 
     createUsersWithoutOwner: function createUsersWithoutOwner() {
-        var usersWithoutOwner = DataGenerator.forKnex.users.slice(1);
+        var usersWithoutOwner =  _.cloneDeep(DataGenerator.forKnex.users.slice(1));
 
-        return db.knex('users').insert(usersWithoutOwner)
-            .then(function () {
-                return db.knex('roles_users').insert(DataGenerator.forKnex.roles_users);
+        return Promise.map(usersWithoutOwner, function (user) {
+            let userRolesRelations = _.filter(DataGenerator.forKnex.roles_users, {user_id: user.id});
+
+            userRolesRelations = _.map(userRolesRelations, function (userRolesRelation) {
+                return _.find(DataGenerator.forKnex.roles, {id: userRolesRelation.role_id});
             });
+
+            user.roles = userRolesRelations;
+            return models.User.add(user, module.exports.context.internal);
+        });
     },
 
     createExtraUsers: function createExtraUsers() {
         // grab 3 more users
-        var extraUsers = DataGenerator.Content.users.slice(2, 5);
-
+        var extraUsers =  _.cloneDeep(DataGenerator.Content.users.slice(2, 6));
         extraUsers = _.map(extraUsers, function (user) {
             return DataGenerator.forKnex.createUser(_.extend({}, user, {
                 id: ObjectId.generate(),
@@ -285,52 +315,52 @@ fixtures = {
             }));
         });
 
+        const roles = {};
+        roles[extraUsers[0].id] = DataGenerator.Content.roles[0];
+        roles[extraUsers[1].id] = DataGenerator.Content.roles[1];
+        roles[extraUsers[2].id] = DataGenerator.Content.roles[2];
+        roles[extraUsers[3].id] = DataGenerator.Content.roles[4];
+
         // @TODO: remove when overhauling test env
         // tests need access to the extra created users (especially to the created id)
         // replacement for admin2, editor2 etc
         DataGenerator.Content.extraUsers = extraUsers;
 
-        return db.knex('users').insert(extraUsers).then(function () {
-            return db.knex('roles_users').insert([
-                {id: ObjectId.generate(), user_id: extraUsers[0].id, role_id: DataGenerator.Content.roles[0].id},
-                {id: ObjectId.generate(), user_id: extraUsers[1].id, role_id: DataGenerator.Content.roles[1].id},
-                {id: ObjectId.generate(), user_id: extraUsers[2].id, role_id: DataGenerator.Content.roles[2].id}
-            ]);
+        return Promise.map(extraUsers, function (user) {
+            user.roles =  roles[user.id];
+            return models.User.add(user, module.exports.context.internal);
         });
     },
 
     insertOneUser: function insertOneUser(options) {
         options = options || {};
 
-        return db.knex('users').insert(DataGenerator.forKnex.createUser({
+        return models.User.add({
+            name: options.name,
             email: options.email,
             slug: options.slug,
             status: options.status
-        }));
+        }, module.exports.context.internal);
     },
 
     // Creates a client, and access and refresh tokens for user with index or 2 by default
     createTokensForUser: function createTokensForUser(index) {
-        return db.knex('clients').insert(DataGenerator.forKnex.clients).then(function () {
-            return db.knex('accesstokens').insert(DataGenerator.forKnex.createToken({
-                user_id: DataGenerator.Content.users[index || 2].id
-            }));
+        return Promise.map(DataGenerator.forKnex.clients, function (client) {
+            return models.Client.add(client, module.exports.context.internal);
         }).then(function () {
-            return db.knex('refreshtokens').insert(DataGenerator.forKnex.createToken({
+            return models.Accesstoken.add(DataGenerator.forKnex.createToken({
                 user_id: DataGenerator.Content.users[index || 2].id
-            }));
+            }), module.exports.context.internal);
+        }).then(function () {
+            return models.Refreshtoken.add(DataGenerator.forKnex.createToken({
+                user_id: DataGenerator.Content.users[index || 2].id
+            }), module.exports.context.internal);
         });
     },
 
-    insertOne: function insertOne(obj, fn, index) {
-        return db.knex(obj)
-            .insert(DataGenerator.forKnex[fn](DataGenerator.Content[obj][index || 0]));
-    },
-
-    insertApps: function insertApps() {
-        return db.knex('apps').insert(DataGenerator.forKnex.apps).then(function () {
-            return db.knex('app_fields').insert(DataGenerator.forKnex.app_fields);
-        });
+    insertOne: function insertOne(modelName, tableName, fn, index) {
+        const obj = DataGenerator.forKnex[fn](DataGenerator.Content[tableName][index || 0]);
+        return models[modelName].add(obj, module.exports.context.internal);
     },
 
     getImportFixturePath: function (filename) {
@@ -362,15 +392,16 @@ fixtures = {
     },
 
     permissionsFor: function permissionsFor(obj) {
-        var permsToInsert = fixtureUtils.findModelFixtures('Permission', {object_type: obj}).entries,
+        var permsToInsert =  _.cloneDeep(fixtureUtils.findModelFixtures('Permission', {object_type: obj}).entries),
             permsRolesToInsert = fixtureUtils.findPermissionRelationsForObject(obj).entries,
             actions = [],
-            permissionsRoles = [],
+            permissionsRoles = {},
             roles = {
                 Administrator: DataGenerator.Content.roles[0].id,
                 Editor: DataGenerator.Content.roles[1].id,
                 Author: DataGenerator.Content.roles[2].id,
-                Owner: DataGenerator.Content.roles[3].id
+                Owner: DataGenerator.Content.roles[3].id,
+                Contributor: DataGenerator.Content.roles[4].id
             };
 
         // CASE: if empty db will throw SQLITE_MISUSE, hard to debug
@@ -389,58 +420,64 @@ fixtures = {
             if (perms[obj]) {
                 if (perms[obj] === 'all') {
                     _.each(actions, function (action) {
-                        permissionsRoles.push({
-                            id: ObjectId.generate(),
-                            permission_id: action.permissionId,
-                            role_id: roles[role]
-                        });
+                        if (!permissionsRoles[action.permissionId]) {
+                            permissionsRoles[action.permissionId] = [];
+                        }
+
+                        permissionsRoles[action.permissionId].push(_.find(DataGenerator.Content.roles, {id: roles[role]}));
                     });
                 } else {
                     _.each(perms[obj], function (action) {
-                        permissionsRoles.push({
-                            id: ObjectId.generate(),
-                            permission_id: _.find(actions, {type: action}).permissionId,
-                            role_id: roles[role]
-                        });
+                        if (!permissionsRoles[_.find(actions, {type: action}).permissionId]) {
+                            permissionsRoles[_.find(actions, {type: action}).permissionId] = [];
+                        }
+
+                        permissionsRoles[_.find(actions, {type: action}).permissionId].push(_.find(DataGenerator.Content.roles, {id: roles[role]}));
                     });
                 }
             }
         });
 
-        return db.knex('permissions').insert(permsToInsert).then(function () {
-            if (_.isEmpty(permissionsRoles)) {
-                return Promise.resolve();
+        return Promise.map(permsToInsert, function (perm) {
+            if (!_.isEmpty(permissionsRoles)) {
+                perm.roles = permissionsRoles[perm.id];
             }
 
-            return db.knex('permissions_roles').insert(permissionsRoles);
+            return models.Permission.add(perm, module.exports.context.internal);
         });
     },
 
     insertClients: function insertClients() {
-        return db.knex('clients').insert(DataGenerator.forKnex.clients);
+        return Promise.map(DataGenerator.forKnex.clients, function (client) {
+            return models.Client.add(client, module.exports.context.internal);
+        });
     },
 
     insertClientWithTrustedDomain: function insertClientWithTrustedDomain() {
-        var client = DataGenerator.forKnex.createClient({slug: 'ghost-test'});
+        const client = DataGenerator.forKnex.createClient({slug: 'ghost-test'});
 
-        return db.knex('clients')
-            .insert(client)
+        return models.Client.add(client, module.exports.context.internal)
             .then(function () {
-                return db.knex('client_trusted_domains')
-                    .insert(DataGenerator.forKnex.createTrustedDomain({client_id: client.id}));
+                return models.ClientTrustedDomain.add(DataGenerator.forKnex.createTrustedDomain({
+                    client_id: client.id
+                }), module.exports.context.internal);
             });
     },
 
     insertAccessToken: function insertAccessToken(override) {
-        return db.knex('accesstokens').insert(DataGenerator.forKnex.createToken(override));
+        return models.Accesstoken.insert(DataGenerator.forKnex.createToken(override), module.exports.context.internal);
     },
 
     insertInvites: function insertInvites() {
-        return db.knex('invites').insert(DataGenerator.forKnex.invites);
+        return Promise.map(DataGenerator.forKnex.invites, function (invite) {
+            return models.Invite.add(invite, module.exports.context.internal);
+        });
     },
 
     insertWebhooks: function insertWebhooks() {
-        return db.knex('webhooks').insert(DataGenerator.forKnex.webhooks);
+        return Promise.map(DataGenerator.forKnex.webhooks, function (webhook) {
+            return models.Webhook.add(webhook, module.exports.context.internal);
+        });
     }
 };
 
@@ -453,6 +490,20 @@ clearBruteData = function clearBruteData() {
     return db.knex('brute').truncate();
 };
 
+truncate = function truncate(tableName) {
+    if (config.get('database:client') === 'sqlite3') {
+        return db.knex(tableName).truncate();
+    }
+
+    return db.knex.raw('SET FOREIGN_KEY_CHECKS=0;')
+        .then(function () {
+            return db.knex(tableName).truncate();
+        })
+        .then(function () {
+            return db.knex.raw('SET FOREIGN_KEY_CHECKS=1;');
+        });
+};
+
 // we must always try to delete all tables
 clearData = function clearData() {
     debug('Database reset');
@@ -461,34 +512,34 @@ clearData = function clearData() {
 
 toDoList = {
     app: function insertApp() {
-        return fixtures.insertOne('apps', 'createApp');
+        return fixtures.insertOne('App', 'apps', 'createApp');
     },
     app_field: function insertAppField() {
         // TODO: use the actual app ID to create the field
-        return fixtures.insertOne('apps', 'createApp').then(function () {
-            return fixtures.insertOne('app_fields', 'createAppField');
+        return fixtures.insertOne('App', 'apps', 'createApp').then(function () {
+            return fixtures.insertOne('AppField', 'app_fields', 'createAppField');
         });
     },
     app_setting: function insertAppSetting() {
         // TODO: use the actual app ID to create the field
-        return fixtures.insertOne('apps', 'createApp').then(function () {
-            return fixtures.insertOne('app_settings', 'createAppSetting');
+        return fixtures.insertOne('App', 'apps', 'createApp').then(function () {
+            return fixtures.insertOne('AppSetting', 'app_settings', 'createAppSetting');
         });
     },
     permission: function insertPermission() {
-        return fixtures.insertOne('permissions', 'createPermission');
+        return fixtures.insertOne('Permission', 'permissions', 'createPermission');
     },
     role: function insertRole() {
-        return fixtures.insertOne('roles', 'createRole');
+        return fixtures.insertOne('Role', 'roles', 'createRole');
     },
     roles: function insertRoles() {
         return fixtures.insertRoles();
     },
     tag: function insertTag() {
-        return fixtures.insertOne('tags', 'createTag');
+        return fixtures.insertOne('Tag', 'tags', 'createTag');
     },
     subscriber: function insertSubscriber() {
-        return fixtures.insertOne('subscribers', 'createSubscriber');
+        return fixtures.insertOne('Subscriber', 'subscribers', 'createSubscriber');
     },
     posts: function insertPostsAndTags() {
         return fixtures.insertPostsAndTags();
@@ -496,8 +547,11 @@ toDoList = {
     'posts:mu': function insertMultiAuthorPosts() {
         return fixtures.insertMultiAuthorPosts();
     },
-    tags: function insertMoreTags() {
-        return fixtures.insertMoreTags();
+    tags: function insertTags() {
+        return fixtures.insertTags();
+    },
+    'tags:extra': function insertExtraTags() {
+        return fixtures.insertExtraTags();
     },
     apps: function insertApps() {
         return fixtures.insertApps();
@@ -512,7 +566,7 @@ toDoList = {
     'users:no-owner': function createUsersWithoutOwner() {
         return fixtures.createUsersWithoutOwner();
     },
-    users: function createExtraUsers() {
+    'users:extra': function createExtraUsers() {
         return fixtures.createExtraUsers();
     },
     'user-token': function createTokensForUser(index) {
@@ -625,7 +679,8 @@ initFixtures = function initFixtures() {
  * @returns {Function}
  */
 setup = function setup() {
-    var self = this,
+    /*eslint no-invalid-this: "off"*/
+    const self = this,
         args = arguments;
 
     return function setup() {
@@ -667,19 +722,15 @@ createUser = function createUser(options) {
     var user = options.user,
         role = options.role;
 
-    return db.knex('users').insert(user)
-        .then(function () {
-            return db.knex('roles');
-        })
+    return models.Role.fetchAll(module.exports.context.internal)
         .then(function (roles) {
-            return db.knex('roles_users').insert({
-                id: ObjectId.generate(),
-                role_id: _.find(roles, {name: role.name}).id,
-                user_id: user.id
-            });
-        })
-        .then(function () {
-            return user;
+            roles = roles.toJSON();
+            user.roles = [_.find(roles, {name: role})];
+
+            return models.User.add(user, module.exports.context.internal)
+                .then(function () {
+                    return user;
+                });
         });
 };
 
@@ -690,11 +741,8 @@ createPost = function createPost(options) {
         post.author_id = options.author.id;
     }
 
-    return db.knex('posts')
-        .insert(post)
-        .then(function () {
-            return post;
-        });
+    post.authors = [{id: post.author_id}];
+    return models.Post.add(post, module.exports.context.internal);
 };
 
 login = function login(request) {
@@ -883,7 +931,7 @@ startGhost = function startGhost(options) {
             .then(function () {
                 customRedirectsMiddleware.reload();
 
-                common.events.emit('server:start');
+                common.events.emit('server.start');
                 return ghostServer;
             });
     }
@@ -916,9 +964,30 @@ startGhost = function startGhost(options) {
         });
 };
 
+/**
+ * Minimal configuration to start integration/unit tests.
+ */
+configureGhost = function configureGhost(sandbox) {
+    models.init();
+
+    const cacheStub = sandbox.stub(SettingsCache, 'get');
+
+    cacheStub.withArgs('active_theme').returns('casper');
+    cacheStub.withArgs('active_timezone').returns('Etc/UTC');
+    cacheStub.withArgs('permalinks').returns('/:slug/');
+
+    configUtils.set('paths:contentPath', path.join(__dirname, 'fixtures'));
+
+    configUtils.set('times:getImageSizeTimeoutInMS', 1);
+
+    return themes.init();
+};
+
 module.exports = {
     startGhost: startGhost,
+    configureGhost: configureGhost,
     teardown: teardown,
+    truncate: truncate,
     setup: setup,
     doAuth: doAuth,
     createUser: createUser,
@@ -976,7 +1045,15 @@ module.exports = {
         owner: {context: {user: DataGenerator.Content.users[0].id}},
         admin: {context: {user: DataGenerator.Content.users[1].id}},
         editor: {context: {user: DataGenerator.Content.users[2].id}},
-        author: {context: {user: DataGenerator.Content.users[3].id}}
+        author: {context: {user: DataGenerator.Content.users[3].id}},
+        contributor: {context: {user: DataGenerator.Content.users[7].id}}
+    },
+    permissions: {
+        owner: {user: {roles: [DataGenerator.Content.roles[3]]}},
+        admin: {user: {roles: [DataGenerator.Content.roles[0]]}},
+        editor: {user: {roles: [DataGenerator.Content.roles[1]]}},
+        author: {user: {roles: [DataGenerator.Content.roles[2]]}},
+        contributor: {user: {roles: [DataGenerator.Content.roles[4]]}},
     },
     users: {
         ids: {
@@ -986,7 +1063,9 @@ module.exports = {
             author: DataGenerator.Content.users[3].id,
             admin2: DataGenerator.Content.users[6].id,
             editor2: DataGenerator.Content.users[4].id,
-            author2: DataGenerator.Content.users[5].id
+            author2: DataGenerator.Content.users[5].id,
+            contributor: DataGenerator.Content.users[7].id,
+            contributor2: DataGenerator.Content.users[8].id
         }
     },
     roles: {
@@ -994,10 +1073,10 @@ module.exports = {
             owner: DataGenerator.Content.roles[3].id,
             admin: DataGenerator.Content.roles[0].id,
             editor: DataGenerator.Content.roles[1].id,
-            author: DataGenerator.Content.roles[2].id
+            author: DataGenerator.Content.roles[2].id,
+            contributor: DataGenerator.Content.roles[4].id
         }
     },
-
     cacheRules: {
         public: 'public, max-age=0',
         hour: 'public, max-age=' + 3600,

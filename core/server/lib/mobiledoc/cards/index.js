@@ -1,6 +1,10 @@
-var hr = require('./hr'),
-    html = require('./html'),
-    image = require('./image'),
-    markdown = require('./markdown');
+'use strict';
 
-module.exports = [hr, html, image, markdown];
+module.exports = [
+    require('./card-markdown'),
+    require('./code'),
+    require('./hr'),
+    require('./html'),
+    require('./image'),
+    require('./markdown')
+];

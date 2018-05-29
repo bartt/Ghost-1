@@ -11,8 +11,8 @@ DataGenerator.markdownToMobiledoc = function markdownToMobiledoc(content) {
         markups: [],
         atoms: [],
         cards: [
-            ['card-markdown', {
-                cardName: 'card-markdown',
+            ['markdown', {
+                cardName: 'markdown',
                 markdown: content || ''
             }]
         ],
@@ -28,66 +28,69 @@ DataGenerator.Content = {
     posts: [
         {
             id: ObjectId.generate(),
-            title: "HTML Ipsum",
-            slug: "html-ipsum",
-            mobiledoc: DataGenerator.markdownToMobiledoc("<h1>HTML Ipsum Presents</h1><p><strong>Pellentesque habitant morbi tristique</strong> senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. <em>Aenean ultricies mi vitae est.</em> Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, <code>commodo vitae</code>, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. <a href=\\\"#\\\">Donec non enim</a> in turpis pulvinar facilisis. Ut felis.</p><h2>Header Level 2</h2><ol><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ol><blockquote><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus magna. Cras in mi at felis aliquet congue. Ut a est eget ligula molestie gravida. Curabitur massa. Donec eleifend, libero at sagittis mollis, tellus est malesuada tellus, at luctus turpis elit sit amet quam. Vivamus pretium ornare est.</p></blockquote><h3>Header Level 3</h3><ul><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ul><pre><code>#header h1 a{display: block;width: 300px;height: 80px;}</code></pre>"),
-            published_at: new Date("2015-01-01"),
-            custom_excerpt: 'This is my custom excerpt!'
+            title: 'HTML Ipsum',
+            slug: 'html-ipsum',
+            mobiledoc: DataGenerator.markdownToMobiledoc('<h1>HTML Ipsum Presents</h1><p><strong>Pellentesque habitant morbi tristique</strong> senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. <em>Aenean ultricies mi vitae est.</em> Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, <code>commodo vitae</code>, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. <a href=\\\"#\\\">Donec non enim</a> in turpis pulvinar facilisis. Ut felis.</p><h2>Header Level 2</h2><ol><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ol><blockquote><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus magna. Cras in mi at felis aliquet congue. Ut a est eget ligula molestie gravida. Curabitur massa. Donec eleifend, libero at sagittis mollis, tellus est malesuada tellus, at luctus turpis elit sit amet quam. Vivamus pretium ornare est.</p></blockquote><h3>Header Level 3</h3><ul><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ul><pre><code>#header h1 a{display: block;width: 300px;height: 80px;}</code></pre>'),
+            published_at: new Date('2015-01-01'),
+            custom_excerpt: 'This is my custom excerpt!',
+            feature_image: 'https://example.com/super_photo.jpg'
         },
         {
             id: ObjectId.generate(),
-            title: "Ghostly Kitchen Sink",
-            slug: "ghostly-kitchen-sink",
-            mobiledoc: DataGenerator.markdownToMobiledoc("<h1>HTML Ipsum Presents</h1><p><strong>Pellentesque habitant morbi tristique</strong> senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. <em>Aenean ultricies mi vitae est.</em> Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, <code>commodo vitae</code>, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. <a href=\\\"#\\\">Donec non enim</a> in turpis pulvinar facilisis. Ut felis.</p><h2>Header Level 2</h2><ol><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ol><blockquote><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus magna. Cras in mi at felis aliquet congue. Ut a est eget ligula molestie gravida. Curabitur massa. Donec eleifend, libero at sagittis mollis, tellus est malesuada tellus, at luctus turpis elit sit amet quam. Vivamus pretium ornare est.</p></blockquote><h3>Header Level 3</h3><ul><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ul><pre><code>#header h1 a{display: block;width: 300px;height: 80px;}</code></pre>"),
-            published_at: new Date("2015-01-02")
+            title: 'Ghostly Kitchen Sink',
+            slug: 'ghostly-kitchen-sink',
+            mobiledoc: DataGenerator.markdownToMobiledoc('<h1>HTML Ipsum Presents</h1><p><strong>Pellentesque habitant morbi tristique</strong> senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. <em>Aenean ultricies mi vitae est.</em> Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, <code>commodo vitae</code>, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. <a href=\\\"#\\\">Donec non enim</a> in turpis pulvinar facilisis. Ut felis.</p><h2>Header Level 2</h2><ol><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ol><blockquote><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus magna. Cras in mi at felis aliquet congue. Ut a est eget ligula molestie gravida. Curabitur massa. Donec eleifend, libero at sagittis mollis, tellus est malesuada tellus, at luctus turpis elit sit amet quam. Vivamus pretium ornare est.</p></blockquote><h3>Header Level 3</h3><ul><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ul><pre><code>#header h1 a{display: block;width: 300px;height: 80px;}</code></pre>'),
+            published_at: new Date('2015-01-02')
         },
         {
             id: ObjectId.generate(),
-            title: "Short and Sweet",
-            slug: "short-and-sweet",
-            mobiledoc: DataGenerator.markdownToMobiledoc("## testing\n\nmctesters\n\n- test\n- line\n- items"),
-            html: "<div class=\"kg-card-markdown\"><h2 id=\"testing\">testing</h2>\n<p>mctesters</p>\n<ul>\n<li>test</li>\n<li>line</li>\n<li>items</li>\n</ul>\n</div>",
-            feature_image: "http://placekitten.com/500/200",
-            meta_description: "test stuff",
-            published_at: new Date("2015-01-03"),
-            uuid: "2ac6b4f6-e1f3-406c-9247-c94a0496d39d"
+            title: 'Short and Sweet',
+            slug: 'short-and-sweet',
+            mobiledoc: DataGenerator.markdownToMobiledoc('## testing\n\nmctesters\n\n- test\n- line\n- items'),
+            html: '<div class=\"kg-card-markdown\"><h2 id=\"testing\">testing</h2>\n<p>mctesters</p>\n<ul>\n<li>test</li>\n<li>line</li>\n<li>items</li>\n</ul>\n</div>',
+            plaintext: 'testing\nmctesters\n\n * test\n * line\n * items',
+            feature_image: 'http://placekitten.com/500/200',
+            meta_description: 'test stuff',
+            published_at: new Date('2015-01-03'),
+            featured: true,
+            uuid: '2ac6b4f6-e1f3-406c-9247-c94a0496d39d'
         },
         {
             id: ObjectId.generate(),
-            title: "Not finished yet",
-            slug: "unfinished",
-            mobiledoc: DataGenerator.markdownToMobiledoc("<h1>HTML Ipsum Presents</h1><p><strong>Pellentesque habitant morbi tristique</strong> senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. <em>Aenean ultricies mi vitae est.</em> Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, <code>commodo vitae</code>, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. <a href=\\\"#\\\">Donec non enim</a> in turpis pulvinar facilisis. Ut felis.</p><h2>Header Level 2</h2><ol><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ol><blockquote><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus magna. Cras in mi at felis aliquet congue. Ut a est eget ligula molestie gravida. Curabitur massa. Donec eleifend, libero at sagittis mollis, tellus est malesuada tellus, at luctus turpis elit sit amet quam. Vivamus pretium ornare est.</p></blockquote><h3>Header Level 3</h3><ul><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ul><pre><code>#header h1 a{display: block;width: 300px;height: 80px;}</code></pre>"),
-            status: "draft",
-            uuid: "d52c42ae-2755-455c-80ec-70b2ec55c903",
-            featured: false
+            title: 'Not finished yet',
+            slug: 'unfinished',
+            mobiledoc: DataGenerator.markdownToMobiledoc('<h1>HTML Ipsum Presents</h1><p><strong>Pellentesque habitant morbi tristique</strong> senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. <em>Aenean ultricies mi vitae est.</em> Mauris placerat eleifend leo. Quisque sit amet est et sapien ullamcorper pharetra. Vestibulum erat wisi, condimentum sed, <code>commodo vitae</code>, ornare sit amet, wisi. Aenean fermentum, elit eget tincidunt condimentum, eros ipsum rutrum orci, sagittis tempus lacus enim ac dui. <a href=\\\"#\\\">Donec non enim</a> in turpis pulvinar facilisis. Ut felis.</p><h2>Header Level 2</h2><ol><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ol><blockquote><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus magna. Cras in mi at felis aliquet congue. Ut a est eget ligula molestie gravida. Curabitur massa. Donec eleifend, libero at sagittis mollis, tellus est malesuada tellus, at luctus turpis elit sit amet quam. Vivamus pretium ornare est.</p></blockquote><h3>Header Level 3</h3><ul><li>Lorem ipsum dolor sit amet, consectetuer adipiscing elit.</li><li>Aliquam tincidunt mauris eu risus.</li></ul><pre><code>#header h1 a{display: block;width: 300px;height: 80px;}</code></pre>'),
+            status: 'draft',
+            uuid: 'd52c42ae-2755-455c-80ec-70b2ec55c903'
         },
         {
             id: ObjectId.generate(),
-            title: "Not so short, bit complex",
-            slug: "not-so-short-bit-complex",
-            mobiledoc: DataGenerator.markdownToMobiledoc("<p><nav><ul><li><a href=\"#nowhere\" title=\"Anchor URL\">Lorem</a></li><li><a href=\"/about#nowhere\" title=\"Relative URL\">Aliquam</a></li><li><a href=\"//somewhere.com/link#nowhere\" title=\"Protocol Relative URL\">Tortor</a></li><li><a href=\"http://somewhere.com/link#nowhere\" title=\"Absolute URL\">Morbi</a></li><li><a href=\"#nowhere\" title=\"Praesent dapibus, neque id cursus faucibus\">Praesent</a></li><li><a href=\"#nowhere\" title=\"Pellentesque fermentum dolor\">Pellentesque</a></li></ul></nav><p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.</p><table><thead><tr><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead><tbody><tr><td>a</td><td>b</td><td>c</td><td>d</td></tr><tr><td>e</td><td>f</td><td>g</td><td>h</td></tr><tr><td>i</td><td>j</td><td>k</td><td>l</td></tr></tbody></table><dl><dt>Definition list</dt><dd>Consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</dd><dt>Lorem ipsum dolor sit amet</dt><dd>Consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</dd></dl><ul><li>Morbi in sem quis dui placerat ornare. Pellentesque odio nisi, euismod in, pharetra a, ultricies in, diam. Sed arcu. Cras consequat.</li><li>Praesent dapibus, neque id cursus faucibus, tortor neque egestas augue, eu vulputate magna eros eu erat. Aliquam erat volutpat. Nam dui mi, tincidunt quis, accumsan porttitor, facilisis luctus, metus.</li><li>Phasellus ultrices nulla quis nibh. Quisque a lectus. Donec consectetuer ligula vulputate sem tristique cursus. Nam nulla quam, gravida non, commodo a, sodales sit amet, nisi.</li><li>Pellentesque fermentum dolor. Aliquam quam lectus, facilisis auctor, ultrices ut, elementum vulputate, nunc.</li></ul></p>")
+            title: 'Not so short, bit complex',
+            slug: 'not-so-short-bit-complex',
+            mobiledoc: DataGenerator.markdownToMobiledoc('<p><nav><ul><li><a href=\"#nowhere\" title=\"Anchor URL\">Lorem</a></li><li><a href=\"/about#nowhere\" title=\"Relative URL\">Aliquam</a></li><li><a href=\"//somewhere.com/link#nowhere\" title=\"Protocol Relative URL\">Tortor</a></li><li><a href=\"http://somewhere.com/link#nowhere\" title=\"Absolute URL\">Morbi</a></li><li><a href=\"#nowhere\" title=\"Praesent dapibus, neque id cursus faucibus\">Praesent</a></li><li><a href=\"#nowhere\" title=\"Pellentesque fermentum dolor\">Pellentesque</a></li></ul></nav><p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.</p><table><thead><tr><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead><tbody><tr><td>a</td><td>b</td><td>c</td><td>d</td></tr><tr><td>e</td><td>f</td><td>g</td><td>h</td></tr><tr><td>i</td><td>j</td><td>k</td><td>l</td></tr></tbody></table><dl><dt>Definition list</dt><dd>Consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</dd><dt>Lorem ipsum dolor sit amet</dt><dd>Consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</dd></dl><ul><li>Morbi in sem quis dui placerat ornare. Pellentesque odio nisi, euismod in, pharetra a, ultricies in, diam. Sed arcu. Cras consequat.</li><li>Praesent dapibus, neque id cursus faucibus, tortor neque egestas augue, eu vulputate magna eros eu erat. Aliquam erat volutpat. Nam dui mi, tincidunt quis, accumsan porttitor, facilisis luctus, metus.</li><li>Phasellus ultrices nulla quis nibh. Quisque a lectus. Donec consectetuer ligula vulputate sem tristique cursus. Nam nulla quam, gravida non, commodo a, sodales sit amet, nisi.</li><li>Pellentesque fermentum dolor. Aliquam quam lectus, facilisis auctor, ultrices ut, elementum vulputate, nunc.</li></ul></p>'),
+            featured: true
         },
         {
             id: ObjectId.generate(),
-            title: "This is a static page",
-            slug: "static-page-test",
-            mobiledoc: DataGenerator.markdownToMobiledoc("<h1>Static page test is what this is for.</h1><p>Hopefully you don't find it a bore.</p>"),
-            page: 1
+            title: 'This is a static page',
+            slug: 'static-page-test',
+            mobiledoc: DataGenerator.markdownToMobiledoc('<h1>Static page test is what this is for.</h1><p>Hopefully you don\'t find it a bore.</p>'),
+            page: true
         },
         {
             id: ObjectId.generate(),
-            title: "This is a draft static page",
-            slug: "static-page-draft",
-            mobiledoc: DataGenerator.markdownToMobiledoc("<h1>Static page test is what this is for.</h1><p>Hopefully you don't find it a bore.</p>"),
-            page: 1,
-            status: "draft"
+            title: 'This is a draft static page',
+            slug: 'static-page-draft',
+            mobiledoc: DataGenerator.markdownToMobiledoc('<h1>Static page test is what this is for.</h1><p>Hopefully you don\'t find it a bore.</p>'),
+            page: true,
+            status: 'draft'
         },
         {
             id: ObjectId.generate(),
-            title: "This is a scheduled post!!",
-            slug: "scheduled-post",
-            mobiledoc: DataGenerator.markdownToMobiledoc("<h1>Welcome to my invisible post!</h1>"),
-            status: "scheduled",
+            title: 'This is a scheduled post!!',
+            slug: 'scheduled-post',
+            mobiledoc: DataGenerator.markdownToMobiledoc('<h1>Welcome to my invisible post!</h1>'),
+            status: 'scheduled',
             published_at: moment().add(2, 'days').toDate()
         }
     ],
@@ -95,28 +98,29 @@ DataGenerator.Content = {
     tags: [
         {
             id: ObjectId.generate(),
-            name: "kitchen sink",
-            slug: "kitchen-sink"
+            name: 'kitchen sink',
+            slug: 'kitchen-sink',
+            feature_image: 'https://example.com/super_photo.jpg'
         },
         {
             id: ObjectId.generate(),
-            name: "bacon",
-            slug: "bacon"
+            name: 'bacon',
+            slug: 'bacon'
         },
         {
             id: ObjectId.generate(),
-            name: "chorizo",
-            slug: "chorizo"
+            name: 'chorizo',
+            slug: 'chorizo'
         },
         {
             id: ObjectId.generate(),
-            name: "pollo",
-            slug: "pollo"
+            name: 'pollo',
+            slug: 'pollo'
         },
         {
             id: ObjectId.generate(),
-            name: "injection",
-            slug: "injection"
+            name: 'injection',
+            slug: 'injection'
         }
     ],
 
@@ -128,7 +132,8 @@ DataGenerator.Content = {
             name: 'Joe Bloggs',
             slug: 'joe-bloggs',
             email: 'jbloggs@example.com',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99',
+            profile_image: 'https://example.com/super_photo.jpg'
         },
         {
             // admin
@@ -136,7 +141,7 @@ DataGenerator.Content = {
             name: 'Smith Wellingsworth',
             slug: 'smith-wellingsworth',
             email: 'swellingsworth@example.com',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99'
         },
         {
             // editor
@@ -144,7 +149,7 @@ DataGenerator.Content = {
             name: 'Jimothy Bogendath',
             slug: 'jimothy-bogendath',
             email: 'jbOgendAth@example.com',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99'
         },
         {
             // author
@@ -152,7 +157,7 @@ DataGenerator.Content = {
             name: 'Slimer McEctoplasm',
             slug: 'slimer-mcectoplasm',
             email: 'smcectoplasm@example.com',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99'
         },
         {
             // editor 2
@@ -160,7 +165,7 @@ DataGenerator.Content = {
             name: 'Ivan Email',
             slug: 'ivan-email',
             email: 'info1@ghost.org',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99'
         },
         {
             // author 2
@@ -168,7 +173,7 @@ DataGenerator.Content = {
             name: 'Author2',
             slug: 'a-2',
             email: 'info2@ghost.org',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99'
         },
         {
             // admin 2
@@ -176,7 +181,23 @@ DataGenerator.Content = {
             name: 'admin2',
             slug: 'ad-2',
             email: 'info3@ghost.org',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99'
+        },
+        {
+            // contributor
+            id: ObjectId.generate(),
+            name: 'Contributor',
+            slug: 'contributor',
+            email: 'contributor@ghost.org',
+            password: 'Sl1m3rson99'
+        },
+        {
+            // contributor
+            id: ObjectId.generate(),
+            name: 'contributor2',
+            slug: 'contrib-2',
+            email: 'contributor2@ghost.org',
+            password: 'Sl1m3rson99'
         }
     ],
 
@@ -263,6 +284,11 @@ DataGenerator.Content = {
             id: ObjectId.generate(),
             name: 'Owner',
             description: 'Blog Owner'
+        },
+        {
+            id: ObjectId.generate(),
+            name: 'Contributor',
+            description: 'Contributors'
         }
     ],
 
@@ -351,6 +377,7 @@ DataGenerator.forKnex = (function () {
     var posts,
         tags,
         posts_tags,
+        posts_authors,
         apps,
         app_fields,
         roles,
@@ -386,16 +413,27 @@ DataGenerator.forKnex = (function () {
     }
 
     function createPost(overrides) {
+        overrides = overrides || {};
+
         var newObj = _.cloneDeep(overrides),
-            mobiledoc = JSON.parse(overrides.mobiledoc || '{}');
+            mobiledocObj;
+
+        if (!newObj.mobiledoc) {
+            newObj.mobiledoc = DataGenerator.markdownToMobiledoc('## markdown');
+        }
+
+        if (!newObj.html) {
+            mobiledocObj = JSON.parse(newObj.mobiledoc);
+            newObj.html = mobiledocObj.cards && mobiledocObj.cards[0][1].markdown;
+        }
 
         return _.defaults(newObj, {
             id: ObjectId.generate(),
             uuid: uuid.v4(),
             title: 'title',
             status: 'published',
-            html: mobiledoc.cards && mobiledoc.cards[0][1].markdown,
-            featured: true,
+            feature_image: null,
+            featured: false,
             page: false,
             author_id: DataGenerator.Content.users[0].id,
             updated_at: new Date(),
@@ -403,7 +441,8 @@ DataGenerator.forKnex = (function () {
             created_at: new Date(),
             created_by: DataGenerator.Content.users[0].id,
             published_at: new Date(),
-            published_by: DataGenerator.Content.users[0].id
+            published_by: DataGenerator.Content.users[0].id,
+            visibility: 'public'
         });
     }
 
@@ -433,9 +472,12 @@ DataGenerator.forKnex = (function () {
             name: 'name',
             slug: 'slug_' + Date.now(),
             status: 'active',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS',
+            password: 'Sl1m3rson99',
             created_by: DataGenerator.Content.users[0].id,
-            created_at: new Date()
+            created_at: new Date(),
+            updated_at: new Date(),
+            updated_by: DataGenerator.Content.users[0].id,
+            visibility: 'public'
         });
     }
 
@@ -463,7 +505,7 @@ DataGenerator.forKnex = (function () {
             name: 'Joe Bloggs',
             slug: 'joe-blogs',
             email: 'joe_' + uniqueInteger + '@example.com',
-            password: '$2b$10$ujPIlqjTsYwfc2/zrqZXZ.yd7cQQm2iOkAFenTAJfveKkc23nwdeS'
+            password: 'Sl1m3rson99'
         });
     }
 
@@ -573,14 +615,16 @@ DataGenerator.forKnex = (function () {
         createBasic(DataGenerator.Content.roles[0]),
         createBasic(DataGenerator.Content.roles[1]),
         createBasic(DataGenerator.Content.roles[2]),
-        createBasic(DataGenerator.Content.roles[3])
+        createBasic(DataGenerator.Content.roles[3]),
+        createBasic(DataGenerator.Content.roles[4])
     ];
 
     users = [
         createUser(DataGenerator.Content.users[0]),
         createUser(DataGenerator.Content.users[1]),
         createUser(DataGenerator.Content.users[2]),
-        createUser(DataGenerator.Content.users[3])
+        createUser(DataGenerator.Content.users[3]),
+        createUser(DataGenerator.Content.users[7])
     ];
 
     clients = [
@@ -610,6 +654,11 @@ DataGenerator.forKnex = (function () {
             id: ObjectId.generate(),
             user_id: DataGenerator.Content.users[3].id,
             role_id: DataGenerator.Content.roles[2].id
+        },
+        {
+            id: ObjectId.generate(),
+            user_id: DataGenerator.Content.users[7].id,
+            role_id: DataGenerator.Content.roles[4].id
         }
     ];
 
@@ -651,6 +700,63 @@ DataGenerator.forKnex = (function () {
             post_id: DataGenerator.Content.posts[3].id,
             tag_id: DataGenerator.Content.tags[3].id,
             sort_order: 5
+        }
+    ];
+
+    posts_authors = [
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[0].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[1].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[2].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[3].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[3].id,
+            author_id: DataGenerator.Content.users[2].id,
+            sort_order: 1
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[4].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[5].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[6].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
+        },
+        {
+            id: ObjectId.generate(),
+            post_id: DataGenerator.Content.posts[7].id,
+            author_id: DataGenerator.Content.users[0].id,
+            sort_order: 0
         }
     ];
 
@@ -699,6 +805,7 @@ DataGenerator.forKnex = (function () {
         posts: posts,
         tags: tags,
         posts_tags: posts_tags,
+        posts_authors: posts_authors,
         apps: apps,
         app_fields: app_fields,
         roles: roles,

@@ -1,8 +1,6 @@
-'use strict';
-
-const crypto = require('crypto'),
-    _ = require('lodash'),
-    constants = require('../lib/constants'),
+const constants = require('../lib/constants'),
+    security = require('../lib/security'),
+    settingsCache = require('../services/settings/cache'),
     ghostBookshelf = require('./base');
 
 let Invite,
@@ -11,10 +9,10 @@ let Invite,
 Invite = ghostBookshelf.Model.extend({
     tableName: 'invites',
 
-    toJSON: function (options) {
-        options = options || {};
+    toJSON: function (unfilteredOptions) {
+        var options = Invite.filterOptions(unfilteredOptions, 'toJSON'),
+            attrs = ghostBookshelf.Model.prototype.toJSON.call(this, options);
 
-        var attrs = ghostBookshelf.Model.prototype.toJSON.call(this, options);
         delete attrs.token;
         return attrs;
     }
@@ -27,39 +25,21 @@ Invite = ghostBookshelf.Model.extend({
         return options;
     },
 
-    /**
-     * @TODO: can't use base class, because:
-     * options.withRelated = _.union(options.withRelated, options.include); is missing
-     * there are some weird self implementations in each model
-     * so adding this line, will destroy other models, because they rely on something else
-     * FIX ME!!!!!
-     */
-    findOne: function findOne(data, options) {
-        options = options || {};
+    add: function add(data, unfilteredOptions) {
+        const options = Invite.filterOptions(unfilteredOptions, 'add');
+        data = data || {};
 
-        options = this.filterOptions(options, 'findOne');
-        data = this.filterData(data, 'findOne');
-        options.withRelated = _.union(options.withRelated, options.include);
-
-        var invite = this.forge(data, {include: options.include});
-        return invite.fetch(options);
-    },
-
-    add: function add(data, options) {
-        var hash = crypto.createHash('sha256'),
-            text = '';
-
-        options = this.filterOptions(options, 'add');
-        options.withRelated = _.union(options.withRelated, options.include);
+        if (!options.context || !options.context.internal) {
+            data.status = 'pending';
+        }
 
         data.expires = Date.now() + constants.ONE_WEEK_MS;
-        data.status = 'pending';
+        data.token = security.tokens.generateHash({
+            email: data.email,
+            expires: data.expires,
+            secret: settingsCache.get('db_hash')
+        });
 
-        // @TODO: call a util fn?
-        hash.update(String(data.expires));
-        hash.update(data.email.toLocaleLowerCase());
-        text += [data.expires, data.email, hash.digest('base64')].join('|');
-        data.token = new Buffer(text).toString('base64');
         return ghostBookshelf.Model.add.call(this, data, options);
     }
 });

@@ -17,34 +17,9 @@ describe('Post API', function () {
     var localSettingsCache = {};
 
     before(testUtils.teardown);
-    afterEach(testUtils.teardown);
-    beforeEach(testUtils.setup('users:roles', 'perms:post', 'perms:init'));
+    after(testUtils.teardown);
 
-    // @TODO: remove when https://github.com/TryGhost/Ghost/issues/6930 is fixed
-    // we insert the posts via the model layer, because right now the test utils insert dates wrong
-    beforeEach(function (done) {
-        Promise.mapSeries(testUtils.DataGenerator.forKnex.posts, function (post) {
-            return models.Post.add(post, {context: {internal: true}});
-        }).then(function () {
-            done();
-        }).catch(done);
-    });
-
-    beforeEach(function (done) {
-        Promise.mapSeries(testUtils.DataGenerator.forKnex.tags, function (tag) {
-            return models.Tag.add(tag, {context: {internal: true}});
-        }).then(function () {
-            done();
-        }).catch(done);
-    });
-
-    beforeEach(function (done) {
-        db.knex('posts_tags').insert(testUtils.DataGenerator.forKnex.posts_tags)
-            .then(function () {
-                done();
-            })
-            .catch(done);
-    });
+    before(testUtils.setup('users:roles', 'perms:post', 'perms:init', 'posts'));
 
     beforeEach(function () {
         sandbox.stub(settingsCache, 'get').callsFake(function (key) {
@@ -91,7 +66,7 @@ describe('Post API', function () {
         it('can fetch featured posts for user 1', function (done) {
             PostAPI.browse(_.merge({filter: 'featured:true'}, testUtils.context.owner)).then(function (results) {
                 should.exist(results.posts);
-                results.posts.length.should.eql(4);
+                results.posts.length.should.eql(2);
                 results.posts[0].featured.should.eql(true);
                 done();
             }).catch(done);
@@ -100,7 +75,7 @@ describe('Post API', function () {
         it('can fetch featured posts for user 2', function (done) {
             PostAPI.browse(_.merge({filter: 'featured:true'}, testUtils.context.admin)).then(function (results) {
                 should.exist(results.posts);
-                results.posts.length.should.eql(4);
+                results.posts.length.should.eql(2);
                 results.posts[0].featured.should.eql(true);
                 done();
             }).catch(done);
@@ -112,7 +87,7 @@ describe('Post API', function () {
                 filter: 'featured:false'
             }, testUtils.context.owner)).then(function (results) {
                 should.exist(results.posts);
-                results.posts.length.should.eql(1);
+                results.posts.length.should.eql(4);
                 results.posts[0].featured.should.eql(false);
 
                 done();
@@ -283,11 +258,34 @@ describe('Post API', function () {
             }).catch(done);
         });
 
-        it('can include author', function (done) {
+        it('[DEPRECATED] can include author (using status:all)', function (done) {
             PostAPI.browse({context: {user: 1}, status: 'all', include: 'author'}).then(function (results) {
                 should.exist(results.posts);
                 should.exist(results.posts[0].author.name);
                 results.posts[0].author.name.should.eql('Joe Bloggs');
+
+                done();
+            }).catch(done);
+        });
+
+        it('[DEPRECATED] can include author', function (done) {
+            PostAPI.read({
+                context: {user: testUtils.DataGenerator.Content.users[1].id},
+                id: testUtils.DataGenerator.Content.posts[1].id,
+                include: 'author'
+            }).then(function (results) {
+                should.exist(results.posts[0].author.name);
+                results.posts[0].author.name.should.eql('Joe Bloggs');
+                done();
+            }).catch(done);
+        });
+
+        it('can include authors', function (done) {
+            PostAPI.browse({context: {user: 1}, status: 'all', include: 'authors'}).then(function (results) {
+                should.exist(results.posts);
+                should.exist(results.posts[0].authors);
+                should.exist(results.posts[0].authors[0]);
+                results.posts[0].authors[0].name.should.eql('Joe Bloggs');
 
                 done();
             }).catch(done);
@@ -311,27 +309,29 @@ describe('Post API', function () {
             }).catch(done);
         });
 
-        it('can include author and be case insensitive', function (done) {
-            PostAPI.browse({context: {user: 1}, status: 'all', include: 'Author'}).then(function (results) {
+        it('can include authors and be case insensitive', function (done) {
+            PostAPI.browse({context: {user: 1}, status: 'all', include: 'Authors'}).then(function (results) {
                 should.exist(results.posts);
-                should.exist(results.posts[0].author.name);
-                results.posts[0].author.name.should.eql('Joe Bloggs');
+                should.exist(results.posts[0].authors);
+                should.exist(results.posts[0].authors[0]);
+                results.posts[0].authors[0].name.should.eql('Joe Bloggs');
 
                 done();
             }).catch(done);
         });
 
-        it('can include author and ignore space in include', function (done) {
-            PostAPI.browse({context: {user: 1}, status: 'all', include: ' author'}).then(function (results) {
+        it('can include authors and ignore space in include', function (done) {
+            PostAPI.browse({context: {user: 1}, status: 'all', include: ' authors'}).then(function (results) {
                 should.exist(results.posts);
-                should.exist(results.posts[0].author.name);
-                results.posts[0].author.name.should.eql('Joe Bloggs');
+                should.exist(results.posts[0].authors);
+                should.exist(results.posts[0].authors[0]);
+                results.posts[0].authors[0].name.should.eql('Joe Bloggs');
 
                 done();
             }).catch(done);
         });
 
-        it('can fetch all posts for an author', function (done) {
+        it('[DEPRECATED] can fetch all posts for an author', function (done) {
             PostAPI.browse({
                 context: {user: 1},
                 status: 'all',
@@ -344,6 +344,27 @@ describe('Post API', function () {
                 _.each(results.posts, function (post) {
                     post.author.slug.should.eql('joe-bloggs');
                 });
+
+                done();
+            }).catch(done);
+        });
+
+        it('can fetch all posts for an author', function (done) {
+            PostAPI.browse({
+                context: {user: 1},
+                status: 'all',
+                filter: 'authors:joe-bloggs',
+                include: 'authors'
+            }).then(function (results) {
+                should.exist(results.posts);
+                results.posts.length.should.eql(6);
+
+                _.each(results.posts, function (post) {
+                    post.primary_author.slug.should.eql('joe-bloggs');
+                });
+
+                _.find(results.posts, {id: testUtils.DataGenerator.forKnex.posts[0].id}).authors.length.should.eql(1);
+                _.find(results.posts, {id: testUtils.DataGenerator.forKnex.posts[3].id}).authors.length.should.eql(2);
 
                 done();
             }).catch(done);
@@ -362,7 +383,7 @@ describe('Post API', function () {
         });
 
         it.skip('cannot fetch all posts for an author with invalid slug', function (done) {
-            PostAPI.browse({filter: 'author:invalid!'}).then(function () {
+            PostAPI.browse({filter: 'authors:invalid!'}).then(function () {
                 done(new Error('Should not return a result with invalid author'));
             }).catch(function (err) {
                 should.exist(err);
@@ -615,18 +636,6 @@ describe('Post API', function () {
             }).catch(done);
         });
 
-        it('can include author', function (done) {
-            PostAPI.read({
-                context: {user: testUtils.DataGenerator.Content.users[1].id},
-                id: testUtils.DataGenerator.Content.posts[1].id,
-                include: 'author'
-            }).then(function (results) {
-                should.exist(results.posts[0].author.name);
-                results.posts[0].author.name.should.eql('Joe Bloggs');
-                done();
-            }).catch(done);
-        });
-
         // TODO: this should be a 422?
         it('cannot fetch a post with an invalid slug', function (done) {
             PostAPI.read({slug: 'invalid!'}).then(function () {
@@ -641,6 +650,10 @@ describe('Post API', function () {
     });
 
     describe('Destroy', function () {
+        beforeEach(testUtils.teardown);
+        beforeEach(testUtils.setup('users:roles', 'perms:post', 'perms:init', 'posts'));
+        after(testUtils.teardown);
+
         it('can delete a post', function (done) {
             var options = {
                 context: {user: testUtils.DataGenerator.Content.users[1].id},
@@ -676,6 +689,10 @@ describe('Post API', function () {
     });
 
     describe('Edit', function () {
+        beforeEach(testUtils.teardown);
+        beforeEach(testUtils.setup('users:roles', 'perms:post', 'perms:init', 'posts'));
+        after(testUtils.teardown);
+
         it('can edit own post', function (done) {
             PostAPI.edit({posts: [{status: 'test'}]}, {
                 context: {user: testUtils.DataGenerator.Content.users[1].id},

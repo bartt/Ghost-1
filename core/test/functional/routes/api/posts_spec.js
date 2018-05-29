@@ -22,7 +22,7 @@ describe('Post API', function () {
                     request = supertest.agent(config.get('url'));
                 })
                 .then(function () {
-                    return testUtils.doAuth(request, 'posts');
+                    return testUtils.doAuth(request, 'users:extra', 'posts');
                 })
                 .then(function (token) {
                     ownerAccessToken = token;
@@ -269,7 +269,7 @@ describe('Post API', function () {
                         var jsonResponse = res.body;
                         should.exist(jsonResponse.posts);
                         testUtils.API.checkResponse(jsonResponse, 'posts');
-                        jsonResponse.posts.should.have.length(4);
+                        jsonResponse.posts.should.have.length(2);
                         testUtils.API.checkResponse(jsonResponse.posts[0], 'post');
                         testUtils.API.checkResponse(jsonResponse.meta.pagination, 'pagination');
                         done();
@@ -404,7 +404,7 @@ describe('Post API', function () {
                     });
             });
 
-            it('can retrieve a post with author, created_by, and tags', function (done) {
+            it('[DEPRECATED] can retrieve a post with author, created_by, and tags', function (done) {
                 request.get(testUtils.API.getApiQuery('posts/' + testUtils.DataGenerator.Content.posts[0].id + '/?include=author,tags,created_by'))
                     .set('Authorization', 'Bearer ' + ownerAccessToken)
                     .expect('Content-Type', /json/)
@@ -424,6 +424,36 @@ describe('Post API', function () {
 
                         jsonResponse.posts[0].author.should.be.an.Object();
                         testUtils.API.checkResponse(jsonResponse.posts[0].author, 'user');
+                        jsonResponse.posts[0].tags[0].should.be.an.Object();
+                        testUtils.API.checkResponse(jsonResponse.posts[0].tags[0], 'tag');
+                        done();
+                    });
+            });
+
+            it('can retrieve a post with authors, created_by, and tags', function (done) {
+                request.get(testUtils.API.getApiQuery('posts/' + testUtils.DataGenerator.Content.posts[0].id + '/?include=authors,tags,created_by'))
+                    .set('Authorization', 'Bearer ' + ownerAccessToken)
+                    .expect('Content-Type', /json/)
+                    .expect('Cache-Control', testUtils.cacheRules.private)
+                    .expect(200)
+                    .end(function (err, res) {
+                        if (err) {
+                            return done(err);
+                        }
+
+                        should.not.exist(res.headers['x-cache-invalidate']);
+                        var jsonResponse = res.body;
+                        should.exist(jsonResponse);
+                        should.exist(jsonResponse.posts);
+
+                        testUtils.API.checkResponse(jsonResponse.posts[0], 'post', ['tags', 'authors']);
+
+                        jsonResponse.posts[0].author.should.be.a.String();
+                        jsonResponse.posts[0].page.should.not.be.ok();
+
+                        jsonResponse.posts[0].authors[0].should.be.an.Object();
+                        testUtils.API.checkResponse(jsonResponse.posts[0].authors[0], 'user');
+
                         jsonResponse.posts[0].tags[0].should.be.an.Object();
                         testUtils.API.checkResponse(jsonResponse.posts[0].tags[0], 'tag');
                         done();
@@ -726,9 +756,10 @@ describe('Post API', function () {
 
                         var jsonResponse = res.body,
                             changedTitle = 'My new Title',
-                            changedAuthor = ObjectId.generate();
+                            changedAuthor = testUtils.DataGenerator.Content.extraUsers[0].id;
 
                         should.exist(jsonResponse.posts[0]);
+                        jsonResponse.posts[0].author.should.not.eql(changedAuthor);
                         jsonResponse.posts[0].title = changedTitle;
                         jsonResponse.posts[0].author = changedAuthor;
                         jsonResponse.posts[0].custom_template = 'custom-about';
@@ -1044,10 +1075,11 @@ describe('Post API', function () {
                         }
 
                         var jsonResponse = res.body,
-                            changedValue = 'My new Title';
+                            changedValue = 'A title.';
+
                         should.exist(jsonResponse);
-                        jsonResponse.title = changedValue;
-                        jsonResponse.published_at = null;
+                        jsonResponse.posts[0].title = changedValue;
+                        jsonResponse.posts[0].published_at = null;
 
                         request.put(testUtils.API.getApiQuery('posts/' + testUtils.DataGenerator.Content.posts[0].id + '/'))
                             .set('Authorization', 'Bearer ' + ownerAccessToken)
@@ -1383,7 +1415,7 @@ describe('Post API', function () {
                     // create author
                     return testUtils.createUser({
                         user: testUtils.DataGenerator.forKnex.createUser({email: 'test+2@ghost.org'}),
-                        role: testUtils.DataGenerator.Content.roles[2]
+                        role: testUtils.DataGenerator.Content.roles[2].name
                     });
                 })
                 .then(function (_author) {
@@ -1423,30 +1455,6 @@ describe('Post API', function () {
                         done();
                     });
             });
-
-            it('CANNOT add post with other author ID', function (done) {
-                var post = {
-                    title: 'Freshly added',
-                    slug: 'freshly-added',
-                    author_id: 1
-                };
-
-                request.post(testUtils.API.getApiQuery('posts/'))
-                    .set('Authorization', 'Bearer ' + authorAccessToken)
-                    .send({posts: [post]})
-                    .expect('Content-Type', /json/)
-                    .expect('Cache-Control', testUtils.cacheRules.private)
-                    .expect(403)
-                    .end(function (err, res) {
-                        if (err) {
-                            return done(err);
-                        }
-
-                        should.exist(res.body.errors);
-                        res.body.errors[0].errorType.should.eql('NoPermissionError');
-                        done();
-                    });
-            });
         });
 
         describe('Edit', function () {
@@ -1459,10 +1467,9 @@ describe('Post API', function () {
                         slug: 'author-post',
                         author_id: author.id
                     }
-                })
-                    .then(function (post) {
-                        authorPostId = post.id;
-                    });
+                }).then(function (post) {
+                    authorPostId = post.id;
+                });
             });
 
             it('can edit own post', function (done) {
@@ -1506,10 +1513,110 @@ describe('Post API', function () {
                             });
                     });
             });
+        });
 
-            it('CANNOT change author of own post', function (done) {
-                request.get(testUtils.API.getApiQuery('posts/' + authorPostId + '/?include=tags'))
-                    .set('Authorization', 'Bearer ' + authorAccessToken)
+        describe('Delete', function () {
+            it('can delete own published post', function (done) {
+                testUtils.createPost({
+                    post: {
+                        title: 'Author\'s test post for deletion',
+                        slug: 'author-delete-post-published',
+                        author_id: author.id,
+                        status: 'published'
+                    }
+                }).then(function (post) {
+                    request.del(testUtils.API.getApiQuery('posts/' + post.id + '/'))
+                        .set('Authorization', 'Bearer ' + authorAccessToken)
+                        .expect('Cache-Control', testUtils.cacheRules.private)
+                        .expect(204)
+                        .end(function (err, res) {
+                            if (err) {
+                                return done(err);
+                            }
+
+                            res.body.should.be.empty();
+
+                            done();
+                        });
+                });
+            });
+        });
+    });
+
+    describe('As Contributor', function () {
+        var contributorAccessToken, contributor;
+
+        before(function () {
+            return ghost()
+                .then(function (_ghostServer) {
+                    ghostServer = _ghostServer;
+                    request = supertest.agent(config.get('url'));
+
+                    // create contributor
+                    return testUtils.createUser({
+                        user: testUtils.DataGenerator.forKnex.createUser({email: 'test+3@ghost.org'}),
+                        role: testUtils.DataGenerator.Content.roles[4].name
+                    });
+                })
+                .then(function (_contributor) {
+                    request.user = contributor = _contributor;
+                    return testUtils.doAuth(request, 'posts');
+                })
+                .then(function (token) {
+                    contributorAccessToken = token;
+                });
+        });
+
+        describe('Add', function () {
+            it('can add own post', function (done) {
+                var post = {
+                    title: 'Freshly added',
+                    slug: 'freshly-added',
+                    author_id: contributor.id
+                };
+
+                request.post(testUtils.API.getApiQuery('posts/'))
+                    .set('Authorization', 'Bearer ' + contributorAccessToken)
+                    .send({posts: [post]})
+                    .expect('Content-Type', /json/)
+                    .expect('Cache-Control', testUtils.cacheRules.private)
+                    .expect(201)
+                    .end(function (err, res) {
+                        if (err) {
+                            return done(err);
+                        }
+
+                        var postBody = res.body;
+
+                        res.headers['x-cache-invalidate'].should.eql('/p/' + postBody.posts[0].uuid + '/');
+                        should.exist(postBody);
+
+                        testUtils.API.checkResponse(postBody.posts[0], 'post');
+                        done();
+                    });
+            });
+        });
+
+        describe('Edit', function () {
+            var contributorPostId;
+
+            before(function () {
+                return testUtils.createPost({
+                    post: {
+                        title: 'Contributor\'s test post',
+                        slug: 'contributor-post',
+                        author_id: contributor.id,
+                        status: 'draft'
+                    }
+                })
+                    .then(function (post) {
+                        contributorPostId = post.id;
+                    });
+            });
+
+            it('can edit own post', function (done) {
+                request.get(testUtils.API.getApiQuery('posts/' + contributorPostId + '/?include=tags&status=draft'))
+                    .set('Authorization', 'Bearer ' + contributorAccessToken)
                     .expect('Content-Type', /json/)
                     .expect('Cache-Control', testUtils.cacheRules.private)
                     .expect(200)
@@ -1520,14 +1627,54 @@ describe('Post API', function () {
 
                         var jsonResponse = res.body,
                             changedTitle = 'My new Title',
-                            changedAuthor = ObjectId.generate();
+                            changedSlug = 'my-new-slug';
 
                         should.exist(jsonResponse.posts[0]);
                         jsonResponse.posts[0].title = changedTitle;
-                        jsonResponse.posts[0].author = changedAuthor;
+                        jsonResponse.posts[0].slug = changedSlug;
 
-                        request.put(testUtils.API.getApiQuery('posts/' + authorPostId + '/'))
-                            .set('Authorization', 'Bearer ' + authorAccessToken)
+                        request.put(testUtils.API.getApiQuery('posts/' + contributorPostId + '/'))
+                            .set('Authorization', 'Bearer ' + contributorAccessToken)
+                            .send(jsonResponse)
+                            .expect('Content-Type', /json/)
+                            .expect('Cache-Control', testUtils.cacheRules.private)
+                            .expect(200)
+                            .end(function (err, res) {
+                                if (err) {
+                                    return done(err);
+                                }
+
+                                var putBody = res.body;
+                                should.exist(putBody);
+                                res.headers['x-cache-invalidate'].should.eql('/p/' + putBody.posts[0].uuid + '/');
+                                putBody.posts[0].title.should.eql(changedTitle);
+                                putBody.posts[0].slug.should.eql(changedSlug);
+
+                                testUtils.API.checkResponse(putBody.posts[0], 'post');
+                                done();
+                            });
+                    });
+            });
+
+            it('CANNOT publish a post', function (done) {
+                request.get(testUtils.API.getApiQuery('posts/' + contributorPostId + '/?include=tags&status=draft'))
+                    .set('Authorization', 'Bearer ' + contributorAccessToken)
+                    .expect('Content-Type', /json/)
+                    .expect('Cache-Control', testUtils.cacheRules.private)
+                    .expect(200)
+                    .end(function (err, res) {
+                        if (err) {
+                            return done(err);
+                        }
+
+                        var jsonResponse = res.body,
+                            changedStatus = 'published';
+
+                        should.exist(jsonResponse.posts[0]);
+                        jsonResponse.posts[0].status = changedStatus;
+
+                        request.put(testUtils.API.getApiQuery('posts/' + contributorPostId + '/'))
+                            .set('Authorization', 'Bearer ' + contributorAccessToken)
                             .send(jsonResponse)
                             .expect('Content-Type', /json/)
                             .expect('Cache-Control', testUtils.cacheRules.private)
@@ -1543,42 +1690,57 @@ describe('Post API', function () {
                             });
                     });
             });
+        });
 
-            it('CANNOT become author of other post', function (done) {
-                request.get(testUtils.API.getApiQuery('posts/' + testUtils.DataGenerator.Content.posts[0].id + '/?include=tags'))
-                    .set('Authorization', 'Bearer ' + authorAccessToken)
-                    .expect('Content-Type', /json/)
-                    .expect('Cache-Control', testUtils.cacheRules.private)
-                    .expect(200)
-                    .end(function (err, res) {
-                        if (err) {
-                            return done(err);
-                        }
+        describe('Delete', function () {
+            it('can delete own draft post', function (done) {
+                testUtils.createPost({
+                    post: {
+                        title: 'Contrbutor\'s test post for deletion',
+                        slug: 'contributor-delete-post',
+                        author_id: contributor.id,
+                        status: 'draft'
+                    }
+                }).then(function (post) {
+                    request.del(testUtils.API.getApiQuery('posts/' + post.id + '/'))
+                        .set('Authorization', 'Bearer ' + contributorAccessToken)
+                        .expect('Cache-Control', testUtils.cacheRules.private)
+                        .expect(204)
+                        .end(function (err, res) {
+                            if (err) {
+                                return done(err);
+                            }
 
-                        var jsonResponse = res.body,
-                            changedTitle = 'My new Title',
-                            changedAuthor = author.id;
+                            res.body.should.be.empty();
 
-                        should.exist(jsonResponse.posts[0]);
-                        jsonResponse.posts[0].title = changedTitle;
-                        jsonResponse.posts[0].author = changedAuthor;
+                            done();
+                        });
+                });
+            });
 
-                        request.put(testUtils.API.getApiQuery('posts/' + testUtils.DataGenerator.Content.posts[0].id + '/'))
-                            .set('Authorization', 'Bearer ' + authorAccessToken)
-                            .send(jsonResponse)
-                            .expect('Content-Type', /json/)
-                            .expect('Cache-Control', testUtils.cacheRules.private)
-                            .expect(403)
-                            .end(function (err, res) {
-                                if (err) {
-                                    return done(err);
-                                }
+            it('can\'t delete own published post', function (done) {
+                testUtils.createPost({
+                    post: {
+                        title: 'Contributor\'s test post for deletion',
+                        slug: 'contributor-delete-post-published',
+                        author_id: contributor.id,
+                        status: 'published'
+                    }
+                }).then(function (post) {
+                    request.del(testUtils.API.getApiQuery('posts/' + post.id + '/'))
+                        .set('Authorization', 'Bearer ' + contributorAccessToken)
+                        .expect('Cache-Control', testUtils.cacheRules.private)
+                        .expect(403)
+                        .end(function (err, res) {
+                            if (err) {
+                                return done(err);
+                            }
 
-                                should.exist(res.body.errors);
-                                res.body.errors[0].errorType.should.eql('NoPermissionError');
-                                done();
-                            });
-                    });
+                            should.exist(res.body.errors);
+                            res.body.errors[0].errorType.should.eql('NoPermissionError');
+                            done();
+                        });
+                });
             });
         });
     });

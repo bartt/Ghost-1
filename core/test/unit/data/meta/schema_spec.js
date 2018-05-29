@@ -43,7 +43,7 @@ describe('getSchema', function () {
         },  data = {
             context: ['post'],
             post: {
-                author: {
+                primary_author: {
                     name: 'Post Author',
                     website: 'http://myblogsite.com/',
                     bio: 'My author bio.',
@@ -146,7 +146,7 @@ describe('getSchema', function () {
                 slug: 'my-amp-post-slug',
                 mobiledoc: markdownToMobiledoc('some markdown'),
                 html: 'some html',
-                author: {
+                primary_author: {
                     name: 'Post Author',
                     website: 'http://myblogsite.com/',
                     bio: 'My author bio.',
@@ -225,7 +225,7 @@ describe('getSchema', function () {
         },  data = {
             context: ['post'],
             post: {
-                author: {
+                primary_author: {
                     name: 'Post Author',
                     website: undefined,
                     bio: null,
@@ -290,7 +290,7 @@ describe('getSchema', function () {
         },  data = {
             context: ['post'],
             post: {
-                author: {
+                primary_author: {
                     name: 'Post Author',
                     website: 'http://myblogsite.com/',
                     bio: 'My author bio.',
@@ -356,7 +356,7 @@ describe('getSchema', function () {
 
         should.deepEqual(schema, {
             '@context': 'https://schema.org',
-            '@type': 'Website',
+            '@type': 'WebSite',
             description: 'This is the theme description',
             image: {
                 '@type': 'ImageObject',

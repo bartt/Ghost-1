@@ -12,8 +12,8 @@ var should = require('should'),
     sandbox = sinon.sandbox.create();
 
 describe('Invites API', function () {
-    beforeEach(testUtils.teardown);
-    beforeEach(testUtils.setup('invites', 'settings', 'users:roles', 'perms:invite', 'perms:init'));
+    before(testUtils.teardown);
+    before(testUtils.setup('invites', 'settings', 'users:roles', 'perms:invite', 'perms:init'));
 
     beforeEach(function () {
         sandbox.stub(mail, 'send').callsFake(function () {
@@ -28,6 +28,31 @@ describe('Invites API', function () {
     after(testUtils.teardown);
 
     describe('CRUD', function () {
+        describe('Browse', function () {
+            it('browse invites', function (done) {
+                InvitesAPI.browse(testUtils.context.owner)
+                    .then(function (response) {
+                        response.invites.length.should.eql(2);
+
+                        response.invites[0].status.should.eql('sent');
+                        response.invites[0].email.should.eql('test1@ghost.org');
+                        response.invites[0].role_id.should.eql(testUtils.roles.ids.admin);
+
+                        response.invites[1].status.should.eql('sent');
+                        response.invites[1].email.should.eql('test2@ghost.org');
+                        response.invites[1].role_id.should.eql(testUtils.roles.ids.author);
+
+                        should.not.exist(response.invites[0].token);
+                        should.exist(response.invites[0].expires);
+
+                        should.not.exist(response.invites[1].token);
+                        should.exist(response.invites[1].expires);
+
+                        done();
+                    }).catch(done);
+            });
+        });
+
         describe('Add', function () {
             it('add invite 1', function (done) {
                 InvitesAPI.add({
@@ -47,6 +72,17 @@ describe('Invites API', function () {
                     .then(function (response) {
                         response.invites.length.should.eql(1);
                         response.invites[0].role_id.should.eql(testUtils.roles.ids.author);
+                        done();
+                    }).catch(done);
+            });
+
+            it('add invite 3', function (done) {
+                InvitesAPI.add({
+                    invites: [{email: 'test3@example.com', role_id: testUtils.roles.ids.contributor}]
+                }, testUtils.context.owner)
+                    .then(function (response) {
+                        response.invites.length.should.eql(1);
+                        response.invites[0].role_id.should.eql(testUtils.roles.ids.contributor);
                         done();
                     }).catch(done);
             });
@@ -87,31 +123,6 @@ describe('Invites API', function () {
                         (err instanceof common.errors.ValidationError).should.eql(true);
                         done();
                     });
-            });
-        });
-
-        describe('Browse', function () {
-            it('browse invites', function (done) {
-                InvitesAPI.browse(testUtils.context.owner)
-                    .then(function (response) {
-                        response.invites.length.should.eql(2);
-
-                        response.invites[0].status.should.eql('sent');
-                        response.invites[0].email.should.eql('test1@ghost.org');
-                        response.invites[0].role_id.should.eql(testUtils.roles.ids.admin);
-
-                        response.invites[1].status.should.eql('sent');
-                        response.invites[1].email.should.eql('test2@ghost.org');
-                        response.invites[1].role_id.should.eql(testUtils.roles.ids.author);
-
-                        should.not.exist(response.invites[0].token);
-                        should.exist(response.invites[0].expires);
-
-                        should.not.exist(response.invites[1].token);
-                        should.exist(response.invites[1].expires);
-
-                        done();
-                    }).catch(done);
             });
         });
 
@@ -253,6 +264,21 @@ describe('Invites API', function () {
                 }).catch(done);
             });
 
+            it('Can invite a Contributor', function (done) {
+                InvitesAPI.add({
+                    invites: [
+                        {
+                            email: 'test@example.com',
+                            role_id: testUtils.roles.ids.contributor
+                        }
+                    ]
+                }, testUtils.context.owner).then(function (response) {
+                    checkAddResponse(response);
+                    response.invites[0].role_id.should.equal(testUtils.roles.ids.contributor);
+                    done();
+                }).catch(done);
+            });
+
             it('Can invite with role set as string', function (done) {
                 InvitesAPI.add({
                     invites: [
@@ -291,7 +317,7 @@ describe('Invites API', function () {
                             role_id: testUtils.roles.ids.admin
                         }
                     ]
-                }, _.merge({}, {include: ['roles']}, testUtils.context.admin)).then(function (response) {
+                }, _.merge({}, {include: 'roles'}, testUtils.context.admin)).then(function (response) {
                     checkAddResponse(response);
                     response.invites[0].role_id.should.equal(testUtils.roles.ids.admin);
                     done();
@@ -324,6 +350,21 @@ describe('Invites API', function () {
                 }, testUtils.context.admin).then(function (response) {
                     checkAddResponse(response);
                     response.invites[0].role_id.should.equal(testUtils.roles.ids.author);
+                    done();
+                }).catch(done);
+            });
+
+            it('Can invite a Contributor', function (done) {
+                InvitesAPI.add({
+                    invites: [
+                        {
+                            email: 'test@example.com',
+                            role_id: testUtils.roles.ids.contributor
+                        }
+                    ]
+                }, testUtils.context.admin).then(function (response) {
+                    checkAddResponse(response);
+                    response.invites[0].role_id.should.equal(testUtils.roles.ids.contributor);
                     done();
                 }).catch(done);
             });
@@ -383,33 +424,20 @@ describe('Invites API', function () {
                     done();
                 }).catch(done);
             });
-        });
 
-        describe('Author', function () {
-            it('CANNOT invite an Owner', function (done) {
+            it('Can invite a Contributor', function (done) {
                 InvitesAPI.add({
                     invites: [
                         {
                             email: 'test@example.com',
-                            role_id: testUtils.roles.ids.owner
+                            role_id: testUtils.roles.ids.contributor
                         }
                     ]
-                }, context.author).then(function () {
-                    done(new Error('Author should not be able to add an owner'));
-                }).catch(checkForErrorType('NoPermissionError', done));
-            });
-
-            it('CANNOT invite an Author', function (done) {
-                InvitesAPI.add({
-                    invites: [
-                        {
-                            email: 'test@example.com',
-                            role_id: testUtils.roles.ids.author
-                        }
-                    ]
-                }, context.author).then(function () {
-                    done(new Error('Author should not be able to add an Author'));
-                }).catch(checkForErrorType('NoPermissionError', done));
+                }, context.editor).then(function (response) {
+                    checkAddResponse(response);
+                    response.invites[0].role_id.should.equal(testUtils.roles.ids.contributor);
+                    done();
+                }).catch(done);
             });
         });
     });

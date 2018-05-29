@@ -8,8 +8,8 @@ var should = require('should'),
 describe('Permission Model', function () {
     // Keep the DB clean
     before(testUtils.teardown);
-    afterEach(testUtils.teardown);
-    beforeEach(testUtils.setup('permission'));
+    after(testUtils.teardown);
+    before(testUtils.setup('permission'));
 
     before(function () {
         should.exist(PermissionModel);
@@ -75,7 +75,7 @@ describe('Permission Model', function () {
 
             return PermissionModel.destroy(firstPermission);
         }).then(function (response) {
-            response.toJSON().should.be.empty();
+            response.toJSON({shallow: true}).should.be.empty();
             return PermissionModel.findOne(firstPermission);
         }).then(function (newResults) {
             should.equal(newResults, null);
@@ -127,7 +127,7 @@ describe('Permission Model', function () {
     //             return testUser.permissions().attach(testPermission);
     //         });
     //     }).then(function () {
-    //         return Models.User.findOne({id: 1}, { include: ['permissions']});
+    //         return Models.User.findOne({id: 1}, { withRelated: ['permissions']});
     //     }).then(function (updatedUser) {
     //         should.exist(updatedUser);
 

@@ -13,6 +13,9 @@ var should = require('should'),
     exporter = require('../../../../../server/data/export'),
     importer = require('../../../../../server/data/importer'),
     dataImporter = importer.importers[1],
+    importOptions = {
+        returnImportedData: true
+    },
 
     knex = db.knex,
     sandbox = sinon.sandbox.create();
@@ -39,9 +42,9 @@ describe('Import', function () {
         it('import results have data and problems', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function (importResult) {
                 should.exist(importResult);
                 should.exist(importResult.data);
@@ -51,16 +54,52 @@ describe('Import', function () {
             }).catch(done);
         });
 
-        it('removes duplicate posts', function (done) {
+        it('removes duplicate posts, cares about invalid dates', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function (importResult) {
                 should.exist(importResult.data.posts);
                 importResult.data.posts.length.should.equal(1);
-                importResult.problems.length.should.eql(3);
+                importResult.problems.length.should.eql(4);
+
+                importResult.problems[0].message.should.eql('Entry was imported, but we were not able to ' +
+                    'resolve the following user references: updated_by. The user does not exist, fallback to owner user.');
+                importResult.problems[0].help.should.eql('User');
+
+                importResult.problems[1].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
+                importResult.problems[1].help.should.eql('User');
+
+                importResult.problems[2].message.should.eql('Date is in a wrong format and invalid. ' +
+                    'It was replaced with the current timestamp.');
+                importResult.problems[2].help.should.eql('Post');
+
+                importResult.problems[3].message.should.eql('Theme not imported, please upload in Settings - Design');
+                importResult.problems[3].help.should.eql('Settings');
+
+                moment(importResult.data.posts[0].created_at).isValid().should.eql(true);
+                moment(importResult.data.posts[0].updated_at).format().should.eql('2013-10-18T23:58:44Z');
+                moment(importResult.data.posts[0].published_at).format().should.eql('2013-12-29T11:58:30Z');
+                moment(importResult.data.tags[0].updated_at).format().should.eql('2016-07-17T12:02:54Z');
+
+                done();
+            }).catch(done);
+        });
+
+        it('can import user with missing allowed fields', function (done) {
+            var exportData;
+
+            testUtils.fixtures.loadExportFixture('export-003-missing-allowed-fields', {lts: true}).then(function (exported) {
+                exportData = exported;
+                return dataImporter.doImport(exportData, importOptions);
+            }).then(function (importResult) {
+                importResult.data.users[0].hasOwnProperty('website');
+                importResult.data.users[0].hasOwnProperty('bio');
+                importResult.data.users[0].hasOwnProperty('accessibility');
+                importResult.data.users[0].hasOwnProperty('cover_image');
+                importResult.problems.length.should.eql(1);
 
                 done();
             }).catch(done);
@@ -69,9 +108,10 @@ describe('Import', function () {
         it('removes duplicate tags and updates associations', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003-duplicate-tags', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-duplicate-tags', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function (importResult) {
                 should.exist(importResult.data.tags);
                 should.exist(importResult.originalData.posts_tags);
@@ -86,30 +126,40 @@ describe('Import', function () {
                     return postTag.tag_id !== 2;
                 });
 
-                importResult.problems.length.should.equal(3);
+                importResult.problems.length.should.equal(4);
 
-                importResult.problems[2].message.should.equal('Theme not imported, please upload in Settings - Design');
+                importResult.problems[0].message.should.eql('Entry was imported, but we were not able to ' +
+                    'resolve the following user references: updated_by. The user does not exist, fallback to owner user.');
+                importResult.problems[0].help.should.eql('User');
+
+                importResult.problems[1].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
+                importResult.problems[1].help.should.eql('User');
+
+                importResult.problems[2].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
+                importResult.problems[2].help.should.eql('Tag');
+
+                importResult.problems[3].message.should.eql('Theme not imported, please upload in Settings - Design');
+                importResult.problems[3].help.should.eql('Settings');
 
                 done();
             }).catch(done);
         });
 
-        it('cares about invalid dates', function (done) {
+        it('removes broken tags from post (not in db, not in file)', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-broken-tags', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
-            }).then(function (importResult) {
-                should.exist(importResult.data.posts);
-                importResult.data.posts.length.should.equal(1);
-                importResult.problems.length.should.eql(3);
 
-                moment(importResult.data.posts[0].created_at).isValid().should.eql(true);
-                moment(importResult.data.posts[0].updated_at).format().should.eql('2013-10-18T23:58:44Z');
-                moment(importResult.data.posts[0].published_at).format().should.eql('2013-12-29T11:58:30Z');
-                moment(importResult.data.tags[0].updated_at).format().should.eql('2016-07-17T12:02:54Z');
-
+                return dataImporter.doImport(exportData, importOptions);
+            }).then(function () {
+                return Promise.all([
+                    models.Post.findPage({withRelated: ['tags']})
+                ]);
+            }).then(function (data) {
+                data[0].posts.length.should.eql(1);
+                data[0].posts[0].slug.should.eql('welcome-to-ghost-2');
+                data[0].posts[0].tags.length.should.eql(0);
                 done();
             }).catch(done);
         });
@@ -121,9 +171,9 @@ describe('Import', function () {
         it('imports data from 000', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-000', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-000', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 // Grab the data from tables
                 return Promise.all([
@@ -167,9 +217,9 @@ describe('Import', function () {
         it('safely imports data, from 001', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-001', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-001', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 // Grab the data from tables
                 return Promise.all([
@@ -193,40 +243,45 @@ describe('Import', function () {
 
                 // user should still have the credentials from the original insert, not the import
                 users[0].email.should.equal(testUtils.DataGenerator.Content.users[0].email);
-                users[0].password.should.equal(testUtils.DataGenerator.Content.users[0].password);
-                // but the name, slug, and bio should have been overridden
-                users[0].name.should.equal(exportData.data.users[0].name);
-                users[0].slug.should.equal(exportData.data.users[0].slug);
-                should.not.exist(users[0].bio, 'bio is not imported');
 
-                // import no longer requires all data to be dropped, and adds posts
-                posts.length.should.equal(exportData.data.posts.length, 'Wrong number of posts');
+                models.User.isPasswordCorrect({
+                    hashedPassword: users[0].password,
+                    plainPassword: testUtils.DataGenerator.Content.users[0].password
+                }).then(function () {
+                    // but the name, slug, and bio should have been overridden
+                    users[0].name.should.equal(exportData.data.users[0].name);
+                    users[0].slug.should.equal(exportData.data.users[0].slug);
+                    should.not.exist(users[0].bio, 'bio is not imported');
 
-                // active_theme should NOT have been overridden
-                _.find(settings, {key: 'active_theme'}).value.should.equal('casper', 'Wrong theme');
+                    // import no longer requires all data to be dropped, and adds posts
+                    posts.length.should.equal(exportData.data.posts.length, 'Wrong number of posts');
 
-                // test tags
-                tags.length.should.equal(exportData.data.tags.length, 'no new tags');
+                    // active_theme should NOT have been overridden
+                    _.find(settings, {key: 'active_theme'}).value.should.equal('casper', 'Wrong theme');
 
-                // Ensure imported post retains set timestamp
-                // When in sqlite we are returned a unix timestamp number,
-                // in MySQL we're returned a date object.
-                // We pass the returned post always through the date object
-                // to ensure the return is consistent for all DBs.
-                assert.equal(moment(posts[0].created_at).valueOf(), 1388318310000);
-                assert.equal(moment(posts[0].updated_at).valueOf(), 1388318310000);
-                assert.equal(moment(posts[0].published_at).valueOf(), 1388404710000);
+                    // test tags
+                    tags.length.should.equal(exportData.data.tags.length, 'no new tags');
 
-                done();
+                    // Ensure imported post retains set timestamp
+                    // When in sqlite we are returned a unix timestamp number,
+                    // in MySQL we're returned a date object.
+                    // We pass the returned post always through the date object
+                    // to ensure the return is consistent for all DBs.
+                    assert.equal(moment(posts[0].created_at).valueOf(), 1388318310000);
+                    assert.equal(moment(posts[0].updated_at).valueOf(), 1388318310000);
+                    assert.equal(moment(posts[0].published_at).valueOf(), 1388404710000);
+
+                    done();
+                });
             }).catch(done);
         });
 
         it('doesn\'t import invalid settings data from 001', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-001-invalid-setting', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-001-invalid-setting', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 (1).should.eql(0, 'Data import should not resolve promise.');
             }).catch(function (error) {
@@ -265,9 +320,9 @@ describe('Import', function () {
         it('safely imports data from 002', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-002', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-002', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 // Grab the data from tables
                 return Promise.all([
@@ -291,32 +346,37 @@ describe('Import', function () {
 
                 // user should still have the credentials from the original insert, not the import
                 users[0].email.should.equal(testUtils.DataGenerator.Content.users[0].email);
-                users[0].password.should.equal(testUtils.DataGenerator.Content.users[0].password);
-                // but the name, slug, and bio should have been overridden
-                users[0].name.should.equal(exportData.data.users[0].name);
-                users[0].slug.should.equal(exportData.data.users[0].slug);
-                should.not.exist(users[0].bio, 'bio is not imported');
 
-                // import no longer requires all data to be dropped, and adds posts
-                posts.length.should.equal(exportData.data.posts.length, 'Wrong number of posts');
-                posts[0].comment_id.should.eql(exportData.data.posts[0].id.toString());
+                models.User.isPasswordCorrect({
+                    hashedPassword: users[0].password,
+                    plainPassword: testUtils.DataGenerator.Content.users[0].password
+                }).then(function () {
+                    // but the name, slug, and bio should have been overridden
+                    users[0].name.should.equal(exportData.data.users[0].name);
+                    users[0].slug.should.equal(exportData.data.users[0].slug);
+                    should.not.exist(users[0].bio, 'bio is not imported');
 
-                // active_theme should NOT have been overridden
-                _.find(settings, {key: 'active_theme'}).value.should.equal('casper', 'Wrong theme');
+                    // import no longer requires all data to be dropped, and adds posts
+                    posts.length.should.equal(exportData.data.posts.length, 'Wrong number of posts');
+                    posts[0].comment_id.should.eql(exportData.data.posts[0].id.toString());
 
-                // test tags
-                tags.length.should.equal(exportData.data.tags.length, 'no new tags');
+                    // active_theme should NOT have been overridden
+                    _.find(settings, {key: 'active_theme'}).value.should.equal('casper', 'Wrong theme');
 
-                // Ensure imported post retains set timestamp
-                // When in sqlite we are returned a unix timestamp number,
-                // in MySQL we're returned a date object.
-                // We pass the returned post always through the date object
-                // to ensure the return is consistant for all DBs.
-                assert.equal(moment(posts[0].created_at).valueOf(), 1419940710000);
-                assert.equal(moment(posts[0].updated_at).valueOf(), 1420027110000);
-                assert.equal(moment(posts[0].published_at).valueOf(), 1420027110000);
+                    // test tags
+                    tags.length.should.equal(exportData.data.tags.length, 'no new tags');
 
-                done();
+                    // Ensure imported post retains set timestamp
+                    // When in sqlite we are returned a unix timestamp number,
+                    // in MySQL we're returned a date object.
+                    // We pass the returned post always through the date object
+                    // to ensure the return is consistant for all DBs.
+                    assert.equal(moment(posts[0].created_at).valueOf(), 1419940710000);
+                    assert.equal(moment(posts[0].updated_at).valueOf(), 1420027110000);
+                    assert.equal(moment(posts[0].published_at).valueOf(), 1420027110000);
+
+                    done();
+                });
             }).catch(done);
         });
     });
@@ -327,9 +387,9 @@ describe('Import', function () {
         it('safely imports data from 003 (single user)', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 // Grab the data from tables
                 return Promise.all([
@@ -348,41 +408,47 @@ describe('Import', function () {
 
                 // user should still have the credentials from the original insert, not the import
                 users[0].email.should.equal(testUtils.DataGenerator.Content.users[0].email);
-                users[0].password.should.equal(testUtils.DataGenerator.Content.users[0].password);
-                // but the name, slug, and bio should have been overridden
-                users[0].name.should.equal(exportData.data.users[0].name);
-                users[0].slug.should.equal(exportData.data.users[0].slug);
-                should.not.exist(users[0].bio, 'bio is not imported');
 
-                // test posts
-                posts.length.should.equal(1, 'Wrong number of posts');
-                // test tags
-                tags.length.should.equal(1, 'no new tags');
+                models.User.isPasswordCorrect({
+                    hashedPassword: users[0].password,
+                    plainPassword: testUtils.DataGenerator.Content.users[0].password
+                }).then(function () {
+                    // but the name, slug, and bio should have been overridden
+                    users[0].name.should.equal(exportData.data.users[0].name);
+                    users[0].slug.should.equal(exportData.data.users[0].slug);
+                    should.not.exist(users[0].bio, 'bio is not imported');
 
-                done();
+                    // test posts
+                    posts.length.should.equal(1, 'Wrong number of posts');
+                    // test tags
+                    tags.length.should.equal(1, 'no new tags');
+
+                    done();
+                });
             }).catch(done);
         });
 
         it('handles validation errors nicely', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003-badValidation', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-badValidation', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done(new Error('Allowed import of duplicate data'));
             }).catch(function (response) {
-                response.length.should.equal(4);
+                response.length.should.equal(3);
 
                 // NOTE: a duplicated tag.slug is a warning
                 response[0].errorType.should.equal('ValidationError');
                 response[0].message.should.eql('Value in [tags.name] cannot be blank.');
+
                 response[1].errorType.should.equal('ValidationError');
                 response[1].message.should.eql('Value in [posts.title] cannot be blank.');
+
                 response[2].errorType.should.equal('ValidationError');
-                response[2].message.should.eql('Value in [tags.name] cannot be blank.');
-                response[3].errorType.should.equal('ValidationError');
-                response[3].message.should.eql('Value in [settings.key] cannot be blank.');
+                response[2].message.should.eql('Value in [settings.key] cannot be blank.');
+
                 done();
             }).catch(done);
         });
@@ -390,34 +456,47 @@ describe('Import', function () {
         it('handles database errors nicely: duplicated tag and posts slugs', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003-dbErrors', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-dbErrors', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function (importedData) {
                 importedData.data.posts.length.should.eql(1);
 
-                importedData.problems.length.should.eql(3);
-                importedData.problems[0].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
-                importedData.problems[0].help.should.eql('Tag');
+                importedData.problems.length.should.eql(4);
+
+                importedData.problems[0].message.should.eql('Entry was imported, but we were not able to ' +
+                    'resolve the following user references: updated_by. The user does not exist, fallback to owner user.');
+                importedData.problems[0].help.should.eql('User');
                 importedData.problems[1].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
                 importedData.problems[1].help.should.eql('Tag');
                 importedData.problems[2].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
-                importedData.problems[2].help.should.eql('Post');
+                importedData.problems[2].help.should.eql('Tag');
+                importedData.problems[3].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
+                importedData.problems[3].help.should.eql('Post');
                 done();
             }).catch(done);
         });
 
-        it('does import posts with an invalid author', function (done) {
+        it('does import posts with an invalid author_id', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003-mu-unknownAuthor', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-mu-unknownAuthor', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function (importedData) {
                 // NOTE: we detect invalid author references as warnings, because ember can handle this
                 // The owner can simply update the author reference in the UI
                 importedData.problems.length.should.eql(3);
-                importedData.problems[2].message.should.eql('Entry was imported, but we were not able to update user reference field: published_by');
+
+                importedData.problems[0].message.should.eql('Entry was imported, but we were not able to resolve the ' +
+                    'following user references: updated_by. The user does not exist, fallback to owner user.');
+                importedData.problems[0].help.should.eql('User');
+
+                importedData.problems[1].message.should.eql('Entry was not imported and ignored. Detected duplicated entry.');
+                importedData.problems[1].help.should.eql('User');
+
+                importedData.problems[2].message.should.eql('Entry was imported, but we were not able to ' +
+                    'resolve the following user references: author_id, published_by. The user does not exist, fallback to owner user.');
                 importedData.problems[2].help.should.eql('Post');
 
                 // Grab the data from tables
@@ -437,40 +516,43 @@ describe('Import', function () {
 
                 // user should still have the credentials from the original insert, not the import
                 users[0].email.should.equal(testUtils.DataGenerator.Content.users[0].email);
-                users[0].password.should.equal(testUtils.DataGenerator.Content.users[0].password);
-                // but the name, slug, and bio should have been overridden
-                users[0].name.should.equal('Joe Bloggs');
-                users[0].slug.should.equal('joe-bloggs');
-                should.not.exist(users[0].bio, 'bio is not imported');
 
-                // test posts
-                posts.length.should.equal(1, 'Wrong number of posts');
+                models.User.isPasswordCorrect({
+                    hashedPassword: users[0].password,
+                    plainPassword: testUtils.DataGenerator.Content.users[0].password
+                }).then(function () {
+                    // but the name, slug, and bio should have been overridden
+                    users[0].name.should.equal('Joe Bloggs');
+                    users[0].slug.should.equal('joe-bloggs');
+                    should.not.exist(users[0].bio, 'bio is not imported');
 
-                // this is just a string and ember can handle unknown authors
-                // the blog owner is able to simply set a new author
-                posts[0].author_id.should.eql('2');
+                    // test posts
+                    posts.length.should.equal(1, 'Wrong number of posts');
 
-                // test tags
-                tags.length.should.equal(0, 'no tags');
+                    // we fallback to owner user
+                    // NOTE: ember can handle unknown author_id, but still a fallback to an existing user is better.
+                    posts[0].author_id.should.eql('1');
 
-                done();
+                    // test tags
+                    tags.length.should.equal(0, 'no tags');
+
+                    done();
+                });
             }).catch(done);
         });
 
         it('doesn\'t import invalid tags data from 003', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003-nullTags', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-nullTags', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done(new Error('Allowed import of invalid tags data'));
             }).catch(function (response) {
-                response.length.should.equal(2);
+                response.length.should.equal(1);
                 response[0].errorType.should.equal('ValidationError');
                 response[0].message.should.eql('Value in [tags.name] cannot be blank.');
-                response[1].errorType.should.equal('ValidationError');
-                response[1].message.should.eql('Value in [tags.name] cannot be blank.');
                 done();
             }).catch(done);
         });
@@ -478,19 +560,16 @@ describe('Import', function () {
         it('doesn\'t import invalid posts data from 003', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003-nullPosts', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-nullPosts', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done(new Error('Allowed import of invalid post data'));
             }).catch(function (response) {
-                response.length.should.equal(2, response);
+                response.length.should.equal(1, response);
 
                 response[0].errorType.should.equal('ValidationError');
                 response[0].message.should.eql('Value in [posts.title] cannot be blank.');
-
-                response[1].errorType.should.equal('ValidationError');
-                response[1].message.should.eql('Value in [posts.status] cannot be blank.');
 
                 done();
             }).catch(done);
@@ -499,9 +578,9 @@ describe('Import', function () {
         it('correctly sanitizes incorrect UUIDs', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-003-wrongUUID', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-003-wrongUUID', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 // Grab the data from tables
                 return knex('posts').select();
@@ -523,14 +602,14 @@ describe('Import', function () {
         it('ensure post tag order is correct', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-004', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-004', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 // Grab the data from tables
                 // NOTE: we have to return sorted data, sqlite can insert the posts in a different order
                 return Promise.all([
-                    models.Post.findPage({include: ['tags']}),
+                    models.Post.findPage({withRelated: ['tags']}),
                     models.Tag.findAll()
                 ]);
             }).then(function (importedData) {
@@ -571,13 +650,13 @@ describe('Import', function () {
         it('doesn\'t import a title which is too long', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-001', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-001', {lts: true}).then(function (exported) {
                 exportData = exported;
 
                 // change title to 300 characters  (soft limit is 255)
                 exportData.data.posts[0].title = new Array(300).join('a');
                 exportData.data.posts[0].tags = 'Tag';
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 (1).should.eql(0, 'Data import should not resolve promise.');
             }).catch(function (error) {
@@ -612,12 +691,12 @@ describe('Import', function () {
         it('doesn\'t import a tag when meta title too long', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-001', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-001', {lts: true}).then(function (exported) {
                 exportData = exported;
 
                 // change meta_title to 305 characters  (soft limit is 300)
                 exportData.data.tags[0].meta_title = new Array(305).join('a');
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 (1).should.eql(0, 'Data import should not resolve promise.');
             }).catch(function (error) {
@@ -652,12 +731,12 @@ describe('Import', function () {
         it('doesn\'t import a user user when bio too long', function (done) {
             var exportData;
 
-            testUtils.fixtures.loadExportFixture('export-001', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-001', {lts: true}).then(function (exported) {
                 exportData = exported;
 
                 // change bio to 300 characters (soft limit is 200)
                 exportData.data.users[0].bio = new Array(300).join('a');
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 (1).should.eql(0, 'Data import should not resolve promise.');
             }).catch(function (error) {
@@ -700,10 +779,10 @@ describe('Import (new test structure)', function () {
 
         before(function doImport(done) {
             testUtils.initFixtures('roles', 'owner', 'settings').then(function () {
-                return testUtils.fixtures.loadExportFixture('export-003-mu', {lts:true});
+                return testUtils.fixtures.loadExportFixture('export-003-mu', {lts: true});
             }).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done();
             }).catch(done);
@@ -802,46 +881,51 @@ describe('Import (new test structure)', function () {
                 });
 
                 ownerUser.email.should.equal(testUtils.DataGenerator.Content.users[0].email);
-                ownerUser.password.should.equal(testUtils.DataGenerator.Content.users[0].password);
-                ownerUser.status.should.equal('active');
 
-                user1.email.should.equal(exportData.data.users[0].email);
-                user2.email.should.equal(exportData.data.users[1].email);
-                user3.email.should.equal(exportData.data.users[2].email);
+                models.User.isPasswordCorrect({
+                    hashedPassword: users[0].password,
+                    plainPassword: testUtils.DataGenerator.Content.users[0].password
+                }).then(function () {
+                    ownerUser.status.should.equal('active');
 
-                // Newly created users should have a status of locked
-                user2.status.should.equal('locked');
-                user3.status.should.equal('locked');
+                    user1.email.should.equal(exportData.data.users[0].email);
+                    user2.email.should.equal(exportData.data.users[1].email);
+                    user3.email.should.equal(exportData.data.users[2].email);
 
-                // Newly created users should have created_at/_by and updated_at/_by set to when they were imported
-                user2.created_by.should.equal(user1.id);
-                user2.created_at.should.not.equal(exportData.data.users[1].created_at);
-                user2.updated_by.should.equal(ownerUser.id);
-                user2.updated_at.should.not.equal(exportData.data.users[1].updated_at);
-                user3.created_by.should.equal(user1.id);
-                user3.created_at.should.not.equal(exportData.data.users[2].created_at);
-                user3.updated_by.should.equal(ownerUser.id);
-                user3.updated_at.should.not.equal(exportData.data.users[2].updated_at);
+                    // Newly created users should have a status of locked
+                    user2.status.should.equal('locked');
+                    user3.status.should.equal('locked');
 
-                rolesUsers.length.should.equal(4, 'There should be 4 role relations');
+                    // Newly created users should have created_at/_by and updated_at/_by set to when they were imported
+                    user2.created_by.should.equal(user1.id);
+                    user2.created_at.should.not.equal(exportData.data.users[1].created_at);
+                    user2.updated_by.should.equal(ownerUser.id);
+                    user2.updated_at.should.not.equal(exportData.data.users[1].updated_at);
+                    user3.created_by.should.equal(user1.id);
+                    user3.created_at.should.not.equal(exportData.data.users[2].created_at);
+                    user3.updated_by.should.equal(ownerUser.id);
+                    user3.updated_at.should.not.equal(exportData.data.users[2].updated_at);
 
-                _.each(rolesUsers, function (roleUser) {
-                    if (roleUser.user_id === ownerUser.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[3].id, 'Original user should be an owner');
-                    }
-                    if (roleUser.user_id === user2.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Josephine should be an admin');
-                    }
-                    if (roleUser.user_id === user3.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[2].id, 'Smith should be an author by default');
-                    }
+                    rolesUsers.length.should.equal(4, 'There should be 4 role relations');
+
+                    _.each(rolesUsers, function (roleUser) {
+                        if (roleUser.user_id === ownerUser.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[3].id, 'Original user should be an owner');
+                        }
+                        if (roleUser.user_id === user2.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Josephine should be an admin');
+                        }
+                        if (roleUser.user_id === user3.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[2].id, 'Smith should be an author by default');
+                        }
+                    });
+
+                    done();
                 });
-
-                done();
             }).catch(done);
         });
 
-        it('imports posts & tags with correct authors, owners etc', function (done) {
+        it('imports posts & tags with correct author_id, owners etc', function (done) {
             var fetchImported = Promise.join(
                 knex('users').select(),
                 knex('posts').select(),
@@ -905,7 +989,7 @@ describe('Import (new test structure)', function () {
                     return tag.slug === exportData.data.tags[2].slug;
                 });
 
-                // Check the authors are correct
+                // Check that the author_id's are correct
                 post1.author_id.should.equal(user2.id);
                 // This ensures that imported owner posts are getting imported with a new id
                 post2.author_id.should.equal(user1.id);
@@ -947,10 +1031,10 @@ describe('Import (new test structure)', function () {
 
         before(function doImport(done) {
             testUtils.initFixtures('roles', 'owner', 'settings').then(function () {
-                return testUtils.fixtures.loadExportFixture('export-003-mu-noOwner', {lts:true});
+                return testUtils.fixtures.loadExportFixture('export-003-mu-noOwner', {lts: true});
             }).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done();
             }).catch(done);
@@ -1039,44 +1123,49 @@ describe('Import (new test structure)', function () {
                 });
 
                 user1.email.should.equal(testUtils.DataGenerator.Content.users[0].email);
-                user1.password.should.equal(testUtils.DataGenerator.Content.users[0].password);
-                user1.status.should.equal('active');
-                user2.email.should.equal(exportData.data.users[0].email);
-                user3.email.should.equal(exportData.data.users[1].email);
 
-                // Newly created users should have a status of locked
-                user2.status.should.equal('locked');
-                user3.status.should.equal('locked');
+                models.User.isPasswordCorrect({
+                    hashedPassword: users[0].password,
+                    plainPassword: testUtils.DataGenerator.Content.users[0].password
+                }).then(function () {
+                    user1.status.should.equal('active');
+                    user2.email.should.equal(exportData.data.users[0].email);
+                    user3.email.should.equal(exportData.data.users[1].email);
 
-                // Newly created users should have created_at/_by and updated_at/_by set to when they were imported
-                user2.created_by.should.equal(user1.id);
-                user2.created_at.should.not.equal(exportData.data.users[0].created_at);
-                user2.updated_by.should.equal(user1.id);
-                user2.updated_at.should.not.equal(exportData.data.users[0].updated_at);
-                user3.created_by.should.equal(user1.id);
-                user3.created_at.should.not.equal(exportData.data.users[1].created_at);
-                user3.updated_by.should.equal(user1.id);
-                user3.updated_at.should.not.equal(exportData.data.users[1].updated_at);
+                    // Newly created users should have a status of locked
+                    user2.status.should.equal('locked');
+                    user3.status.should.equal('locked');
 
-                rolesUsers.length.should.equal(3, 'There should be 3 role relations');
+                    // Newly created users should have created_at/_by and updated_at/_by set to when they were imported
+                    user2.created_by.should.equal(user1.id);
+                    user2.created_at.should.not.equal(exportData.data.users[0].created_at);
+                    user2.updated_by.should.equal(user1.id);
+                    user2.updated_at.should.not.equal(exportData.data.users[0].updated_at);
+                    user3.created_by.should.equal(user1.id);
+                    user3.created_at.should.not.equal(exportData.data.users[1].created_at);
+                    user3.updated_by.should.equal(user1.id);
+                    user3.updated_at.should.not.equal(exportData.data.users[1].updated_at);
 
-                _.each(rolesUsers, function (roleUser) {
-                    if (roleUser.user_id === user1.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[3].id, 'Original user should be an owner');
-                    }
-                    if (roleUser.user_id === user2.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Josephine should be an admin');
-                    }
-                    if (roleUser.user_id === user3.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[2].id, 'Smith should be an author by default');
-                    }
+                    rolesUsers.length.should.equal(3, 'There should be 3 role relations');
+
+                    _.each(rolesUsers, function (roleUser) {
+                        if (roleUser.user_id === user1.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[3].id, 'Original user should be an owner');
+                        }
+                        if (roleUser.user_id === user2.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Josephine should be an admin');
+                        }
+                        if (roleUser.user_id === user3.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[2].id, 'Smith should be an author by default');
+                        }
+                    });
+
+                    done();
                 });
-
-                done();
             }).catch(done);
         });
 
-        it('imports posts & tags with correct authors, owners etc', function (done) {
+        it('imports posts & tags with correct author_id, owners etc', function (done) {
             var fetchImported = Promise.join(
                 knex('users').select(),
                 knex('posts').select(),
@@ -1126,7 +1215,7 @@ describe('Import (new test structure)', function () {
                     return tag.slug === exportData.data.tags[2].slug;
                 });
 
-                // Check the authors are correct
+                // Check that the author_id's are correct
                 post1.author_id.should.equal(user2.id);
                 post2.author_id.should.equal(user3.id);
                 post3.author_id.should.equal(user1.id);
@@ -1167,10 +1256,10 @@ describe('Import (new test structure)', function () {
         before(function doImport(done) {
             // initialise the blog with some data
             testUtils.initFixtures('users:roles', 'posts', 'settings').then(function () {
-                return testUtils.fixtures.loadExportFixture('export-003-mu', {lts:true});
+                return testUtils.fixtures.loadExportFixture('export-003-mu', {lts: true});
             }).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done();
             }).catch(done);
@@ -1255,8 +1344,8 @@ describe('Import (new test structure)', function () {
                 users = importedData[0];
                 rolesUsers = importedData[1];
 
-                // we imported 3 users, there were already 3 users, only one of the imported users is new
-                users.length.should.equal(6, 'There should only be 6 users');
+                // we imported 3 users, there were already 4 users
+                users.length.should.equal(7, 'There should only be 7 users');
 
                 // the original owner user is first
                 ownerUser = users[0];
@@ -1272,44 +1361,49 @@ describe('Import (new test structure)', function () {
                 });
 
                 ownerUser.email.should.equal(testUtils.DataGenerator.Content.users[0].email);
-                ownerUser.password.should.equal(testUtils.DataGenerator.Content.users[0].password);
-                ownerUser.status.should.equal('active');
-                newUser.email.should.equal(exportData.data.users[1].email);
-                existingUser.email.should.equal(exportData.data.users[2].email);
 
-                // Newly created users should have a status of locked
-                newUser.status.should.equal('locked');
-                // The already existing user should still have a status of active
-                existingUser.status.should.equal('active');
+                models.User.isPasswordCorrect({
+                    hashedPassword: users[0].password,
+                    plainPassword: testUtils.DataGenerator.Content.users[0].password
+                }).then(function () {
+                    ownerUser.status.should.equal('active');
+                    newUser.email.should.equal(exportData.data.users[1].email);
+                    existingUser.email.should.equal(exportData.data.users[2].email);
 
-                // Newly created users should have created_at/_by and updated_at/_by set to when they were imported
-                newUser.created_by.should.equal(importedOwnerUser.id);
-                newUser.created_at.should.not.equal(exportData.data.users[1].created_at);
-                newUser.updated_by.should.equal(ownerUser.id);
-                newUser.updated_at.should.not.equal(exportData.data.users[1].updated_at);
+                    // Newly created users should have a status of locked
+                    newUser.status.should.equal('locked');
+                    // The already existing user should still have a status of active
+                    existingUser.status.should.equal('active');
 
-                rolesUsers.length.should.equal(6, 'There should be 6 role relations');
+                    // Newly created users should have created_at/_by and updated_at/_by set to when they were imported
+                    newUser.created_by.should.equal(importedOwnerUser.id);
+                    newUser.created_at.should.not.equal(exportData.data.users[1].created_at);
+                    newUser.updated_by.should.equal(ownerUser.id);
+                    newUser.updated_at.should.not.equal(exportData.data.users[1].updated_at);
 
-                _.each(rolesUsers, function (roleUser) {
-                    if (roleUser.user_id === ownerUser.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[3].id, 'Original user should be an owner');
-                    }
-                    if (roleUser.user_id === importedOwnerUser.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Imported owner should be an admin now.');
-                    }
-                    if (roleUser.user_id === newUser.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'New user should be an admin');
-                    }
-                    if (roleUser.user_id === existingUser.id) {
-                        roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Existing user was an admin');
-                    }
+                    rolesUsers.length.should.equal(7, 'There should be 7 role relations');
+
+                    _.each(rolesUsers, function (roleUser) {
+                        if (roleUser.user_id === ownerUser.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[3].id, 'Original user should be an owner');
+                        }
+                        if (roleUser.user_id === importedOwnerUser.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Imported owner should be an admin now.');
+                        }
+                        if (roleUser.user_id === newUser.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'New user should be an admin');
+                        }
+                        if (roleUser.user_id === existingUser.id) {
+                            roleUser.role_id.should.equal(testUtils.DataGenerator.Content.roles[0].id, 'Existing user was an admin');
+                        }
+                    });
+
+                    done();
                 });
-
-                done();
             }).catch(done);
         });
 
-        it('imports posts & tags with correct authors, owners etc', function (done) {
+        it('imports posts & tags with correct author_id, owners etc', function (done) {
             var fetchImported = Promise.join(
                 knex('users').select(),
                 knex('posts').select(),
@@ -1362,7 +1456,7 @@ describe('Import (new test structure)', function () {
                     return tag.slug === exportData.data.tags[2].slug;
                 });
 
-                // Check the authors are correct
+                // Check that the author_id's are correct
                 post1.author_id.should.equal(user2.id);
                 post2.author_id.should.equal(importedOwnerUser.id);
                 post3.author_id.should.equal(user3.id);
@@ -1406,7 +1500,7 @@ describe('Import (new test structure)', function () {
                 return testUtils.fixtures.loadExportFixture('export-003-mu-multipleOwner', {lts: true});
             }).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done();
             }).catch(done);
@@ -1446,10 +1540,10 @@ describe('Import (new test structure)', function () {
                     return user.name === exportData.data.users[2].name;
                 });
 
-                // we imported 3 users, there were already 4 users, only one of the imported users is new
-                users.length.should.equal(5, 'There should only be three users');
+                // we imported 3 users, there were already 5 users, only one of the imported users is new
+                users.length.should.equal(6, 'There should only be three users');
 
-                rolesUsers.length.should.equal(5, 'There should be 5 role relations');
+                rolesUsers.length.should.equal(6, 'There should be 6 role relations');
 
                 _.each(rolesUsers, function (roleUser) {
                     if (roleUser.user_id === ownerUser.id) {
@@ -1477,7 +1571,7 @@ describe('Import (new test structure)', function () {
                 return testUtils.fixtures.loadExportFixture('export-lts-legacy-fields', {lts: true});
             }).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done();
             }).catch(done);
@@ -1512,11 +1606,15 @@ describe('Import (new test structure)', function () {
 
                     // Check feature image is correctly mapped for a post
                     firstPost.feature_image.should.eql('/content/images/2017/05/post-image.jpg');
+
                     // Check logo and cover images are correctly mapped for a user
                     users[1].cover_image.should.eql(exportData.data.users[0].cover);
                     users[1].profile_image.should.eql(exportData.data.users[0].image);
                     // Check feature image is correctly mapped for a tag
                     tags[0].feature_image.should.eql(exportData.data.tags[0].image);
+
+                    // updated_by: 2 could not be resolved, fallback to owner
+                    settings[5].updated_by.should.eql(users[0].id);
 
                     // Check logo image is correctly mapped for a blog
                     settings[5].key.should.eql('logo');
@@ -1559,7 +1657,7 @@ describe('Import (new test structure)', function () {
                 );
             }).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done();
             }).catch(done);
@@ -1671,9 +1769,9 @@ describe('Import (new test structure)', function () {
         after(testUtils.teardown);
 
         it('provides error message and does not import where lts email address is longer that 1.0.0 constraint', function (done) {
-            testUtils.fixtures.loadExportFixture('export-lts-style-user-long-email', {lts:true}).then(function (exported) {
+            testUtils.fixtures.loadExportFixture('export-lts-style-user-long-email', {lts: true}).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 (1).should.eql(0, 'Data import should not resolve promise.');
             }).catch(function (error) {
@@ -1703,7 +1801,7 @@ describe('Import (new test structure)', function () {
                 );
             }).then(function (exported) {
                 exportData = exported;
-                return dataImporter.doImport(exportData);
+                return dataImporter.doImport(exportData, importOptions);
             }).then(function () {
                 done();
             }).catch(done);
@@ -1746,31 +1844,101 @@ describe('Import (new test structure)', function () {
         });
     });
 
-    describe('1.0: basic import test', function () {
+    describe('1.0: tests', function () {
         var exportData;
 
-        before(function doImport() {
-            // initialize the blog with some data
-            return testUtils.initFixtures('roles', 'owner', 'settings').then(function () {
-                return testUtils.fixtures.loadExportFixture('export-basic-test');
-            }).then(function (exported) {
-                exportData = exported.db[0];
-                return dataImporter.doImport(exportData);
+        afterEach(testUtils.teardown);
+
+        describe('edge cases', function () {
+            before(function doImport() {
+                return testUtils.initFixtures('roles', 'owner', 'settings');
+            });
+
+            it('uppercase tag slugs', function () {
+                return testUtils.fixtures.loadExportFixture('uppercase-tags')
+                    .then(function (exported) {
+                        exportData = exported.db[0];
+                        return dataImporter.doImport(exportData, importOptions);
+                    })
+                    .then(function (imported) {
+                        imported.problems.length.should.eql(0);
+                        return models.Post.findAll({withRelated: ['tags']});
+                    })
+                    .then(function (posts) {
+                        posts.toJSON()[0].tags.length.should.eql(1);
+                    });
             });
         });
 
-        after(testUtils.teardown);
+        describe('amp/comment', function () {
+            before(function doImport() {
+                // initialize the blog with some data
+                return testUtils.initFixtures('roles', 'owner', 'settings').then(function () {
+                    return testUtils.fixtures.loadExportFixture('export-basic-test');
+                }).then(function (exported) {
+                    exportData = exported.db[0];
+                    return dataImporter.doImport(exportData, importOptions);
+                });
+            });
 
-        it('keeps the value of the amp field', function () {
-            return models.Post.findPage(_.merge({formats: 'amp'}, testUtils.context.internal)).then(function (response) {
-                should.exist(response.posts);
+            it('keeps the value of the amp field', function () {
+                return models.Post.findPage(_.merge({formats: 'amp'}, testUtils.context.internal)).then(function (response) {
+                    should.exist(response.posts);
 
-                response.posts.length.should.eql(exportData.data.posts.length);
-                response.posts[0].amp.should.eql(exportData.data.posts[1].id);
-                response.posts[1].amp.should.eql(exportData.data.posts[0].amp);
+                    response.posts.length.should.eql(exportData.data.posts.length);
+                    response.posts[0].amp.should.eql(exportData.data.posts[1].id);
+                    response.posts[1].amp.should.eql(exportData.data.posts[0].amp);
 
-                response.posts[0].comment_id.should.eql(response.posts[0].amp);
-                response.posts[1].comment_id.should.eql(response.posts[1].amp);
+                    response.posts[0].comment_id.should.eql(response.posts[0].amp);
+                    response.posts[1].comment_id.should.eql(response.posts[1].amp);
+                });
+            });
+        });
+
+        describe('authors', function () {
+            before(function doImport() {
+                // initialize the blog with some data
+                return testUtils.initFixtures('roles', 'owner', 'settings').then(function () {
+                    return testUtils.fixtures.loadExportFixture('export-authors');
+                }).then(function (exported) {
+                    exportData = exported.db[0];
+                    return dataImporter.doImport(exportData, importOptions);
+                });
+            });
+
+            it('imports authors successfully', function () {
+                return Promise.join(
+                    models.Post.findPage(_.merge({withRelated: ['authors']}, testUtils.context.internal)),
+                    models.User.findPage(testUtils.context.internal)
+                ).then(function (importedData) {
+                    const posts = importedData[0].posts,
+                        users = importedData[1].users;
+
+                    // owner + 3 imported users + 1 duplicate
+                    users.length.should.eql(4);
+                    users[0].slug.should.eql(exportData.data.users[0].slug);
+                    users[1].slug.should.eql(exportData.data.users[1].slug);
+                    users[2].slug.should.eql(exportData.data.users[2].slug);
+                    users[3].slug.should.eql(testUtils.DataGenerator.Content.users[0].slug);
+
+                    posts.length.should.eql(3);
+
+                    // has three posts_authors relations, but 2 of them are invalid
+                    posts[0].author.should.eql(users[2].id);
+                    posts[0].authors.length.should.eql(1);
+                    posts[0].authors[0].id.should.eql(users[2].id);
+
+                    // falls back to owner user, because target reference could not be resolved (duplicate)
+                    posts[1].author.should.eql(testUtils.DataGenerator.Content.users[0].id);
+                    posts[1].authors.length.should.eql(1);
+                    posts[1].authors[0].id.should.eql(testUtils.DataGenerator.Content.users[0].id);
+
+                    posts[2].author.should.eql(users[1].id);
+                    posts[2].authors.length.should.eql(3);
+                    posts[2].authors[0].id.should.eql(users[1].id);
+                    posts[2].authors[1].id.should.eql(users[0].id);
+                    posts[2].authors[2].id.should.eql(users[2].id);
+                });
             });
         });
     });

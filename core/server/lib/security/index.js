@@ -1,5 +1,3 @@
-'use strict';
-
 module.exports = {
     get url() {
         return require('./url');
@@ -15,5 +13,9 @@ module.exports = {
 
     get identifier() {
         return require('./identifier');
+    },
+
+    get password() {
+        return require('./password');
     }
 };

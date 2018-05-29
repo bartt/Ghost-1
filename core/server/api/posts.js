@@ -1,17 +1,21 @@
 // # Posts API
 // RESTful API for the Post resource
-var Promise = require('bluebird'),
+const Promise = require('bluebird'),
     _ = require('lodash'),
     pipeline = require('../lib/promise/pipeline'),
     localUtils = require('./utils'),
     models = require('../models'),
     common = require('../lib/common'),
     docName = 'posts',
+    /**
+     * @deprecated: `author`, will be removed in Ghost 2.0
+     */
     allowedIncludes = [
-        'created_by', 'updated_by', 'published_by', 'author', 'tags', 'fields'
+        'created_by', 'updated_by', 'published_by', 'author', 'tags', 'fields', 'authors', 'authors.roles'
     ],
-    unsafeAttrs = ['author_id'],
-    posts;
+    unsafeAttrs = ['author_id', 'status', 'authors'];
+
+let posts;
 
 /**
  * ### Posts API Methods
@@ -59,8 +63,8 @@ posts = {
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
             localUtils.validate(docName, {opts: permittedOptions}),
-            localUtils.handlePublicPermissions(docName, 'browse', unsafeAttrs),
             localUtils.convertOptions(allowedIncludes, models.Post.allowedFormats),
+            localUtils.handlePublicPermissions(docName, 'browse', unsafeAttrs),
             modelQuery
         ];
 
@@ -106,8 +110,8 @@ posts = {
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
             localUtils.validate(docName, {attrs: attrs, opts: extraAllowedOptions}),
-            localUtils.handlePublicPermissions(docName, 'read', unsafeAttrs),
             localUtils.convertOptions(allowedIncludes, models.Post.allowedFormats),
+            localUtils.handlePublicPermissions(docName, 'read', unsafeAttrs),
             modelQuery
         ];
 
@@ -162,8 +166,8 @@ posts = {
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
             localUtils.validate(docName, {opts: localUtils.idDefaultOptions.concat(extraAllowedOptions)}),
-            localUtils.handlePermissions(docName, 'edit', unsafeAttrs),
             localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePermissions(docName, 'edit', unsafeAttrs),
             modelQuery
         ];
 
@@ -206,8 +210,8 @@ posts = {
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
             localUtils.validate(docName),
-            localUtils.handlePermissions(docName, 'add', unsafeAttrs),
             localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePermissions(docName, 'add', unsafeAttrs),
             modelQuery
         ];
 
@@ -217,7 +221,8 @@ posts = {
 
     /**
      * ## Destroy
-     * Delete a post, cleans up tag relations, but not unused tags
+     * Delete a post, cleans up tag relations, but not unused tags.
+     * You can only delete a post by `id`.
      *
      * @public
      * @param {{id (required), context,...}} options
@@ -231,22 +236,21 @@ posts = {
          * @param  {Object} options
          */
         function deletePost(options) {
-            var Post = models.Post,
-                data = _.defaults({status: 'all'}, options),
-                fetchOpts = _.defaults({require: true, columns: 'id'}, options);
+            const opts = _.defaults({require: true}, options);
 
-            return Post.findOne(data, fetchOpts).then(function () {
-                return Post.destroy(options).return(null);
-            }).catch(Post.NotFoundError, function () {
-                throw new common.errors.NotFoundError({message: common.i18n.t('errors.api.posts.postNotFound')});
-            });
+            return models.Post.destroy(opts).return(null)
+                .catch(models.Post.NotFoundError, function () {
+                    throw new common.errors.NotFoundError({
+                        message: common.i18n.t('errors.api.posts.postNotFound')
+                    });
+                });
         }
 
         // Push all of our tasks into a `tasks` array in the correct order
         tasks = [
             localUtils.validate(docName, {opts: localUtils.idDefaultOptions}),
-            localUtils.handlePermissions(docName, 'destroy', unsafeAttrs),
             localUtils.convertOptions(allowedIncludes),
+            localUtils.handlePermissions(docName, 'destroy', unsafeAttrs),
             deletePost
         ];
 

@@ -251,7 +251,7 @@ describe('Frontend Routing', function () {
 
             it('should redirect to editor', function (done) {
                 request.get('/welcome/edit/')
-                    .expect('Location', /ghost\/#\/editor\/\w+/)
+                    .expect('Location', /ghost\/editor\/\w+/)
                     .expect('Cache-Control', testUtils.cacheRules.public)
                     .expect(302)
                     .end(doEnd(done));
@@ -321,7 +321,7 @@ describe('Frontend Routing', function () {
                     .end(doEnd(done));
             });
 
-            it('should not render AMP, when AMP is disabled', function (done) {
+            it('should redirect to regular post when AMP is disabled', function (done) {
                 sandbox.stub(settingsCache, 'get').callsFake(function (key, options) {
                     if (key === 'amp' && !options) {
                         return false;
@@ -330,8 +330,8 @@ describe('Frontend Routing', function () {
                 });
 
                 request.get('/welcome/amp/')
-                    .expect(404)
-                    .expect(/Page not found/)
+                    .expect('Location', '/welcome/')
+                    .expect(301)
                     .end(doEnd(done));
             });
         });
@@ -399,7 +399,7 @@ describe('Frontend Routing', function () {
 
             it('should redirect to editor', function (done) {
                 request.get('/static-page-test/edit/')
-                    .expect('Location', /ghost\/#\/editor\/\w+/)
+                    .expect('Location', /ghost\/editor\/\w+/)
                     .expect('Cache-Control', testUtils.cacheRules.public)
                     .expect(302)
                     .end(doEnd(done));

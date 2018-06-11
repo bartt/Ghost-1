@@ -135,25 +135,6 @@ describe('Subscriber: Routing', function () {
                 });
         });
 
-        it('[error] location does not resolve to a post', function (done) {
-            request.post('/subscribe/')
-                .set('Content-type', 'application/x-www-form-urlencoded')
-                .set('Referer', 'http://localhost:2368/about')
-                .send({
-                    email: 'test@ghost.org',
-                    location: '',
-                    referrer: 'http://localhost:2368',
-                    confirm: ''
-                })
-                .expect(200)
-                .end(function (err, res) {
-                    should.not.exist(err);
-                    res.text.should.not.containEql('Subscribed!');
-                    res.text.should.not.containEql('test@ghost.org');
-                    done();
-                });
-        });
-
         it('[error] referrer is not defined', function (done) {
             request.post('/subscribe/')
                 .set('Content-type', 'application/x-www-form-urlencoded')

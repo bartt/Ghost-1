@@ -6,40 +6,16 @@ const urlService = require('../url');
 const controllers = require('./controllers');
 const middlewares = require('./middlewares');
 
-/* eslint-disable */
-const knownTaxonomies = {
-    tag: {
-        filter: "tags:'%s'+tags.visibility:public",
-        data: {
-            type: 'read',
-            resource: 'tags',
-            options: {
-                slug: '%s',
-                visibility: 'public'
-            }
-        },
-        editRedirect: '#/settings/tags/:slug/'
-    },
-    author: {
-        filter: "authors:'%s'",
-        data: {
-            type: 'read',
-            resource: 'users',
-            options: {
-                slug: '%s',
-                visibility: 'public'
-            }
-        },
-        editRedirect: '#/team/:slug/'
-    }
-};
-/* eslint-enable */
-
+/**
+ * @description Taxonomies are groupings of posts based on a common relation.
+ * Taxonomies do not change the url of a resource.
+ */
 class TaxonomyRouter extends ParentRouter {
-    constructor(key, permalinks) {
+    constructor(key, permalinks, RESOURCE_CONFIG) {
         super('Taxonomy');
 
         this.taxonomyKey = key;
+        this.RESOURCE_CONFIG = RESOURCE_CONFIG;
 
         this.permalinks = {
             value: permalinks
@@ -54,52 +30,79 @@ class TaxonomyRouter extends ParentRouter {
         this._registerRoutes();
     }
 
+    /**
+     * @description Register all routes of this router.
+     * @private
+     */
     _registerRoutes() {
         // REGISTER: context middleware
         this.router().use(this._prepareContext.bind(this));
 
+        // REGISTER: redirects across routers
+        this.router().param('slug', this._respectDominantRouter.bind(this));
+
         // REGISTER: enable rss by default
-        this.mountRouter(this.permalinks.getValue(), new RSSRouter().router());
+        this.rssRouter = new RSSRouter();
+        this.mountRouter(this.permalinks.getValue(), this.rssRouter.router());
 
         // REGISTER: e.g. /tag/:slug/
-        this.mountRoute(this.permalinks.getValue(), controllers.collection);
+        this.mountRoute(this.permalinks.getValue(), controllers.channel);
 
         // REGISTER: enable pagination for each taxonomy by default
         this.router().param('page', middlewares.pageParam);
-        this.mountRoute(urlService.utils.urlJoin(this.permalinks.value, 'page', ':page(\\d+)'), controllers.collection);
+        this.mountRoute(urlService.utils.urlJoin(this.permalinks.value, 'page', ':page(\\d+)'), controllers.channel);
 
+        // REGISTER: edit redirect to admin client e.g. /tag/:slug/edit
         this.mountRoute(urlService.utils.urlJoin(this.permalinks.value, 'edit'), this._redirectEditOption.bind(this));
 
         common.events.emit('router.created', this);
     }
 
+    /**
+     * @description Prepare context for routing middlewares/controllers.
+     * @param {Object} req
+     * @param {Object} res
+     * @param {Function} next
+     * @private
+     */
     _prepareContext(req, res, next) {
-        res.locals.routerOptions = {
+        res.routerOptions = {
+            type: 'channel',
             name: this.taxonomyKey,
             permalinks: this.permalinks.getValue(),
-            data: {[this.taxonomyKey]: knownTaxonomies[this.taxonomyKey].data},
-            filter: knownTaxonomies[this.taxonomyKey].filter,
-            type: this.getType(),
+            data: {[this.taxonomyKey]: this.RESOURCE_CONFIG.QUERY[this.taxonomyKey]},
+            filter: this.RESOURCE_CONFIG.TAXONOMIES[this.taxonomyKey].filter,
+            resourceType: this.getResourceType(),
             context: [this.taxonomyKey],
             slugTemplate: true,
             identifier: this.identifier
         };
 
-        res._route = {
-            type: 'collection'
-        };
-
         next();
     }
 
+    /**
+     * @description Simple controller function to redirect /edit to admin client
+     * @param {Object} req
+     * @param {Object} res
+     * @private
+     */
     _redirectEditOption(req, res) {
-        urlService.utils.redirectToAdmin(302, res, knownTaxonomies[this.taxonomyKey].editRedirect.replace(':slug', req.params.slug));
+        urlService.utils.redirectToAdmin(302, res, this.RESOURCE_CONFIG.TAXONOMIES[this.taxonomyKey].editRedirect.replace(':slug', req.params.slug));
     }
 
-    getType() {
-        return knownTaxonomies[this.taxonomyKey].data.resource;
+    /**
+     * @description Get resource type e.g. tags or authors
+     * @returns {*}
+     */
+    getResourceType() {
+        return this.RESOURCE_CONFIG.TAXONOMIES[this.taxonomyKey].resource;
     }
 
+    /**
+     * @description There is no default/index route for taxonomies e.g. /tag/ does not exist, only /tag/:slug/
+     * @returns {null}
+     */
     getRoute() {
         return null;
     }

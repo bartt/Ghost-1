@@ -11,7 +11,7 @@
  * 3. data - used for telling the difference between posts and pages
  */
 const labs = require('../../labs'),
-    // @TODO: fix this, this is app specific and should be dynamic
+    // @TODO: fix this!! These regexes are app specific and should be dynamic. They should not belong here....
     // routeKeywords.private: 'private'
     privatePattern = new RegExp('^\\/private\\/'),
     // routeKeywords.subscribe: 'subscribe'
@@ -27,6 +27,7 @@ function setResponseContext(req, res, data) {
     res.locals.context = [];
 
     // If we don't have a relativeUrl, we can't detect the context, so return
+    // See shared/middlewares/ghost-locals
     if (!res.locals.relativeUrl) {
         return;
     }
@@ -47,16 +48,35 @@ function setResponseContext(req, res, data) {
     }
 
     // Each page can only have at most one of these
-    if (res.locals.routerOptions) {
-        res.locals.context = res.locals.context.concat(res.locals.routerOptions.context);
-    } else if (privatePattern.test(res.locals.relativeUrl)) {
-        res.locals.context.push('private');
-    } else if (subscribePattern.test(res.locals.relativeUrl) && labs.isSet('subscribers') === true) {
-        res.locals.context.push('subscribe');
-    } else if (data && data.post && data.post.page) {
-        res.locals.context.push('page');
+    if (res.routerOptions && res.routerOptions.context) {
+        res.locals.context = res.locals.context.concat(res.routerOptions.context);
+    }
+
+    if (privatePattern.test(res.locals.relativeUrl)) {
+        if (!res.locals.context.includes('private')) {
+            res.locals.context.push('private');
+        }
+    }
+
+    if (subscribePattern.test(res.locals.relativeUrl) && labs.isSet('subscribers') === true) {
+        if (!res.locals.context.includes('subscribe')) {
+            res.locals.context.push('subscribe');
+        }
+    }
+
+    // @TODO: remove first if condition when we drop v0.1
+    if (data && data.post && data.post.page) {
+        if (!res.locals.context.includes('page')) {
+            res.locals.context.push('page');
+        }
     } else if (data && data.post) {
-        res.locals.context.push('post');
+        if (!res.locals.context.includes('post')) {
+            res.locals.context.push('post');
+        }
+    } else if (data && data.page) {
+        if (!res.locals.context.includes('page')) {
+            res.locals.context.push('page');
+        }
     }
 }
 

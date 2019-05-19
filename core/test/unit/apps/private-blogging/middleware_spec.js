@@ -5,8 +5,7 @@ var should = require('should'),
     fs = require('fs-extra'),
     common = require('../../../../server/lib/common'),
     settingsCache = require('../../../../server/services/settings/cache'),
-    privateBlogging = require('../../../../server/apps/private-blogging/lib/middleware'),
-    sandbox = sinon.sandbox.create();
+    privateBlogging = require('../../../../server/apps/private-blogging/lib/middleware');
 
 function hash(password, salt) {
     var hasher = crypto.createHash('sha256');
@@ -18,17 +17,19 @@ describe('Private Blogging', function () {
     var settingsStub;
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     describe('passProtect', function () {
         var req, res, next;
 
         beforeEach(function () {
-            req = {};
+            req = {
+                query: {}
+            };
             res = {};
-            settingsStub = sandbox.stub(settingsCache, 'get');
-            next = sandbox.spy();
+            settingsStub = sinon.stub(settingsCache, 'get');
+            next = sinon.spy();
         });
 
         it('checkIsPrivate should call next if not private', function () {
@@ -58,7 +59,7 @@ describe('Private Blogging', function () {
 
             it('isPrivateSessionAuth should redirect if blog is not private', function () {
                 res = {
-                    redirect: sandbox.spy(),
+                    redirect: sinon.spy(),
                     isPrivateBlog: false
                 };
                 privateBlogging.isPrivateSessionAuth(req, res, next);
@@ -76,17 +77,11 @@ describe('Private Blogging', function () {
                     },
                     set: function () {
                     },
-                    redirect: sandbox.spy(),
+                    redirect: sinon.spy(),
                     isPrivateBlog: true
                 };
 
                 req.session = {};
-            });
-
-            it('filterPrivateRoutes should call next if admin', function () {
-                res.isAdmin = true;
-                privateBlogging.filterPrivateRoutes(req, res, next);
-                next.called.should.be.true();
             });
 
             it('filterPrivateRoutes should call next if is the "private" route', function () {
@@ -140,9 +135,9 @@ describe('Private Blogging', function () {
 
             it('filterPrivateRoutes should render custom robots.txt', function () {
                 req.url = req.path = '/robots.txt';
-                res.writeHead = sandbox.spy();
-                res.end = sandbox.spy();
-                sandbox.stub(fs, 'readFile').callsFake(function (file, cb) {
+                res.writeHead = sinon.spy();
+                res.end = sinon.spy();
+                sinon.stub(fs, 'readFile').callsFake(function (file, cb) {
                     cb(null, 'User-agent: * Disallow: /');
                 });
                 privateBlogging.filterPrivateRoutes(req, res, next);
@@ -179,7 +174,7 @@ describe('Private Blogging', function () {
                         token: 'wrongpassword',
                         salt: Date.now().toString()
                     };
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.authenticatePrivateSession(req, res, next);
                     res.redirect.called.should.be.true();
@@ -192,7 +187,7 @@ describe('Private Blogging', function () {
                         token: hash('rightpassword', salt),
                         salt: salt
                     };
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.isPrivateSessionAuth(req, res, next);
                     res.redirect.called.should.be.true();
@@ -219,10 +214,23 @@ describe('Private Blogging', function () {
                 it('authenticateProtection should redirect if password is correct', function () {
                     req.body = {password: 'rightpassword'};
                     req.session = {};
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.authenticateProtection(req, res, next);
                     res.redirect.called.should.be.true();
+                });
+
+                it('authenticateProtection should redirect to "/" if r param is a full url', function () {
+                    req.body = {password: 'rightpassword'};
+                    req.session = {};
+                    req.query = {
+                        r: encodeURIComponent('http://britney.com')
+                    };
+                    res.redirect = sinon.spy();
+
+                    privateBlogging.authenticateProtection(req, res, next);
+                    res.redirect.called.should.be.true();
+                    res.redirect.args[0][0].should.be.equal('/');
                 });
 
                 it('filterPrivateRoutes should 404 for /rss/ requests', function () {
@@ -235,7 +243,7 @@ describe('Private Blogging', function () {
                     };
 
                     res.isPrivateBlog = true;
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     next.called.should.be.true();
@@ -252,7 +260,7 @@ describe('Private Blogging', function () {
                     };
 
                     res.isPrivateBlog = true;
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     next.called.should.be.true();
@@ -269,7 +277,7 @@ describe('Private Blogging', function () {
                     };
 
                     res.isPrivateBlog = true;
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     next.called.should.be.true();
@@ -286,7 +294,7 @@ describe('Private Blogging', function () {
                     };
 
                     res.isPrivateBlog = true;
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     next.called.should.be.true();
@@ -303,7 +311,7 @@ describe('Private Blogging', function () {
                     };
 
                     res.isPrivateBlog = true;
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     next.called.should.be.true();
@@ -320,7 +328,7 @@ describe('Private Blogging', function () {
                     };
 
                     res.isPrivateBlog = true;
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     next.called.should.be.true();
@@ -337,7 +345,7 @@ describe('Private Blogging', function () {
                     };
 
                     res.isPrivateBlog = true;
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     next.called.should.be.true();
@@ -395,7 +403,7 @@ describe('Private Blogging', function () {
                     res.isPrivateBlog = true;
                     res.locals = {};
 
-                    res.redirect = sandbox.spy();
+                    res.redirect = sinon.spy();
 
                     privateBlogging.filterPrivateRoutes(req, res, next);
                     res.redirect.called.should.be.true();

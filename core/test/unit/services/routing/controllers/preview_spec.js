@@ -4,12 +4,10 @@ const should = require('should'),
     testUtils = require('../../../../utils'),
     configUtils = require('../../../../utils/configUtils'),
     api = require('../../../../../server/api'),
-    filters = require('../../../../../server/filters'),
     controllers = require('../../../../../server/services/routing/controllers'),
     helpers = require('../../../../../server/services/routing/helpers'),
     urlService = require('../../../../../server/services/url'),
-    sandbox = sinon.sandbox.create(),
-    EDITOR_URL = '/editor/';
+    EDITOR_URL = '/editor/post/';
 
 describe('Unit - services/routing/controllers/preview', function () {
     let secureStub, renderStub;
@@ -23,117 +21,190 @@ describe('Unit - services/routing/controllers/preview', function () {
     }
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
         configUtils.restore();
     });
 
-    beforeEach(function () {
-        post = testUtils.DataGenerator.forKnex.createPost({status: 'draft'});
+    describe('v0.1', function () {
+        beforeEach(function () {
+            post = testUtils.DataGenerator.forKnex.createPost({status: 'draft'});
 
-        apiResponse = {
-            posts: [post]
-        };
+            apiResponse = {
+                posts: [post]
+            };
 
-        req = {
-            path: '/',
-            params: {
-                uuid: 'something'
-            },
-            route: {}
-        };
+            req = {
+                path: '/',
+                params: {
+                    uuid: 'something'
+                },
+                route: {}
+            };
 
-        res = {
-            locals: {},
-            render: sinon.spy(),
-            redirect: sinon.spy(),
-            set: sinon.spy()
-        };
+            res = {
+                routerOptions: {
+                    query: {controller: 'posts', resource: 'posts'}
+                },
+                locals: {
+                    apiVersion: 'v0.1'
+                },
+                render: sinon.spy(),
+                redirect: sinon.spy(),
+                set: sinon.spy()
+            };
 
-        secureStub = sandbox.stub();
-        renderStub = sandbox.stub();
+            secureStub = sinon.stub();
 
-        sandbox.stub(urlService.utils, 'redirectToAdmin');
-        sandbox.stub(urlService.utils, 'redirect301');
-        sandbox.stub(urlService, 'getUrlByResourceId');
+            sinon.stub(urlService.utils, 'redirectToAdmin');
+            sinon.stub(urlService.utils, 'redirect301');
+            sinon.stub(urlService, 'getUrlByResourceId');
 
-        sandbox.stub(helpers, 'secure').get(function () {
-            return secureStub;
+            sinon.stub(helpers, 'secure').get(function () {
+                return secureStub;
+            });
+
+            renderStub = sinon.stub();
+            sinon.stub(helpers, 'renderEntry').get(function () {
+                return function () {
+                    return renderStub;
+                };
+            });
+
+            sinon.stub(api.posts, 'read').withArgs({
+                uuid: req.params.uuid,
+                status: 'all',
+                include: 'author,authors,tags'
+            }).callsFake(function () {
+                return Promise.resolve(apiResponse);
+            });
         });
 
-        sandbox.stub(helpers, 'renderEntry').get(function () {
-            return renderStub;
+        it('should render post', function (done) {
+            controllers.preview(req, res, failTest(done)).then(function () {
+                secureStub.called.should.be.true();
+                renderStub.called.should.be.true();
+                done();
+            }).catch(done);
         });
 
-        sandbox.stub(filters, 'doFilter');
+        it('should call next if post is not found', function (done) {
+            apiResponse = {posts: []};
 
-        sandbox.stub(api.posts, 'read').withArgs({
-            uuid: req.params.uuid,
-            status: 'all',
-            include: 'author,authors,tags'
-        }).callsFake(function () {
-            return Promise.resolve(apiResponse);
+            controllers.preview(req, res, function (err) {
+                should.not.exist(err);
+                renderStub.called.should.be.false();
+                secureStub.called.should.be.false();
+                done();
+            });
+        });
+
+        it('should call redirect if post is published', function (done) {
+            post.status = 'published';
+            urlService.getUrlByResourceId.withArgs(post.id).returns('/something/');
+
+            urlService.utils.redirect301.callsFake(function (res, postUrl) {
+                postUrl.should.eql('/something/');
+                renderStub.called.should.be.false();
+                secureStub.called.should.be.false();
+                done();
+            });
+
+            controllers.preview(req, res, failTest(done));
+        });
+
+        it('should call redirect if /edit/ (options param) is detected', function (done) {
+            req.params.options = 'edit';
+
+            urlService.utils.redirectToAdmin.callsFake(function (statusCode, res, editorUrl) {
+                statusCode.should.eql(302);
+                editorUrl.should.eql(EDITOR_URL + post.id);
+                renderStub.called.should.be.false();
+                secureStub.called.should.be.false();
+                done();
+            });
+
+            controllers.preview(req, res, failTest(done));
+        });
+
+        it('should call next for unknown options param detected', function (done) {
+            req.params.options = 'abcde';
+
+            controllers.preview(req, res, function (err) {
+                should.not.exist(err);
+                renderStub.called.should.be.false();
+                secureStub.called.should.be.false();
+                done();
+            });
         });
     });
 
-    it('should render post', function (done) {
-        filters.doFilter.withArgs('prePostsRender', post, res.locals).resolves();
+    describe('v2', function () {
+        let previewStub;
 
-        helpers.renderEntry.callsFake(function () {
-            renderStub.called.should.be.true();
-            secureStub.called.should.be.true();
-            done();
+        beforeEach(function () {
+            post = testUtils.DataGenerator.forKnex.createPost({status: 'draft'});
+
+            apiResponse = {
+                preview: [post]
+            };
+
+            req = {
+                path: '/',
+                params: {
+                    uuid: 'something'
+                },
+                route: {}
+            };
+
+            res = {
+                routerOptions: {
+                    query: {controller: 'preview', resource: 'preview'}
+                },
+                locals: {
+                    apiVersion: 'v2'
+                },
+                render: sinon.spy(),
+                redirect: sinon.spy(),
+                set: sinon.spy()
+            };
+
+            secureStub = sinon.stub();
+
+            sinon.stub(urlService.utils, 'redirectToAdmin');
+            sinon.stub(urlService.utils, 'redirect301');
+            sinon.stub(urlService, 'getUrlByResourceId');
+
+            sinon.stub(helpers, 'secure').get(function () {
+                return secureStub;
+            });
+
+            renderStub = sinon.stub();
+            sinon.stub(helpers, 'renderEntry').get(function () {
+                return function () {
+                    return renderStub;
+                };
+            });
+
+            previewStub = sinon.stub();
+            previewStub.withArgs({
+                uuid: req.params.uuid,
+                status: 'all',
+                include: 'author,authors,tags'
+            }).resolves(apiResponse);
+
+            sinon.stub(api.v2, 'preview').get(() => {
+                return {
+                    read: previewStub
+                };
+            });
         });
 
-        controllers.preview(req, res, failTest(done));
-    });
-
-    it('should call next if post is not found', function (done) {
-        apiResponse = {posts: []};
-
-        controllers.preview(req, res, function (err) {
-            should.not.exist(err);
-            renderStub.called.should.be.false();
-            secureStub.called.should.be.false();
-            done();
-        });
-    });
-
-    it('should call redirect if post is published', function (done) {
-        post.status = 'published';
-        urlService.getUrlByResourceId.withArgs(post.id).returns('/something/');
-
-        urlService.utils.redirect301.callsFake(function (res, postUrl) {
-            postUrl.should.eql('/something/');
-            renderStub.called.should.be.false();
-            secureStub.called.should.be.false();
-            done();
-        });
-
-        controllers.preview(req, res, failTest(done));
-    });
-
-    it('should call redirect if /edit/ (options param) is detected', function (done) {
-        req.params.options = 'edit';
-
-        urlService.utils.redirectToAdmin.callsFake(function (statusCode, res, editorUrl) {
-            statusCode.should.eql(302);
-            editorUrl.should.eql(EDITOR_URL + post.id);
-            renderStub.called.should.be.false();
-            secureStub.called.should.be.false();
-            done();
-        });
-
-        controllers.preview(req, res, failTest(done));
-    });
-
-    it('should call next for unknown options param detected', function (done) {
-        req.params.options = 'abcde';
-
-        controllers.preview(req, res, function (err) {
-            should.not.exist(err);
-            renderStub.called.should.be.false();
-            secureStub.called.should.be.false();
-            done();
+        it('should render post', function (done) {
+            controllers.preview(req, res, failTest(done)).then(function () {
+                renderStub.called.should.be.true();
+                secureStub.called.should.be.true();
+                done();
+            }).catch(done);
         });
     });
 });

@@ -12,7 +12,9 @@
  *
  */
 var join = require('path').join,
+    _ = require('lodash'),
     themeConfig = require('./config'),
+    themeEngines = require('./engines'),
     config = require('../../config'),
     engine = require('./engine'),
     // Current instance of ActiveTheme
@@ -34,7 +36,7 @@ class ActiveTheme {
 
         // @TODO: get gscan to return validated, useful package.json fields for us!
         this._packageInfo = loadedTheme['package.json'];
-        this._partials =  checkedTheme.partials;
+        this._partials = checkedTheme.partials;
 
         // all custom .hbs templates (e.g. custom-about)
         this._customTemplates = checkedTheme.templates.custom;
@@ -44,6 +46,9 @@ class ActiveTheme {
 
         // Create a theme config object
         this._config = themeConfig.create(this._packageInfo);
+
+        // Create a theme engines object
+        this._engines = themeEngines.create(this._packageInfo);
     }
 
     get name() {
@@ -74,8 +79,16 @@ class ActiveTheme {
         return this._templates.indexOf(templateName) > -1;
     }
 
+    updateTemplateOptions(options) {
+        engine.updateTemplateOptions(_.merge({}, engine.getTemplateOptions(), options));
+    }
+
     config(key) {
         return this._config[key];
+    }
+
+    engine(key) {
+        return this._engines[key];
     }
 
     mount(siteApp) {

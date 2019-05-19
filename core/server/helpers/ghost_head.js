@@ -10,11 +10,11 @@ var proxy = require('./proxy'),
     getAssetUrl = proxy.metaData.getAssetUrl,
     escapeExpression = proxy.escapeExpression,
     SafeString = proxy.SafeString,
-    filters = proxy.filters,
     logging = proxy.logging,
     settingsCache = proxy.settingsCache,
     config = proxy.config,
-    blogIconUtils = proxy.blogIcon;
+    blogIconUtils = proxy.blogIcon,
+    labs = proxy.labs;
 
 function writeMetaTag(property, content, type) {
     type = type || property.substring(0, 7) === 'twitter' ? 'name' : 'property';
@@ -55,6 +55,13 @@ function getAjaxHelper(clientId, clientSecret) {
         '</script>';
 }
 
+function getMembersHelper() {
+    return `
+        <script src="${getAssetUrl('public/members-theme-bindings.js')}"></script>
+        <script defer src="${getAssetUrl('public/members.js')}"></script>
+    `;
+}
+
 /**
  * **NOTE**
  * Express adds `_locals`, see https://github.com/expressjs/express/blob/4.15.4/lib/response.js#L962.
@@ -87,7 +94,7 @@ function getAjaxHelper(clientId, clientSecret) {
  *  }
  *
  * `blog`, `labs` and `config` are the templateOptions, search for `hbs.updateTemplateOptions` in the code base.
- *  Also see how the root object get's created, https://github.com/wycats/handlebars.js/blob/v4.0.6/lib/handlebars/runtime.js#L259
+ *  Also see how the root object gets created, https://github.com/wycats/handlebars.js/blob/v4.0.6/lib/handlebars/runtime.js#L259
  */
 // We use the name ghost_head to match the helper for consistency:
 module.exports = function ghost_head(options) { // eslint-disable-line camelcase
@@ -136,6 +143,11 @@ module.exports = function ghost_head(options) { // eslint-disable-line camelcase
                     escapeExpression(metaData.canonicalUrl) + '" />');
                 head.push('<meta name="referrer" content="' + referrerPolicy + '" />');
 
+                // don't allow indexing of preview URLs!
+                if (_.includes(context, 'preview')) {
+                    head.push(writeMetaTag('robots', 'noindex,nofollow', 'name'));
+                }
+
                 // show amp link in post when 1. we are not on the amp page and 2. amp is enabled
                 if (_.includes(context, 'post') && !_.includes(context, 'amp') && settingsCache.get('amp')) {
                     head.push('<link rel="amphtml" href="' +
@@ -167,6 +179,10 @@ module.exports = function ghost_head(options) { // eslint-disable-line camelcase
                 if (client && client.id && client.secret && !_.includes(context, 'amp')) {
                     head.push(getAjaxHelper(client.id, client.secret));
                 }
+
+                if (!_.includes(context, 'amp') && labs.isSet('members')) {
+                    head.push(getMembersHelper());
+                }
             }
 
             head.push('<meta name="generator" content="Ghost ' +
@@ -186,9 +202,6 @@ module.exports = function ghost_head(options) { // eslint-disable-line camelcase
                     head.push(postCodeInjection);
                 }
             }
-            return filters.doFilter('ghost_head', head);
-        })
-        .then(function afterFilters(head) {
             debug('end');
             return new SafeString(head.join('\n    ').trim());
         })

@@ -5,8 +5,7 @@ const sinon = require('sinon'),
     path = require('path'),
     configUtils = require('../../../utils/configUtils'),
     common = require('../../../../server/lib/common'),
-    loadSettings = rewire('../../../../server/services/settings/loader'),
-    sandbox = sinon.sandbox.create();
+    loadSettings = rewire('../../../../server/services/settings/loader');
 
 describe('UNIT > Settings Service:', function () {
     beforeEach(function () {
@@ -14,7 +13,7 @@ describe('UNIT > Settings Service:', function () {
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
         configUtils.restore();
     });
 
@@ -23,24 +22,30 @@ describe('UNIT > Settings Service:', function () {
             routes: null,
             collections: {
                 '/': {
-                    permalink: '{globals.permalinks}',
+                    permalink: '/{slug}/',
                     template: ['home', 'index']
                 }
             },
             taxonomies: {tag: '/tag/{slug}/', author: '/author/{slug}/'}
         };
+
         let yamlParserStub;
+        let validateStub;
 
         beforeEach(function () {
             yamlParserStub = sinon.stub();
+            validateStub = sinon.stub();
         });
 
         it('can find yaml settings file and returns a settings object', function () {
-            const fsReadFileSpy = sandbox.spy(fs, 'readFileSync');
+            const fsReadFileSpy = sinon.spy(fs, 'readFileSync');
             const expectedSettingsFile = path.join(__dirname, '../../../utils/fixtures/settings/goodroutes.yaml');
 
             yamlParserStub.returns(yamlStubFile);
+            validateStub.returns({routes: {}, collections: {}, taxonomies: {}});
+
             loadSettings.__set__('yamlParser', yamlParserStub);
+            loadSettings.__set__('validate', validateStub);
 
             const setting = loadSettings('goodroutes');
             should.exist(setting);
@@ -77,7 +82,7 @@ describe('UNIT > Settings Service:', function () {
             fsError.code = 'EPERM';
 
             const originalFn = fs.readFileSync;
-            const fsReadFileStub = sandbox.stub(fs, 'readFileSync').callsFake(function (filePath, options) {
+            const fsReadFileStub = sinon.stub(fs, 'readFileSync').callsFake(function (filePath, options) {
                 if (filePath.match(/routes\.yaml/)) {
                     throw fsError;
                 }

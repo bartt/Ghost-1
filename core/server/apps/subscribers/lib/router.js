@@ -1,30 +1,25 @@
-var path = require('path'),
-    express = require('express'),
+const path = require('path'),
     _ = require('lodash'),
+    express = require('express'),
     subscribeRouter = express.Router(),
     bodyParser = require('body-parser'),
-
     // Dirty requires
-    api = require('../../../api'),
     common = require('../../../lib/common'),
     urlService = require('../../../services/url'),
     validator = require('../../../data/validation').validator,
     routing = require('../../../services/routing'),
-
     templateName = 'subscribe';
 
 function _renderer(req, res) {
-    // Note: this is super similar to the config middleware used in channels
-    // @TODO refactor into to something explicit & DRY this up
-    res._route = {
+    res.routerOptions = {
         type: 'custom',
-        templateName: templateName,
-        defaultTemplate: path.resolve(__dirname, 'views', templateName + '.hbs')
+        templates: templateName,
+        defaultTemplate: path.resolve(__dirname, 'views', `${templateName}.hbs`)
     };
 
     // Renderer begin
     // Format data
-    var data = req.body;
+    const data = req.body;
 
     // Render Call
     return routing.helpers.renderer(req, res, data);
@@ -37,6 +32,8 @@ function _renderer(req, res) {
  */
 function errorHandler(error, req, res, next) {
     req.body.email = '';
+    req.body.subscribed_url = santizeUrl(req.body.subscribed_url);
+    req.body.subscribed_referrer = santizeUrl(req.body.subscribed_referrer);
 
     if (error.statusCode !== 404) {
         res.locals.error = error;
@@ -73,7 +70,7 @@ function handleSource(req, res, next) {
     delete req.body.location;
     delete req.body.referrer;
 
-    const resource = urlService.getResource(urlService.utils.absoluteToRelative(req.body.subscribed_url));
+    const resource = urlService.getResource(urlService.utils.absoluteToRelative(req.body.subscribed_url, {withoutSubdirectory: true}));
 
     if (resource) {
         req.body.post_id = resource.data.id;
@@ -85,6 +82,8 @@ function handleSource(req, res, next) {
 function storeSubscriber(req, res, next) {
     req.body.status = 'subscribed';
 
+    const api = require('../../../api')[res.locals.apiVersion];
+
     if (_.isEmpty(req.body.email)) {
         return next(new common.errors.ValidationError({message: 'Email cannot be blank.'}));
     } else if (!validator.isEmail(req.body.email)) {
@@ -92,11 +91,11 @@ function storeSubscriber(req, res, next) {
     }
 
     return api.subscribers.add({subscribers: [req.body]}, {context: {external: true}})
-        .then(function () {
+        .then(() => {
             res.locals.success = true;
             next();
         })
-        .catch(function () {
+        .catch(() => {
             // we do not expose any information
             res.locals.success = true;
             next();

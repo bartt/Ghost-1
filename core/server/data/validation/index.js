@@ -220,6 +220,11 @@ validateSchema = function validateSchema(tableName, model, options) {
                     context: tableName + '.' + columnKey
                 }));
             }
+
+            // CASE: ensure we transform 0|1 to false|true
+            if (!validator.empty(strVal)) {
+                model.set(columnKey, !!model.get(columnKey));
+            }
         }
 
         // TODO: check if mandatory values should be enforced
@@ -359,7 +364,7 @@ validateRedirects = function validateRedirects(redirects) {
     if (!_.isArray(redirects)) {
         throw new common.errors.ValidationError({
             message: common.i18n.t('errors.utils.redirectsWrongFormat'),
-            help: 'https://docs.ghost.org/docs/redirects'
+            help: 'https://docs.ghost.org/concepts/redirects/'
         });
     }
 
@@ -367,8 +372,8 @@ validateRedirects = function validateRedirects(redirects) {
         if (!redirect.from || !redirect.to) {
             throw new common.errors.ValidationError({
                 message: common.i18n.t('errors.utils.redirectsWrongFormat'),
-                context: JSON.stringify(redirect),
-                help: 'https://docs.ghost.org/docs/redirects'
+                context: redirect,
+                help: 'https://docs.ghost.org/concepts/redirects/'
             });
         }
     });

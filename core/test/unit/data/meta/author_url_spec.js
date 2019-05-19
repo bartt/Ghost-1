@@ -1,17 +1,16 @@
 const should = require('should'),
     sinon = require('sinon'),
     ObjectId = require('bson-objectid'),
-    sandbox = sinon.sandbox.create(),
     urlService = require('../../../../server/services/url'),
     getAuthorUrl = require('../../../../server/data/meta/author_url');
 
 describe('getAuthorUrl', function () {
     beforeEach(function () {
-        sandbox.stub(urlService, 'getUrlByResourceId');
+        sinon.stub(urlService, 'getUrlByResourceId');
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     it('should return author url if context contains primary author', function () {
@@ -22,7 +21,7 @@ describe('getAuthorUrl', function () {
             }
         };
 
-        urlService.getUrlByResourceId.withArgs(post.primary_author.id, {absolute: undefined, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(post.primary_author.id, {absolute: undefined, secure: undefined, withSubdirectory: true})
             .returns('author url');
 
         should.exist(getAuthorUrl({
@@ -39,7 +38,7 @@ describe('getAuthorUrl', function () {
             }
         };
 
-        urlService.getUrlByResourceId.withArgs(post.primary_author.id, {absolute: true, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(post.primary_author.id, {absolute: true, secure: undefined, withSubdirectory: true})
             .returns('absolute author url');
 
         should.exist(getAuthorUrl({
@@ -56,7 +55,7 @@ describe('getAuthorUrl', function () {
             }
         };
 
-        urlService.getUrlByResourceId.withArgs(post.primary_author.id, {absolute: undefined, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(post.primary_author.id, {absolute: undefined, secure: undefined, withSubdirectory: true})
             .returns('author url');
 
         should.exist(getAuthorUrl({
@@ -71,7 +70,7 @@ describe('getAuthorUrl', function () {
             slug: 'test-author'
         };
 
-        urlService.getUrlByResourceId.withArgs(author.id, {absolute: undefined, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(author.id, {absolute: undefined, secure: undefined, withSubdirectory: true})
             .returns('author url');
 
         should.exist(getAuthorUrl({

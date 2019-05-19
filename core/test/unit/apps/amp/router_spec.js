@@ -6,8 +6,7 @@ const should = require('should'),
     helpers = require('../../../../server/services/routing/helpers'),
     common = require('../../../../server/lib/common'),
     testUtils = require('../../../utils'),
-    configUtils = require('../../../utils/configUtils'),
-    sandbox = sinon.sandbox.create();
+    configUtils = require('../../../utils/configUtils');
 
 // Helper function to prevent unit tests
 // from failing via timeout when they
@@ -25,14 +24,14 @@ describe('Unit - apps/amp/lib/router', function () {
         rendererStub;
 
     beforeEach(function () {
-        rendererStub = sandbox.stub();
+        rendererStub = sinon.stub();
 
-        sandbox.stub(helpers, 'renderer').get(function () {
+        sinon.stub(helpers, 'renderer').get(function () {
             return rendererStub;
         });
 
         res = {
-            render: sandbox.spy(),
+            render: sinon.spy(),
             locals: {
                 context: ['amp', 'post']
             }
@@ -54,13 +53,13 @@ describe('Unit - apps/amp/lib/router', function () {
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     describe('fn: renderer', function () {
         it('should render default amp page when theme has no amp template', function (done) {
             helpers.renderer.callsFake(function (req, res, data) {
-                res._route.defaultTemplate.should.eql(defaultPath);
+                res.routerOptions.defaultTemplate.should.eql(defaultPath);
                 data.should.eql({post: {title: 'test'}});
                 done();
             });
@@ -94,7 +93,7 @@ describe('Unit - apps/amp/lib/router', function () {
     });
 
     describe('fn: getPostData', function () {
-        let res, req, postLookupStub, post;
+        let res, req, entryLookupStub, post;
 
         beforeEach(function () {
             post = testUtils.DataGenerator.forKnex.createPost({slug: 'welcome'});
@@ -105,17 +104,17 @@ describe('Unit - apps/amp/lib/router', function () {
 
             req = {};
 
-            postLookupStub = sandbox.stub();
+            entryLookupStub = sinon.stub();
 
-            sandbox.stub(helpers, 'postLookup').get(function () {
-                return postLookupStub;
+            sinon.stub(helpers, 'entryLookup').get(function () {
+                return entryLookupStub;
             });
 
-            sandbox.stub(urlService, 'getPermalinkByUrl');
+            sinon.stub(urlService, 'getPermalinkByUrl');
         });
 
         afterEach(function () {
-            sandbox.restore();
+            sinon.restore();
         });
 
         it('should successfully get the post data from slug', function (done) {
@@ -123,9 +122,10 @@ describe('Unit - apps/amp/lib/router', function () {
 
             urlService.getPermalinkByUrl.withArgs('/welcome/').returns('/:slug/');
 
-            helpers.postLookup.withArgs('/welcome/', {permalinks: '/:slug/'}).resolves({
-                post: post
-            });
+            helpers.entryLookup.withArgs('/welcome/', {permalinks: '/:slug/', query: {controller: 'postsPublic', resource: 'posts'}})
+                .resolves({
+                    entry: post
+                });
 
             ampController.getPostData(req, res, function () {
                 req.body.post.should.be.eql(post);
@@ -137,10 +137,10 @@ describe('Unit - apps/amp/lib/router', function () {
             req.originalUrl = '/blog/welcome/amp';
             res.locals.relativeUrl = '/welcome/amp';
 
-            urlService.getPermalinkByUrl.withArgs('/blog/welcome/').returns('/:slug/');
+            urlService.getPermalinkByUrl.withArgs('/welcome/').returns('/:slug/');
 
-            helpers.postLookup.withArgs('/welcome/', {permalinks: '/:slug/'}).resolves({
-                post: post
+            helpers.entryLookup.withArgs('/welcome/', {permalinks: '/:slug/', query: {controller: 'postsPublic', resource: 'posts'}}).resolves({
+                entry: post
             });
 
             ampController.getPostData(req, res, function () {
@@ -149,12 +149,13 @@ describe('Unit - apps/amp/lib/router', function () {
             });
         });
 
-        it('should return error if postlookup returns NotFoundError', function (done) {
+        it('should return error if entrylookup returns NotFoundError', function (done) {
             res.locals.relativeUrl = req.originalUrl = '/welcome/amp';
 
             urlService.getPermalinkByUrl.withArgs('/welcome/').returns('/:slug/');
 
-            helpers.postLookup.withArgs('/welcome/', {permalinks: '/:slug/'}).rejects(new common.errors.NotFoundError());
+            helpers.entryLookup.withArgs('/welcome/', {permalinks: '/:slug/', query: {controller: 'postsPublic', resource: 'posts'}})
+                .rejects(new common.errors.NotFoundError());
 
             ampController.getPostData(req, res, function (err) {
                 (err instanceof common.errors.NotFoundError).should.be.true();

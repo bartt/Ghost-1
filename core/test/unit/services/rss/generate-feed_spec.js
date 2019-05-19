@@ -4,8 +4,7 @@ var should = require('should'),
     testUtils = require('../../../utils'),
     configUtils = require('../../../utils/configUtils'),
     urlService = require('../../../../server/services/url'),
-    generateFeed = require('../../../../server/services/rss/generate-feed'),
-    sandbox = sinon.sandbox.create();
+    generateFeed = require('../../../../server/services/rss/generate-feed');
 
 describe('RSS: Generate Feed', function () {
     var data = {},
@@ -28,13 +27,13 @@ describe('RSS: Generate Feed', function () {
 
     afterEach(function () {
         configUtils.restore();
-        sandbox.restore();
+        sinon.restore();
     });
 
     beforeEach(function () {
         configUtils.set({url: 'http://my-ghost-blog.com'});
 
-        sandbox.stub(urlService, 'getUrlByResourceId');
+        sinon.stub(urlService, 'getUrlByResourceId');
 
         baseUrl = '/rss/';
 
@@ -92,7 +91,7 @@ describe('RSS: Generate Feed', function () {
             xmlData.should.match(/<guid isPermaLink="false">/);
             xmlData.should.match(/<\/guid><dc:creator><!\[CDATA\[Joe Bloggs\]\]><\/dc:creator>/);
             xmlData.should.match(/<pubDate>Thu, 01 Jan 2015/);
-            xmlData.should.match(/<content:encoded><!\[CDATA\[<h1>HTML Ipsum Presents<\/h1><p><strong>Pellentes/);
+            xmlData.should.match(/<content:encoded><!\[CDATA\[<h1>HTML Ipsum Presents<\/h1>/);
             xmlData.should.match(/<\/code><\/pre>\]\]><\/content:encoded><\/item>/);
             xmlData.should.not.match(/<author>/);
 
@@ -124,7 +123,7 @@ describe('RSS: Generate Feed', function () {
             // item tags
             xmlData.should.match(/<title><!\[CDATA\[Short and Sweet\]\]>/);
             xmlData.should.match(/<description><!\[CDATA\[test stuff/);
-            xmlData.should.match(/<content:encoded><!\[CDATA\[<div class="kg-card-markdown"><h2 id="testing">testing<\/h2>\n/);
+            xmlData.should.match(/<content:encoded><!\[CDATA\[<!--kg-card-begin: markdown--><h2 id="testing">testing<\/h2>\n/);
             xmlData.should.match(/<img src="http:\/\/placekitten.com\/500\/200"/);
             xmlData.should.match(/<media:content url="http:\/\/placekitten.com\/500\/200" medium="image"\/>/);
             xmlData.should.match(/<category><!\[CDATA\[public\]\]/);
@@ -143,7 +142,7 @@ describe('RSS: Generate Feed', function () {
             // special/optional tags
             xmlData.should.match(/<title><!\[CDATA\[Short and Sweet\]\]>/);
             xmlData.should.match(/<description><!\[CDATA\[test stuff/);
-            xmlData.should.match(/<content:encoded><!\[CDATA\[<div class="kg-card-markdown"><h2 id="testing">testing<\/h2>\n/);
+            xmlData.should.match(/<content:encoded><!\[CDATA\[<!--kg-card-begin: markdown--><h2 id="testing">testing<\/h2>\n/);
             xmlData.should.match(/<img src="http:\/\/placekitten.com\/500\/200"/);
             xmlData.should.match(/<media:content url="http:\/\/placekitten.com\/500\/200" medium="image"\/>/);
             xmlData.should.not.match(/<dc:creator>/);
@@ -161,7 +160,7 @@ describe('RSS: Generate Feed', function () {
             // special/optional tags
             xmlData.should.match(/<title><!\[CDATA\[Short and Sweet\]\]>/);
             xmlData.should.match(/<description><!\[CDATA\[test stuff/);
-            xmlData.should.match(/<content:encoded><!\[CDATA\[<div class="kg-card-markdown"><h2 id="testing">testing<\/h2>\n/);
+            xmlData.should.match(/<content:encoded><!\[CDATA\[<!--kg-card-begin: markdown--><h2 id="testing">testing<\/h2>\n/);
             xmlData.should.match(/<img src="http:\/\/placekitten.com\/500\/200"/);
             xmlData.should.match(/<media:content url="http:\/\/placekitten.com\/500\/200" medium="image"\/>/);
 

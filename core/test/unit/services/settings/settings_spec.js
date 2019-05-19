@@ -2,12 +2,11 @@ const sinon = require('sinon'),
     should = require('should'),
     rewire = require('rewire'),
     common = require('../../../../server/lib/common'),
-    settings = rewire('../../../../server/services/settings/index'),
-    sandbox = sinon.sandbox.create();
+    settings = rewire('../../../../server/services/settings');
 
 describe('UNIT > Settings Service:', function () {
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     describe('knownSettings', function () {
@@ -26,7 +25,7 @@ describe('UNIT > Settings Service:', function () {
             routes: null,
             collections: {
               '/': {
-                permalink: '{globals.permalinks}',
+                permalink: '/{slug}/',
                 template: [ 'home', 'index' ]
               }
             },
@@ -34,7 +33,7 @@ describe('UNIT > Settings Service:', function () {
         };
 
         beforeEach(function () {
-            settingsLoaderStub = sandbox.stub();
+            settingsLoaderStub = sinon.stub();
         });
 
         it('returns settings object for `routes`', function () {
@@ -86,7 +85,7 @@ describe('UNIT > Settings Service:', function () {
                 routes: null,
                 collections: {
                   '/': {
-                    permalink: '{globals.permalinks}',
+                    permalink: '/{slug}/',
                     template: [ 'home', 'index' ]
                   }
                 },
@@ -99,9 +98,9 @@ describe('UNIT > Settings Service:', function () {
             };
 
         beforeEach(function () {
-            knownSettingsStub = sandbox.stub().returns(['routes', 'globals']);
+            knownSettingsStub = sinon.stub().returns(['routes', 'globals']);
             settings.__set__('this.knownSettings', knownSettingsStub);
-            settingsLoaderStub = sandbox.stub();
+            settingsLoaderStub = sinon.stub();
         });
 
         it('returns settings object for all known settings', function () {

@@ -8,9 +8,7 @@ const should = require('should'),
     PageGenerator = require('../../../../../server/data/xml/sitemap/page-generator'),
     TagGenerator = require('../../../../../server/data/xml/sitemap/tag-generator'),
     UserGenerator = require('../../../../../server/data/xml/sitemap/user-generator'),
-    IndexGenerator = require('../../../../../server/data/xml/sitemap/index-generator'),
-
-    sandbox = sinon.sandbox.create();
+    IndexGenerator = require('../../../../../server/data/xml/sitemap/index-generator');
 
 describe('Unit: sitemap/manager', function () {
     let eventsToRemember;
@@ -30,18 +28,18 @@ describe('Unit: sitemap/manager', function () {
     beforeEach(function () {
         eventsToRemember = {};
 
-        sandbox.stub(common.events, 'on').callsFake(function (eventName, callback) {
+        sinon.stub(common.events, 'on').callsFake(function (eventName, callback) {
             eventsToRemember[eventName] = callback;
         });
 
-        sandbox.stub(PostGenerator.prototype, 'getXml');
-        sandbox.stub(PostGenerator.prototype, 'addUrl');
-        sandbox.stub(PostGenerator.prototype, 'removeUrl');
-        sandbox.stub(IndexGenerator.prototype, 'getXml');
+        sinon.stub(PostGenerator.prototype, 'getXml');
+        sinon.stub(PostGenerator.prototype, 'addUrl');
+        sinon.stub(PostGenerator.prototype, 'removeUrl');
+        sinon.stub(IndexGenerator.prototype, 'getXml');
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     describe('SiteMapManager', function () {
@@ -49,7 +47,7 @@ describe('Unit: sitemap/manager', function () {
 
         beforeEach(function () {
             manager = makeStubManager();
-            fake = sandbox.stub();
+            fake = sinon.stub();
         });
 
         it('create SiteMapManager with defaults', function () {
@@ -62,10 +60,11 @@ describe('Unit: sitemap/manager', function () {
 
         it('can create a SiteMapManager instance', function () {
             should.exist(manager);
-            Object.keys(eventsToRemember).length.should.eql(3);
+            Object.keys(eventsToRemember).length.should.eql(4);
             should.exist(eventsToRemember['url.added']);
             should.exist(eventsToRemember['url.removed']);
             should.exist(eventsToRemember['router.created']);
+            should.exist(eventsToRemember['routers.reset']);
         });
 
         describe('trigger url events', function () {

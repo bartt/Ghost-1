@@ -69,9 +69,14 @@ class Queue extends EventEmitter {
     }
 
     /**
-     * `tolerance`:
+     * @description Register a subscriber for this queue.
+     *
+     * tolerance:
      *   - 0: don't wait for more subscribers [default]
      *   - 100: wait long enough till all subscribers have registered (e.g. bootstrap)
+     *
+     * @param {Object} options
+     * @param {function} fn
      */
     register(options, fn) {
         if (!options.hasOwnProperty('tolerance')) {
@@ -92,6 +97,10 @@ class Queue extends EventEmitter {
         this.queue[options.event].subscribers.push(fn);
     }
 
+    /**
+     * @description The queue runs & executes subscribers one by one (sequentially)
+     * @param {Object} options
+     */
     run(options) {
         const event = options.event,
             action = options.action,
@@ -108,7 +117,7 @@ class Queue extends EventEmitter {
             debug('execute', action, event, this.toNotify[action].notified.length);
 
             /**
-             * Currently no async operations happen in the subscribers functions.
+             * @NOTE: Currently no async operations happen in the subscribers functions.
              * We can trigger the functions sync.
              */
             try {
@@ -126,8 +135,7 @@ class Queue extends EventEmitter {
                     err: err
                 }));
 
-                // just try again
-                this.run(options);
+                // @NOTE: The url service stays in maintenance mode. There is nothing we can do if an url generator fails.
             }
         } else {
             // CASE 1: zero tolerance, kill run fn
@@ -143,6 +151,8 @@ class Queue extends EventEmitter {
                 debug('ended (2)', event, action);
                 this.emit('ended', event);
             } else {
+                debug('retry', event, action, this.toNotify[action].timeoutInMS);
+
                 this.toNotify[action].timeoutInMS = this.toNotify[action].timeoutInMS * 1.1;
 
                 this.toNotify[action].timeout = setTimeout(() => {
@@ -152,6 +162,16 @@ class Queue extends EventEmitter {
         }
     }
 
+    /**
+     * @description Start the queue from outside.
+     *
+     * CASE:
+     *
+     *   - resources were fetched from database on bootstrap
+     *   - resource was added
+     *
+     * @param options
+     */
     start(options) {
         debug('start');
 
@@ -184,7 +204,7 @@ class Queue extends EventEmitter {
             }
         }
 
-        // reset who was already notified
+        // @NOTE: reset who was already notified
         this.toNotify[options.action] = {
             event: options.event,
             timeoutInMS: options.timeoutInMS || 50,
@@ -195,6 +215,11 @@ class Queue extends EventEmitter {
         this.run(options);
     }
 
+    /**
+     * @description Hard reset queue from outside.
+     *
+     * Reset usually only happens if you e.g. switch the api version.
+     */
     reset() {
         this.queue = {};
 
@@ -205,6 +230,12 @@ class Queue extends EventEmitter {
         this.toNotify = {};
     }
 
+    /**
+     * @description Soft reset queue from outside.
+     *
+     * A soft reset does NOT clear the subscribers!
+     * Only used for test env currently.
+     */
     softReset() {
         _.each(this.toNotify, (obj) => {
             clearTimeout(obj.timeout);

@@ -1,6 +1,5 @@
 const debug = require('ghost-ignition').debug('services:routing:collection-router');
 const common = require('../../lib/common');
-const settingsCache = require('../settings/cache');
 const urlService = require('../url');
 const ParentRouter = require('./ParentRouter');
 
@@ -8,14 +7,25 @@ const controllers = require('./controllers');
 const middlewares = require('./middlewares');
 const RSSRouter = require('./RSSRouter');
 
+/**
+ * @description Collection Router for post resource.
+ *
+ * Fundamental router to define where resources live and how their url structure is.
+ */
 class CollectionRouter extends ParentRouter {
-    constructor(indexRoute, object) {
+    constructor(mainRoute, object, RESOURCE_CONFIG) {
         super('CollectionRouter');
 
-        // NOTE: index/parent route e.g. /, /podcast/, /magic/ ;)
+        this.RESOURCE_CONFIG = RESOURCE_CONFIG.QUERY.post;
+
+        this.routerName = mainRoute === '/' ? 'index' : mainRoute.replace(/\//g, '');
+
+        // NOTE: this.route === index/parent route e.g. /, /podcast/, /magic/
         this.route = {
-            value: indexRoute
+            value: mainRoute
         };
+
+        this.rss = object.rss !== false;
 
         this.permalinks = {
             originalValue: object.permalink,
@@ -23,18 +33,12 @@ class CollectionRouter extends ParentRouter {
         };
 
         // @NOTE: see helpers/templates - we use unshift to prepend the templates
-        this.templates = (object.template || []).reverse();
+        this.templates = (object.templates || []).reverse();
 
-        this.filter = object.filter || 'page:false';
-
-        /**
-         * @deprecated Remove in Ghost 2.0
-         */
-        if (this.permalinks.originalValue.match(/globals\.permalinks/)) {
-            this.permalinks.originalValue = this.permalinks.originalValue.replace('{globals.permalinks}', '{settings.permalinks}');
-            this.permalinks.value = this.permalinks.originalValue.replace('{settings.permalinks}', settingsCache.get('permalinks'));
-            this.permalinks.value = urlService.utils.deduplicateDoubleSlashes(this.permalinks.value);
-        }
+        this.filter = object.filter;
+        this.data = object.data || {query: {}, router: {}};
+        this.order = object.order;
+        this.limit = object.limit;
 
         this.permalinks.getValue = (options) => {
             options = options || {};
@@ -48,15 +52,21 @@ class CollectionRouter extends ParentRouter {
             return this.permalinks.value;
         };
 
-        debug(this.route, this.permalinks);
+        this.context = [this.routerName];
+
+        debug(this.name, this.route, this.permalinks);
 
         this._registerRoutes();
         this._listeners();
     }
 
+    /**
+     * @description Register all routes of this router.
+     * @private
+     */
     _registerRoutes() {
         // REGISTER: context middleware for this collection
-        this.router().use(this._prepareIndexContext.bind(this));
+        this.router().use(this._prepareEntriesContext.bind(this));
 
         // REGISTER: collection route e.g. /, /podcast/
         this.mountRoute(this.route.value, controllers.collection);
@@ -65,13 +75,17 @@ class CollectionRouter extends ParentRouter {
         this.router().param('page', middlewares.pageParam);
         this.mountRoute(urlService.utils.urlJoin(this.route.value, 'page', ':page(\\d+)'), controllers.collection);
 
-        this.rssRouter =  new RSSRouter();
-
-        // REGISTER: enable rss by default
-        this.mountRouter(this.route.value, this.rssRouter.router());
+        // REGISTER: is rss enabled?
+        if (this.rss) {
+            this.rssRouter = new RSSRouter();
+            this.mountRouter(this.route.value, this.rssRouter.router());
+        }
 
         // REGISTER: context middleware for entries
         this.router().use(this._prepareEntryContext.bind(this));
+
+        // REGISTER: page/post resource redirects
+        this.router().param('slug', this._respectDominantRouter.bind(this));
 
         // REGISTER: permalinks e.g. /:slug/, /podcast/:slug
         this.mountRoute(this.permalinks.getValue({withUrlOptions: true}), controllers.entry);
@@ -80,78 +94,111 @@ class CollectionRouter extends ParentRouter {
     }
 
     /**
-     * We attach context information of the router to the request.
-     * By this we can e.g. access the router options in controllers.
-     *
-     * @TODO: Why do we need two context objects? O_O - refactor this out
+     * @description Prepare index context for further middlewares/controllers.
      */
-    _prepareIndexContext(req, res, next) {
-        res.locals.routerOptions = {
+    _prepareEntriesContext(req, res, next) {
+        res.routerOptions = {
+            type: 'collection',
             filter: this.filter,
+            limit: this.limit,
+            order: this.order,
             permalinks: this.permalinks.getValue({withUrlOptions: true}),
-            type: this.getType(),
-            context: [],
+            resourceType: this.getResourceType(),
+            query: this.RESOURCE_CONFIG,
+            context: this.context,
             frontPageTemplate: 'home',
             templates: this.templates,
-            identifier: this.identifier
-        };
-
-        res._route = {
-            type: 'collection'
+            identifier: this.identifier,
+            name: this.routerName,
+            data: this.data.query
         };
 
         next();
     }
 
+    /**
+     * @description Prepare entry context for further middlewares/controllers.
+     */
     _prepareEntryContext(req, res, next) {
-        res.locals.routerOptions.context = ['post'];
-        res._route.type = 'entry';
+        res.routerOptions.context = ['post'];
+        res.routerOptions.type = 'entry';
         next();
     }
 
+    /**
+     * @description This router has listeners to react on changes which happen in Ghost.
+     * @private
+     */
     _listeners() {
         /**
-         * @deprecated Remove in Ghost 2.0
+         * CASE: timezone changes
+         *
+         * If your permalink contains a date reference, we have to regenerate the urls.
+         *
+         * e.g. /:year/:month/:day/:slug/ or /:day/:slug/
          */
-        if (this.getPermalinks() && this.getPermalinks().originalValue.match(/settings\.permalinks/)) {
-            this._onPermalinksEditedListener = this._onPermalinksEdited.bind(this);
-            common.events.on('settings.permalinks.edited', this._onPermalinksEditedListener);
+        this._onTimezoneEditedListener = this._onTimezoneEdited.bind(this);
+        common.events.on('settings.active_timezone.edited', this._onTimezoneEditedListener);
+    }
+
+    /**
+     * @description Helper function to handle a timezone change.
+     * @param settingModel
+     * @private
+     */
+    _onTimezoneEdited(settingModel) {
+        const newTimezone = settingModel.attributes.value,
+            previousTimezone = settingModel._previousAttributes.value;
+
+        if (newTimezone === previousTimezone) {
+            return;
+        }
+
+        if (this.getPermalinks().getValue().match(/:year|:month|:day/)) {
+            debug('_onTimezoneEdited: trigger regeneration');
+
+            // @NOTE: The connected url generator will listen on this event and regenerate urls.
+            this.emit('updated');
         }
     }
 
     /**
-     * We unmount and mount the permalink url. This enables the ability to change urls on runtime.
+     * @description Get resource type of this router (always "posts")
+     * @returns {string}
      */
-    _onPermalinksEdited() {
-        this.unmountRoute(this.permalinks.getValue({withUrlOptions: true}));
-
-        this.permalinks.value = this.permalinks.originalValue.replace('{settings.permalinks}', settingsCache.get('permalinks'));
-        this.permalinks.value = urlService.utils.deduplicateDoubleSlashes(this.permalinks.value);
-
-        this.mountRoute(this.permalinks.getValue({withUrlOptions: true}), controllers.entry);
-        this.emit('updated');
+    getResourceType() {
+        // @TODO: resourceAlias can be removed? We removed it. Looks like a last left over. Needs double checking.
+        return this.RESOURCE_CONFIG.resourceAlias || this.RESOURCE_CONFIG.resource;
     }
 
-    getType() {
-        return 'posts';
-    }
-
+    /**
+     * @description Get index route e.g. /, /blog/
+     * @param {Object} options
+     * @returns {String}
+     */
     getRoute(options) {
         options = options || {};
 
         return urlService.utils.createUrl(this.route.value, options.absolute, options.secure);
     }
 
+    /**
+     * @description Generate rss url.
+     * @param {Object} options
+     * @returns {String}
+     */
     getRssUrl(options) {
+        if (!this.rss) {
+            return null;
+        }
+
         return urlService.utils.createUrl(urlService.utils.urlJoin(this.route.value, this.rssRouter.route.value), options.absolute, options.secure);
     }
 
     reset() {
-        if (!this._onPermalinksEditedListener) {
-            return;
+        if (this._onTimezoneEditedListener) {
+            common.events.removeListener('settings.active_timezone.edited', this._onTimezoneEditedListener);
         }
-
-        common.events.removeListener('settings.permalinks.edited', this._onPermalinksEditedListener);
     }
 }
 

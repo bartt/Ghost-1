@@ -1,22 +1,36 @@
 const _ = require('lodash'),
-    jsonpath = require('jsonpath'),
+    nql = require('@nexes/nql'),
     debug = require('ghost-ignition').debug('services:url:generator'),
     localUtils = require('./utils'),
-    /**
-     * @TODO: This is a fake version of the upcoming GQL tool.
-     * GQL will offer a tool to match a JSON against a filter.
-     */
-    transformFilter = (filter) => {
-        filter = '$[?(' + filter + ')]';
-        filter = filter.replace(/(\w+):(\w+)/g, '@.$1 == "$2"');
-        filter = filter.replace(/"true"/g, 'true');
-        filter = filter.replace(/"false"/g, 'false');
-        filter = filter.replace(/"0"/g, '0');
-        filter = filter.replace(/"1"/g, '1');
-        filter = filter.replace(/\+/g, ' && ');
-        return filter;
-    };
+    // @TODO: merge with filter plugin
+    EXPANSIONS = [{
+        key: 'author',
+        replacement: 'authors.slug'
+    }, {
+        key: 'tags',
+        replacement: 'tags.slug'
+    }, {
+        key: 'tag',
+        replacement: 'tags.slug'
+    }, {
+        key: 'authors',
+        replacement: 'authors.slug'
+    }, {
+        key: 'primary_tag',
+        replacement: 'primary_tag.slug'
+    }, {
+        key: 'primary_author',
+        replacement: 'primary_author.slug'
+    }];
 
+/**
+ * The UrlGenerator class is responsible to generate urls based on a router's conditions.
+ * It is the component which sits between routers and resources and connects them together.
+ * Each url generator can own resources. Each resource can only be owned by one generator,
+ * because each resource can only live on one url at a time.
+ *
+ * Each router is represented by a url generator.
+ */
 class UrlGenerator {
     constructor(router, queue, resources, urls, position) {
         this.router = router;
@@ -29,17 +43,22 @@ class UrlGenerator {
 
         // CASE: routers can define custom filters, but not required.
         if (this.router.getFilter()) {
-            this.filter = transformFilter(this.router.getFilter());
+            this.filter = this.router.getFilter();
+            this.nql = nql(this.filter, {expansions: EXPANSIONS});
             debug('filter', this.filter);
         }
 
         this._listeners();
     }
 
+    /**
+     * @description Helper function to register listeners for each url generator instance.
+     * @private
+     */
     _listeners() {
         /**
          * @NOTE: currently only used if the permalink setting changes and it's used for this url generator.
-         * @TODO: remove in Ghost 2.0
+         * @TODO: https://github.com/TryGhost/Ghost/issues/10699
          */
         this.router.addListener('updated', () => {
             const myResources = this.urls.getByGeneratorId(this.uid);
@@ -55,35 +74,48 @@ class UrlGenerator {
          * Listen on two events:
          *
          * - init: bootstrap or url reset
-         * - added: resource was added
+         * - added: resource was added to the database
          */
         this.queue.register({
             event: 'init',
             tolerance: 100
         }, this._onInit.bind(this));
 
-        // @TODO: listen on added event per type (post optimisation)
         this.queue.register({
             event: 'added'
         }, this._onAdded.bind(this));
     }
 
+    /**
+     * @description Listener which get's called when the resources were fully fetched from the database.
+     *
+     * Each url generator will be called and can try to own resources now.
+     *
+     * @private
+     */
     _onInit() {
-        debug('_onInit', this.toString());
+        debug('_onInit', this.router.getResourceType());
 
         // @NOTE: get the resources of my type e.g. posts.
-        const resources = this.resources.getAllByType(this.router.getType());
+        const resources = this.resources.getAllByType(this.router.getResourceType());
+
+        debug(resources.length);
 
         _.each(resources, (resource) => {
             this._try(resource);
         });
     }
 
+    /**
+     * @description Listener which get's called when a resource was added on runtime.
+     * @param {String} event
+     * @private
+     */
     _onAdded(event) {
         debug('onAdded', this.toString());
 
         // CASE: you are type "pages", but the incoming type is "users"
-        if (event.type !== this.router.getType()) {
+        if (event.type !== this.router.getResourceType()) {
             return;
         }
 
@@ -92,6 +124,12 @@ class UrlGenerator {
         this._try(resource);
     }
 
+    /**
+     * @description Try to own a resource and generate it's url if so.
+     * @param {Resource} resource
+     * @returns {boolean}
+     * @private
+     */
     _try(resource) {
         /**
          * CASE: another url generator has taken this resource already.
@@ -117,7 +155,7 @@ class UrlGenerator {
             resource.reserve();
             this._resourceListeners(resource);
             return true;
-        } else if (jsonpath.query(resource, this.filter).length) {
+        } else if (this.nql.queryJSON(resource.data)) {
             this.urls.add({
                 url: url,
                 generatorId: this.uid,
@@ -133,18 +171,26 @@ class UrlGenerator {
     }
 
     /**
-     * We currently generate relative urls.
+     * @description Generate url based on the permlink configuration of the target router.
+     *
+     * @NOTE We currently generate relative urls (https://github.com/TryGhost/Ghost/commit/7b0d5d465ba41073db0c3c72006da625fa11df32).
      */
     _generateUrl(resource) {
         const permalink = this.router.getPermalinks().getValue();
-        const url = localUtils.replacePermalink(permalink, resource.data);
-
-        return localUtils.createUrl(url, false, false, true);
+        return localUtils.replacePermalink(permalink, resource.data);
     }
 
     /**
+     * @description Helper function to register resource listeners.
+     *
      * I want to know if my resources changes.
-     * Register events of resource.
+     *
+     * If the owned resource get's updated, we simply release/free the resource and push it back to the queue.
+     * This is the easiest, less error prone implementation.
+     *
+     * Imagine you have two collections: `featured:true` and `page:false`.
+     * If a published post status get's featured and you have not explicitly defined `featured:false`, we wouldn't
+     * be able to figure out if this resource still belongs to me, because the filter still matches.
      */
     _resourceListeners(resource) {
         const onUpdate = (updatedResource) => {
@@ -154,25 +200,17 @@ class UrlGenerator {
             // 2. free resource, the url <-> resource connection no longer exists
             updatedResource.release();
 
-            // 3. try to own the resource again
-            // Imagine you change `featured` to true and your filter excludes featured posts.
-            const isMine = this._try(updatedResource);
+            // 3. post has the change to get owned from a different collection again
+            debug('put back in queue', updatedResource.data.id);
 
-            // 4. if the resource is no longer mine, tell the others
-            // e.g. post -> page
-            // e.g. post is featured now
-            if (!isMine) {
-                debug('free, this is not mine anymore', updatedResource.data.id);
-
-                this.queue.start({
-                    event: 'added',
-                    action: 'added:' + resource.data.id,
-                    eventData: {
-                        id: resource.data.id,
-                        type: this.router.getType()
-                    }
-                });
-            }
+            this.queue.start({
+                event: 'added',
+                action: 'added:' + resource.data.id,
+                eventData: {
+                    id: resource.data.id,
+                    type: this.router.getResourceType()
+                }
+            });
         };
 
         const onRemoved = (removedResource) => {
@@ -185,20 +223,33 @@ class UrlGenerator {
         resource.addListener('removed', onRemoved.bind(this));
     }
 
-    hasUrl(url) {
-        const existingUrl = this.urls.getByUrl(url);
+    /**
+     * @description Figure out if this url generator own's a resource id.
+     * @param {String} id
+     * @returns {boolean}
+     */
+    hasId(id) {
+        const existingUrl = this.urls.getByResourceId(id);
 
-        if (existingUrl.length && existingUrl[0].generatorId === this.uid) {
+        if (existingUrl && existingUrl.generatorId === this.uid) {
             return true;
         }
 
         return false;
     }
 
+    /**
+     * @description Get all urls of this url generator.
+     * @returns {Array}
+     */
     getUrls() {
         return this.urls.getByGeneratorId(this.uid);
     }
 
+    /**
+     * @description Override of `toString`
+     * @returns {string}
+     */
     toString() {
         return this.router.toString();
     }

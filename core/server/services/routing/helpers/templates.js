@@ -2,7 +2,6 @@
 //
 // Figure out which template should be used to render a request
 // based on the templates which are allowed, and what is available in the theme
-// TODO: consider where this should live as it deals with collections, entries, and errors
 const _ = require('lodash'),
     path = require('path'),
     url = require('url'),
@@ -11,7 +10,7 @@ const _ = require('lodash'),
     _private = {};
 
 /**
- * ## Get Error Template Hierarchy
+ * @description Get Error Template Hierarchy
  *
  * Fetch the ordered list of templates that can be used to render this error statusCode.
  *
@@ -34,7 +33,7 @@ _private.getErrorTemplateHierarchy = function getErrorTemplateHierarchy(statusCo
 };
 
 /**
- * ## Get Collection Template Hierarchy
+ * @description Get Template Hierarchy
  *
  * Fetch the ordered list of templates that can be used to render this request.
  * 'index' is the default / fallback
@@ -45,19 +44,19 @@ _private.getErrorTemplateHierarchy = function getErrorTemplateHierarchy(statusCo
  * @param {Object} routerOptions
  * @returns {String[]}
  */
-_private.getCollectionTemplateHierarchy = function getCollectionTemplateHierarchy(routerOptions, requestOptions) {
+_private.getEntriesTemplateHierarchy = function getEntriesTemplateHierarchy(routerOptions, requestOptions) {
     const templateList = ['index'];
 
-    // CASE: author, tag
+    // CASE: author, tag, custom collection name
     if (routerOptions.name && routerOptions.name !== 'index') {
         templateList.unshift(routerOptions.name);
 
-        if (routerOptions.slugTemplate && routerOptions.slugParam) {
-            templateList.unshift(routerOptions.name + '-' + routerOptions.slugParam);
+        if (routerOptions.slugTemplate && requestOptions.slugParam) {
+            templateList.unshift(routerOptions.name + '-' + requestOptions.slugParam);
         }
     }
 
-    // CASE: collections can define a template list
+    // CASE: collections/channels can define a template list
     if (routerOptions.templates && routerOptions.templates.length) {
         routerOptions.templates.forEach((template) => {
             templateList.unshift(template);
@@ -72,7 +71,7 @@ _private.getCollectionTemplateHierarchy = function getCollectionTemplateHierarch
 };
 
 /**
- * ## Get Entry Template Hierarchy
+ * @description Get Entry Template Hierarchy
  *
  * Fetch the ordered list of templates that can be used to render this request.
  * 'post' is the default / fallback
@@ -101,7 +100,7 @@ _private.getEntryTemplateHierarchy = function getEntryTemplateHierarchy(postObje
 };
 
 /**
- * ## Pick Template
+ * @description Pick Template
  *
  * Taking the ordered list of allowed templates for this request
  * Cycle through and find the first one which has a match in the theme
@@ -145,8 +144,8 @@ _private.getTemplateForEntry = function getTemplateForEntry(postObject) {
     return _private.pickTemplate(templateList, fallback);
 };
 
-_private.getTemplateForCollection = function getTemplateForCollection(routerOptions, requestOptions) {
-    const templateList = _private.getCollectionTemplateHierarchy(routerOptions, requestOptions),
+_private.getTemplateForEntries = function getTemplateForEntries(routerOptions, requestOptions) {
+    const templateList = _private.getEntriesTemplateHierarchy(routerOptions, requestOptions),
         fallback = templateList[templateList.length - 1];
     return _private.pickTemplate(templateList, fallback);
 };
@@ -157,9 +156,13 @@ _private.getTemplateForError = function getTemplateForError(statusCode) {
     return _private.pickTemplate(templateList, fallback);
 };
 
+/**
+ * @description Set template for express. Express will render the template you set here.
+ * @param {Object} req
+ * @param {Object} res
+ * @param {Object} data
+ */
 module.exports.setTemplate = function setTemplate(req, res, data) {
-    const routeConfig = res._route || {};
-
     if (res._template && !req.err) {
         return;
     }
@@ -169,20 +172,17 @@ module.exports.setTemplate = function setTemplate(req, res, data) {
         return;
     }
 
-    switch (routeConfig.type) {
-        case 'custom':
-            res._template = _private.pickTemplate(routeConfig.templateName, routeConfig.defaultTemplate);
-            break;
-        case 'collection':
-            res._template = _private.getTemplateForCollection(res.locals.routerOptions, {
-                path: url.parse(req.url).pathname,
-                page: req.params.page
-            });
-            break;
-        case 'entry':
-            res._template = _private.getTemplateForEntry(data.post);
-            break;
-        default:
-            res._template = 'index';
+    if (['channel', 'collection'].indexOf(res.routerOptions.type) !== -1) {
+        res._template = _private.getTemplateForEntries(res.routerOptions, {
+            path: url.parse(req.url).pathname,
+            page: req.params.page,
+            slugParam: req.params.slug
+        });
+    } else if (res.routerOptions.type === 'custom') {
+        res._template = _private.pickTemplate(res.routerOptions.templates, res.routerOptions.defaultTemplate);
+    } else if (res.routerOptions.type === 'entry') {
+        res._template = _private.getTemplateForEntry(data.post);
+    } else {
+        res._template = 'index';
     }
 };

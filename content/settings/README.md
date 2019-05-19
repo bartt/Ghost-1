@@ -11,9 +11,8 @@ routes:
 
 collections:
   /:
-    permalink: '{globals.permalinks}'
+    permalink: '/{slug}/'
     template:
-      - home
       - index
 
 taxonomies:

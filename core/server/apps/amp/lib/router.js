@@ -1,4 +1,4 @@
-var path = require('path'),
+const path = require('path'),
     express = require('express'),
     ampRouter = express.Router(),
 
@@ -9,17 +9,15 @@ var path = require('path'),
     templateName = 'amp';
 
 function _renderer(req, res, next) {
-    // Note: this is super similar to the config middleware used in channels
-    // @TODO refactor into to something explicit & DRY this up
-    res._route = {
+    res.routerOptions = {
         type: 'custom',
-        templateName: templateName,
-        defaultTemplate: path.resolve(__dirname, 'views', templateName + '.hbs')
+        templates: templateName,
+        defaultTemplate: path.resolve(__dirname, 'views', `${templateName}.hbs`)
     };
 
     // Renderer begin
     // Format data
-    var data = req.body || {};
+    let data = req.body || {};
 
     // CASE: we only support amp pages for posts that are not static pages
     if (!data.post || data.post.page) {
@@ -35,8 +33,7 @@ function _renderer(req, res, next) {
 function getPostData(req, res, next) {
     req.body = req.body || {};
 
-    const urlWithSubdirectoryWithoutAmp = req.originalUrl.match(/(.*?\/)amp/)[1];
-    const urlWithoutSubdirectoryWithoutAmp = res.locals.relativeUrl.match(/(.*?\/)amp/)[1];
+    const urlWithoutSubdirectoryWithoutAmp = res.locals.relativeUrl.match(/(.*?\/)amp\/?$/)[1];
 
     /**
      * @NOTE
@@ -58,7 +55,7 @@ function getPostData(req, res, next) {
      *
      * The challenge is to design different types of apps e.g. extensions of routers, standalone pages etc.
      */
-    const permalinks = urlService.getPermalinkByUrl(urlWithSubdirectoryWithoutAmp, {withUrlOptions: true});
+    const permalinks = urlService.getPermalinkByUrl(urlWithoutSubdirectoryWithoutAmp, {withUrlOptions: true});
 
     if (!permalinks) {
         return next(new common.errors.NotFoundError({
@@ -66,10 +63,12 @@ function getPostData(req, res, next) {
         }));
     }
 
-    helpers.postLookup(urlWithoutSubdirectoryWithoutAmp, {permalinks: permalinks})
-        .then(function handleResult(result) {
-            if (result && result.post) {
-                req.body.post = result.post;
+    // @NOTE: amp is not supported for static pages
+    // @TODO: https://github.com/TryGhost/Ghost/issues/10548
+    helpers.entryLookup(urlWithoutSubdirectoryWithoutAmp, {permalinks, query: {controller: 'postsPublic', resource: 'posts'}}, res.locals)
+        .then((result) => {
+            if (result && result.entry) {
+                req.body.post = result.entry;
             }
 
             next();

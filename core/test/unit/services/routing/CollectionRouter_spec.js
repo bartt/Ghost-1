@@ -1,51 +1,53 @@
 const should = require('should'),
     sinon = require('sinon'),
+    express = require('express'),
     settingsCache = require('../../../../server/services/settings/cache'),
     common = require('../../../../server/lib/common'),
     controllers = require('../../../../server/services/routing/controllers'),
     CollectionRouter = require('../../../../server/services/routing/CollectionRouter'),
-    sandbox = sinon.sandbox.create();
+    RESOURCE_CONFIG = {QUERY: {post: {controller: 'posts', resource: 'posts'}}};
 
 describe('UNIT - services/routing/CollectionRouter', function () {
     let req, res, next;
 
+    beforeEach(function () {
+        sinon.stub(common.events, 'emit');
+        sinon.stub(common.events, 'on');
+
+        sinon.spy(CollectionRouter.prototype, 'mountRoute');
+        sinon.spy(CollectionRouter.prototype, 'mountRouter');
+        sinon.spy(CollectionRouter.prototype, 'unmountRoute');
+        sinon.spy(express.Router, 'param');
+
+        req = sinon.stub();
+        res = sinon.stub();
+        next = sinon.stub();
+
+        res.locals = {};
+    });
+
+    afterEach(function () {
+        sinon.restore();
+    });
+
     describe('instantiate', function () {
-        beforeEach(function () {
-            sandbox.stub(settingsCache, 'get').withArgs('permalinks').returns('/:slug/');
-
-            sandbox.stub(common.events, 'emit');
-            sandbox.stub(common.events, 'on');
-
-            sandbox.spy(CollectionRouter.prototype, 'mountRoute');
-            sandbox.spy(CollectionRouter.prototype, 'mountRouter');
-
-            req = sandbox.stub();
-            res = sandbox.stub();
-            next = sandbox.stub();
-
-            res.locals = {};
-        });
-
-        afterEach(function () {
-            sandbox.restore();
-        });
-
         it('default', function () {
-            const collectionRouter = new CollectionRouter('/', {permalink: '/:slug/'});
+            const collectionRouter = new CollectionRouter('/', {permalink: '/:slug/'}, RESOURCE_CONFIG);
 
             should.exist(collectionRouter.router);
 
-            collectionRouter.getFilter().should.eql('page:false');
-            collectionRouter.getType().should.eql('posts');
+            should.not.exist(collectionRouter.getFilter());
+            collectionRouter.getResourceType().should.eql('posts');
             collectionRouter.templates.should.eql([]);
             collectionRouter.getPermalinks().getValue().should.eql('/:slug/');
 
             common.events.emit.calledOnce.should.be.true();
             common.events.emit.calledWith('router.created', collectionRouter).should.be.true();
 
-            common.events.on.called.should.be.false();
+            common.events.on.calledTwice.should.be.false();
 
             collectionRouter.mountRoute.callCount.should.eql(3);
+            express.Router.param.callCount.should.eql(3);
 
             // parent route
             collectionRouter.mountRoute.args[0][0].should.eql('/');
@@ -64,20 +66,34 @@ describe('UNIT - services/routing/CollectionRouter', function () {
             collectionRouter.mountRouter.args[0][1].should.eql(collectionRouter.rssRouter.router());
         });
 
+        it('router name', function () {
+            const collectionRouter1 = new CollectionRouter('/', {permalink: '/:slug/'}, RESOURCE_CONFIG);
+            const collectionRouter2 = new CollectionRouter('/podcast/', {permalink: '/:slug/'}, RESOURCE_CONFIG);
+            const collectionRouter3 = new CollectionRouter('/hello/world/', {permalink: '/:slug/'}, RESOURCE_CONFIG);
+
+            collectionRouter1.routerName.should.eql('index');
+            collectionRouter2.routerName.should.eql('podcast');
+            collectionRouter3.routerName.should.eql('helloworld');
+
+            collectionRouter1.context.should.eql(['index']);
+            collectionRouter2.context.should.eql(['podcast']);
+            collectionRouter3.context.should.eql(['helloworld']);
+        });
+
         it('collection lives under /blog/', function () {
-            const collectionRouter = new CollectionRouter('/blog/', {permalink: '/blog/:year/:slug/'});
+            const collectionRouter = new CollectionRouter('/blog/', {permalink: '/blog/:year/:slug/'}, RESOURCE_CONFIG);
 
             should.exist(collectionRouter.router);
 
-            collectionRouter.getFilter().should.eql('page:false');
-            collectionRouter.getType().should.eql('posts');
+            should.not.exist(collectionRouter.getFilter());
+            collectionRouter.getResourceType().should.eql('posts');
             collectionRouter.templates.should.eql([]);
             collectionRouter.getPermalinks().getValue().should.eql('/blog/:year/:slug/');
 
             common.events.emit.calledOnce.should.be.true();
             common.events.emit.calledWith('router.created', collectionRouter).should.be.true();
 
-            common.events.on.called.should.be.false();
+            common.events.on.calledTwice.should.be.false();
 
             collectionRouter.mountRoute.callCount.should.eql(3);
 
@@ -99,93 +115,127 @@ describe('UNIT - services/routing/CollectionRouter', function () {
         });
 
         it('with custom filter', function () {
-            const collectionRouter = new CollectionRouter('/', {permalink: '/:slug/', filter: 'featured:true'});
+            const collectionRouter = new CollectionRouter('/', {permalink: '/:slug/', filter: 'featured:true'}, RESOURCE_CONFIG);
 
             collectionRouter.getFilter().should.eql('featured:true');
         });
 
-        it('permalink placeholder', function () {
-            const collectionRouter = new CollectionRouter('/magic/', {permalink: '/magic/{globals.permalinks}/'});
-
-            collectionRouter.getPermalinks().getValue().should.eql('/magic/:slug/');
-            common.events.on.calledOnce.should.be.true();
-        });
-
-        it('permalink placeholder', function () {
-            const collectionRouter = new CollectionRouter('/magic/', {permalink: '{globals.permalinks}'});
-
-            collectionRouter.getPermalinks().getValue().should.eql('/:slug/');
-        });
-
         it('with templates', function () {
-            const collectionRouter = new CollectionRouter('/magic/', {permalink: '/:slug/', template: ['home', 'index']});
+            const collectionRouter = new CollectionRouter('/magic/', {permalink: '/:slug/', templates: ['home', 'index']}, RESOURCE_CONFIG);
 
             // they are getting reversed because we unshift the templates in the helper
             collectionRouter.templates.should.eql(['index', 'home']);
         });
     });
 
-    describe('fn: _prepareIndexContext', function () {
-        it('default', function () {
-            const collectionRouter = new CollectionRouter('/magic/', {permalink: '/:slug/', template: ['home', 'index']});
+    describe('fn: _prepareEntriesContext', function () {
+        it('index collection', function () {
+            const collectionRouter = new CollectionRouter('/', {permalink: '/:slug/'}, RESOURCE_CONFIG);
 
-            collectionRouter._prepareIndexContext(req, res, next);
+            collectionRouter._prepareEntriesContext(req, res, next);
 
             next.calledOnce.should.be.true();
-            res.locals.routerOptions.should.eql({
-                filter: 'page:false',
+            res.routerOptions.should.eql({
+                type: 'collection',
+                filter: undefined,
                 permalinks: '/:slug/:options(edit)?/',
+                query: {controller: 'posts', resource: 'posts'},
+                frontPageTemplate: 'home',
+                templates: [],
+                identifier: collectionRouter.identifier,
+                context: ['index'],
+                name: 'index',
+                resourceType: 'posts',
+                data: {},
+                order: undefined,
+                limit: undefined
+            });
+        });
+
+        it('with templates, with order + limit, no index collection', function () {
+            const collectionRouter = new CollectionRouter('/magic/', {
+                permalink: '/:slug/',
+                order: 'published asc',
+                limit: 19,
+                templates: ['home', 'index']
+            }, RESOURCE_CONFIG);
+
+            collectionRouter._prepareEntriesContext(req, res, next);
+
+            next.calledOnce.should.be.true();
+            res.routerOptions.should.eql({
+                type: 'collection',
+                filter: undefined,
+                permalinks: '/:slug/:options(edit)?/',
+                query: {controller: 'posts', resource: 'posts'},
                 frontPageTemplate: 'home',
                 templates: ['index', 'home'],
                 identifier: collectionRouter.identifier,
-                context: [],
-                type: 'posts'
+                context: ['magic'],
+                name: 'magic',
+                resourceType: 'posts',
+                data: {},
+                order: 'published asc',
+                limit: 19
             });
         });
     });
 
-    describe('permalink in database changes', function () {
-        beforeEach(function () {
-            sandbox.stub(settingsCache, 'get').withArgs('permalinks').returns('/:slug/');
+    describe('timezone changes', function () {
+        describe('no dated permalink', function () {
+            it('default', function () {
+                const collectionRouter = new CollectionRouter('/magic/', {permalink: '/:slug/'}, RESOURCE_CONFIG);
 
-            sandbox.stub(common.events, 'emit');
-            sandbox.stub(common.events, 'on');
+                sinon.stub(collectionRouter, 'emit');
 
-            sandbox.spy(CollectionRouter.prototype, 'mountRoute');
-            sandbox.spy(CollectionRouter.prototype, 'unmountRoute');
+                common.events.on.args[0][1]({
+                    attributes: {value: 'America/Los_Angeles'},
+                    _previousAttributes: {value: 'Europe/London'}
+                });
+
+                collectionRouter.emit.called.should.be.false();
+            });
+
+            it('tz has not changed', function () {
+                const collectionRouter = new CollectionRouter('/magic/', {permalink: '/:slug/'}, RESOURCE_CONFIG);
+
+                sinon.stub(collectionRouter, 'emit');
+
+                common.events.on.args[0][1]({
+                    attributes: {value: 'America/Los_Angeles'},
+                    _previousAttributes: {value: 'America/Los_Angeles'}
+                });
+
+                collectionRouter.emit.called.should.be.false();
+            });
         });
 
-        afterEach(function () {
-            sandbox.restore();
-        });
+        describe('with dated permalink', function () {
+            it('default', function () {
+                const collectionRouter = new CollectionRouter('/magic/', {permalink: '/:year/:slug/'}, RESOURCE_CONFIG);
 
-        it('permalink placeholder: flat', function () {
-            const collectionRouter = new CollectionRouter('/magic/', {permalink: '{globals.permalinks}'});
+                sinon.stub(collectionRouter, 'emit');
 
-            collectionRouter.mountRoute.callCount.should.eql(3);
-            collectionRouter.unmountRoute.callCount.should.eql(0);
+                common.events.on.args[0][1]({
+                    attributes: {value: 'America/Los_Angeles'},
+                    _previousAttributes: {value: 'Europe/London'}
+                });
 
-            collectionRouter.getPermalinks().getValue().should.eql('/:slug/');
+                collectionRouter.emit.calledOnce.should.be.true();
+            });
 
-            settingsCache.get.withArgs('permalinks').returns('/:primary_author/:slug/');
+            it('tz has not changed', function () {
+                const collectionRouter = new CollectionRouter('/magic/', {permalink: '/:year/:slug/'}, RESOURCE_CONFIG);
 
-            common.events.on.args[0][1]();
+                sinon.stub(collectionRouter, 'emit');
 
-            collectionRouter.mountRoute.callCount.should.eql(4);
-            collectionRouter.unmountRoute.callCount.should.eql(1);
+                common.events.on.args[0][1]({
+                    attributes: {value: 'America/Los_Angeles'},
+                    _previousAttributes: {value: 'America/Los_Angeles'}
+                });
 
-            collectionRouter.getPermalinks().getValue().should.eql('/:primary_author/:slug/');
-        });
-
-        it('permalink placeholder: complex', function () {
-            const collectionRouter = new CollectionRouter('/animals/', {permalink: '/animals/{globals.permalinks}/'});
-
-            collectionRouter.getPermalinks().getValue().should.eql('/animals/:slug/');
-            settingsCache.get.withArgs('permalinks').returns('/:primary_author/:slug/');
-
-            common.events.on.args[0][1]();
-
-            collectionRouter.getPermalinks().getValue().should.eql('/animals/:primary_author/:slug/');
+                collectionRouter.emit.called.should.be.false();
+            });
         });
     });
 });

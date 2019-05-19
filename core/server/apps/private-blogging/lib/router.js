@@ -3,22 +3,20 @@ const path = require('path'),
     middleware = require('./middleware'),
     bodyParser = require('body-parser'),
     routing = require('../../../services/routing'),
-    brute = require('../../../web/middleware/brute'),
+    web = require('../../../web'),
     templateName = 'private',
     privateRouter = express.Router();
 
 function _renderer(req, res) {
-    // Note: this is super similar to the config middleware used in channels
-    // @TODO refactor into to something explicit & DRY this up
-    res._route = {
+    res.routerOptions = {
         type: 'custom',
-        templateName: templateName,
-        defaultTemplate: path.resolve(__dirname, 'views', templateName + '.hbs')
+        templates: templateName,
+        defaultTemplate: path.resolve(__dirname, 'views', `${templateName}.hbs`)
     };
 
     // Renderer begin
     // Format data
-    var data = {};
+    let data = {};
 
     if (res.error) {
         data.error = res.error;
@@ -38,7 +36,7 @@ privateRouter
     .post(
         bodyParser.urlencoded({extended: true}),
         middleware.isPrivateSessionAuth,
-        brute.privateBlog,
+        web.shared.middlewares.brute.privateBlog,
         middleware.authenticateProtection,
         _renderer
     );

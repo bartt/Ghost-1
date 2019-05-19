@@ -9,36 +9,35 @@ const Resources = require('../../../../server/services/url/Resources');
 const UrlGenerator = require('../../../../server/services/url/UrlGenerator');
 const Urls = require('../../../../server/services/url/Urls');
 const UrlService = rewire('../../../../server/services/url/UrlService');
-const sandbox = sinon.sandbox.create();
 
 describe('Unit: services/url/UrlService', function () {
     let QueueStub, ResourcesStub, UrlsStub, UrlGeneratorStub, urlService;
 
     beforeEach(function () {
-        QueueStub = sandbox.stub();
-        QueueStub.returns(sandbox.createStubInstance(Queue));
+        QueueStub = sinon.stub();
+        QueueStub.returns(sinon.createStubInstance(Queue));
 
-        ResourcesStub = sandbox.stub();
-        ResourcesStub.returns(sandbox.createStubInstance(Resources));
+        ResourcesStub = sinon.stub();
+        ResourcesStub.returns(sinon.createStubInstance(Resources));
 
-        UrlsStub = sandbox.stub();
-        UrlsStub.returns(sandbox.createStubInstance(Urls));
+        UrlsStub = sinon.stub();
+        UrlsStub.returns(sinon.createStubInstance(Urls));
 
-        UrlGeneratorStub = sandbox.stub();
-        UrlGeneratorStub.returns(sandbox.createStubInstance(UrlGenerator));
+        UrlGeneratorStub = sinon.stub();
+        UrlGeneratorStub.returns(sinon.createStubInstance(UrlGenerator));
 
         UrlService.__set__('Queue', QueueStub);
         UrlService.__set__('Resources', ResourcesStub);
         UrlService.__set__('Urls', UrlsStub);
         UrlService.__set__('UrlGenerator', UrlGeneratorStub);
 
-        sandbox.stub(common.events, 'on');
+        sinon.stub(common.events, 'on');
 
         urlService = new UrlService();
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     it('instantiate', function () {
@@ -54,8 +53,9 @@ describe('Unit: services/url/UrlService', function () {
         urlService.queue.addListener.args[0][0].should.eql('started');
         urlService.queue.addListener.args[1][0].should.eql('ended');
 
-        common.events.on.calledOnce.should.be.true();
+        common.events.on.calledTwice.should.be.true();
         common.events.on.args[0][0].should.eql('router.created');
+        common.events.on.args[1][0].should.eql('services.themes.api.changed');
     });
 
     it('fn: _onQueueStarted', function () {
@@ -69,8 +69,24 @@ describe('Unit: services/url/UrlService', function () {
     });
 
     it('fn: _onRouterAddedType', function () {
-        urlService._onRouterAddedType({getPermalinks: sandbox.stub().returns({})});
+        urlService._onRouterAddedType({getPermalinks: sinon.stub().returns({})});
         urlService.urlGenerators.length.should.eql(1);
+    });
+
+    it('fn: getResourceById', function (done) {
+        urlService.urls.getByResourceId.withArgs('id123').returns({resource: true});
+        urlService.getResourceById('id123').should.eql(true);
+
+        urlService.urls.getByResourceId.withArgs('id12345').returns(null);
+
+        try {
+            urlService.getResourceById('id12345').should.eql(true);
+            done(new Error('expected error'));
+        } catch (err) {
+            should.exist(err);
+            err.code.should.eql('URLSERVICE_RESOURCE_NOT_FOUND');
+            done();
+        }
     });
 
     describe('fn: getResource', function () {
@@ -139,12 +155,12 @@ describe('Unit: services/url/UrlService', function () {
 
     describe('fn: getPermalinkByUrl', function () {
         it('found', function () {
-            const permalinkStub1 = sandbox.stub().returns({
-                getValue: sandbox.stub().returns('/:slug/')
+            const permalinkStub1 = sinon.stub().returns({
+                getValue: sinon.stub().returns('/:slug/')
             });
 
-            const permalinkStub2 = sandbox.stub().returns({
-                getValue: sandbox.stub().returns('/:primary_tag/')
+            const permalinkStub2 = sinon.stub().returns({
+                getValue: sinon.stub().returns('/:primary_tag/')
             });
 
             urlService.urlGenerators = [
@@ -162,19 +178,19 @@ describe('Unit: services/url/UrlService', function () {
                 }
             ];
 
-            sandbox.stub(urlService, 'getResource').withArgs('/blog-post/', {returnEverything: true})
+            sinon.stub(urlService, 'getResource').withArgs('/blog-post/', {returnEverything: true})
                 .returns({generatorId: 1, resource: true});
 
             urlService.getPermalinkByUrl('/blog-post/').should.eql('/:primary_tag/');
         });
 
         it('found', function () {
-            const permalinkStub1 = sandbox.stub().returns({
-                getValue: sandbox.stub().returns('/:slug/')
+            const permalinkStub1 = sinon.stub().returns({
+                getValue: sinon.stub().returns('/:slug/')
             });
 
-            const permalinkStub2 = sandbox.stub().returns({
-                getValue: sandbox.stub().returns('/:primary_tag/')
+            const permalinkStub2 = sinon.stub().returns({
+                getValue: sinon.stub().returns('/:primary_tag/')
             });
 
             urlService.urlGenerators = [
@@ -192,7 +208,7 @@ describe('Unit: services/url/UrlService', function () {
                 }
             ];
 
-            sandbox.stub(urlService, 'getResource').withArgs('/blog-post/', {returnEverything: true})
+            sinon.stub(urlService, 'getResource').withArgs('/blog-post/', {returnEverything: true})
                 .returns({generatorId: 0, resource: true});
 
             urlService.getPermalinkByUrl('/blog-post/').should.eql('/:slug/');
@@ -206,8 +222,8 @@ describe('Unit: services/url/UrlService', function () {
         });
 
         it('not found: absolute', function () {
-            urlService.utils = sandbox.stub();
-            urlService.utils.createUrl = sandbox.stub();
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
 
             urlService.urls.getByResourceId.withArgs(1).returns(null);
             urlService.getUrlByResourceId(1, {absolute: true});
@@ -221,8 +237,8 @@ describe('Unit: services/url/UrlService', function () {
         });
 
         it('found: absolute', function () {
-            urlService.utils = sandbox.stub();
-            urlService.utils.createUrl = sandbox.stub();
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
 
             urlService.urls.getByResourceId.withArgs(1).returns({url: '/post/'});
             urlService.getUrlByResourceId(1, {absolute: true});
@@ -230,11 +246,65 @@ describe('Unit: services/url/UrlService', function () {
         });
 
         it('found: absolute + secure', function () {
-            urlService.utils = sandbox.stub();
-            urlService.utils.createUrl = sandbox.stub();
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
 
             urlService.urls.getByResourceId.withArgs(1).returns({url: '/post/'});
             urlService.getUrlByResourceId(1, {absolute: true, secure: true});
+            urlService.utils.createUrl.calledWith('/post/', true, true).should.be.true();
+        });
+
+        it('not found: withSubdirectory', function () {
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
+
+            urlService.urls.getByResourceId.withArgs(1).returns(null);
+            urlService.getUrlByResourceId(1, {withSubdirectory: true});
+            urlService.utils.createUrl.calledWith('/404/', false, undefined).should.be.true();
+        });
+
+        it('not found: withSubdirectory + secure', function () {
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
+
+            urlService.urls.getByResourceId.withArgs(1).returns(null);
+            urlService.getUrlByResourceId(1, {withSubdirectory: true, secure: true});
+            urlService.utils.createUrl.calledWith('/404/', false, true).should.be.true();
+        });
+
+        it('not found: withSubdirectory + secure + absolute', function () {
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
+
+            urlService.urls.getByResourceId.withArgs(1).returns(null);
+            urlService.getUrlByResourceId(1, {withSubdirectory: true, secure: true, absolute: true});
+            urlService.utils.createUrl.calledWith('/404/', true, true).should.be.true();
+        });
+
+        it('found: withSubdirectory', function () {
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
+
+            urlService.urls.getByResourceId.withArgs(1).returns({url: '/post/'});
+            urlService.getUrlByResourceId(1, {withSubdirectory: true});
+            urlService.utils.createUrl.calledWith('/post/', false, undefined).should.be.true();
+        });
+
+        it('found: withSubdirectory + secure', function () {
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
+
+            urlService.urls.getByResourceId.withArgs(1).returns({url: '/post/'});
+            urlService.getUrlByResourceId(1, {withSubdirectory: true, secure: true});
+            urlService.utils.createUrl.calledWith('/post/', false, true).should.be.true();
+        });
+
+        it('found: withSubdirectory + secure + absolute', function () {
+            urlService.utils = sinon.stub();
+            urlService.utils.createUrl = sinon.stub();
+
+            urlService.urls.getByResourceId.withArgs(1).returns({url: '/post/'});
+            urlService.getUrlByResourceId(1, {withSubdirectory: true, secure: true, absolute: true});
             urlService.utils.createUrl.calledWith('/post/', true, true).should.be.true();
         });
     });

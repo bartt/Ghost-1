@@ -6,8 +6,6 @@ const themes = require('../../../../server/services/themes');
 const validate = themes.validate;
 
 const gscan = require('gscan');
-const common = require('../../../../server/lib/common');
-const sandbox = sinon.sandbox.create();
 
 describe('Themes', function () {
     let checkZipStub;
@@ -15,13 +13,13 @@ describe('Themes', function () {
     let formatStub;
 
     beforeEach(function () {
-        checkZipStub = sandbox.stub(gscan, 'checkZip');
-        checkStub = sandbox.stub(gscan, 'check');
-        formatStub = sandbox.stub(gscan, 'format');
+        checkZipStub = sinon.stub(gscan, 'checkZip');
+        checkStub = sinon.stub(gscan, 'check');
+        formatStub = sinon.stub(gscan, 'format');
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     describe('Validate', function () {
@@ -42,6 +40,8 @@ describe('Themes', function () {
                     checkStub.callCount.should.be.equal(0);
                     formatStub.calledOnce.should.be.true();
                     checkedTheme.should.be.an.Object();
+
+                    should.equal(validate.canActivate(checkedTheme), true);
                 });
         });
 
@@ -56,6 +56,8 @@ describe('Themes', function () {
                     checkStub.calledWith(testTheme.path).should.be.true();
                     formatStub.calledOnce.should.be.true();
                     checkedTheme.should.be.an.Object();
+
+                    should.equal(validate.canActivate(checkedTheme), true);
                 });
         });
 
@@ -68,7 +70,7 @@ describe('Themes', function () {
                             fatal: true,
                             level: 'error',
                             rule: 'Replace the <code>{{#if author.cover}}</code> helper with <code>{{#if author.cover_image}}</code>',
-                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://themes.ghost.org/docs/author-context#section-author-object-attributes" target=_blank>here</a>.',
+                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://docs.ghost.org/api/handlebars-themes/context/author/#author-object-attributes" target=_blank>here</a>.',
                             failures: [ {} ],
                             code: 'GS001-DEPR-CON-AC'
                         }
@@ -78,14 +80,12 @@ describe('Themes', function () {
 
             return validate.check(testTheme, true)
                 .then((checkedTheme) => {
-                    checkedTheme.should.not.exist();
-                }).catch((error) => {
-                    error.should.be.an.Object();
-                    (error instanceof common.errors.ThemeValidationError).should.eql(true);
                     checkZipStub.calledOnce.should.be.true();
                     checkZipStub.calledWith(testTheme).should.be.true();
                     checkStub.callCount.should.be.equal(0);
                     formatStub.calledOnce.should.be.true();
+
+                    should.equal(validate.canActivate(checkedTheme), false);
                 });
         });
 
@@ -98,7 +98,7 @@ describe('Themes', function () {
                             fatal: true,
                             level: 'error',
                             rule: 'Replace the <code>{{#if author.cover}}</code> helper with <code>{{#if author.cover_image}}</code>',
-                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://themes.ghost.org/docs/author-context#section-author-object-attributes" target=_blank>here</a>.',
+                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://docs.ghost.org/api/handlebars-themes/context/author/#author-object-attributes" target=_blank>here</a>.',
                             failures: [ {} ],
                             code: 'GS001-DEPR-CON-AC'
                         }
@@ -108,14 +108,12 @@ describe('Themes', function () {
 
             return validate.check(testTheme, false)
                 .then((checkedTheme) => {
-                    checkedTheme.should.not.exist();
-                }).catch((error) => {
-                    error.should.be.an.Object();
-                    (error instanceof common.errors.ThemeValidationError).should.eql(true);
                     checkStub.calledOnce.should.be.true();
                     checkStub.calledWith(testTheme.path).should.be.true();
                     checkZipStub.callCount.should.be.equal(0);
                     formatStub.calledOnce.should.be.true();
+
+                    should.equal(validate.canActivate(checkedTheme), false);
                 });
         });
 

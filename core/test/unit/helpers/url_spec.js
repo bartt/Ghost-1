@@ -6,8 +6,7 @@ var should = require('should'),
     markdownToMobiledoc = require('../../utils/fixtures/data-generator').markdownToMobiledoc,
     helpers = require('../../../server/helpers'),
     urlService = require('../../../server/services/url'),
-    api = require('../../../server/api'),
-    sandbox = sinon.sandbox.create();
+    api = require('../../../server/api');
 
 describe('{{url}} helper', function () {
     var rendered;
@@ -19,15 +18,15 @@ describe('{{url}} helper', function () {
     beforeEach(function () {
         rendered = null;
 
-        sandbox.stub(urlService, 'getUrlByResourceId');
+        sinon.stub(urlService, 'getUrlByResourceId');
 
-        sandbox.stub(api.settings, 'read').callsFake(function () {
+        sinon.stub(api.settings, 'read').callsFake(function () {
             return Promise.resolve({settings: [{value: '/:slug/'}]});
         });
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     after(function () {
@@ -44,7 +43,7 @@ describe('{{url}} helper', function () {
             url: '/slug/'
         });
 
-        urlService.getUrlByResourceId.withArgs(post.id, {absolute: undefined, secure: undefined}).returns('/slug/');
+        urlService.getUrlByResourceId.withArgs(post.id, {absolute: undefined, secure: undefined, withSubdirectory: true}).returns('/slug/');
 
         rendered = helpers.url.call(post);
         should.exist(rendered);
@@ -61,7 +60,7 @@ describe('{{url}} helper', function () {
             created_at: new Date(0)
         });
 
-        urlService.getUrlByResourceId.withArgs(post.id, {absolute: 'true', secure: undefined}).returns('http://localhost:82832/slug/');
+        urlService.getUrlByResourceId.withArgs(post.id, {absolute: true, secure: undefined, withSubdirectory: true}).returns('http://localhost:82832/slug/');
 
         rendered = helpers.url.call(post, {hash: {absolute: 'true'}});
         should.exist(rendered);
@@ -79,7 +78,7 @@ describe('{{url}} helper', function () {
             secure: true
         });
 
-        urlService.getUrlByResourceId.withArgs(post.id, {absolute: 'true', secure: true}).returns('https://localhost:82832/slug/');
+        urlService.getUrlByResourceId.withArgs(post.id, {absolute: true, secure: true, withSubdirectory: true}).returns('https://localhost:82832/slug/');
 
         rendered = helpers.url.call(post, {hash: {absolute: 'true'}});
         should.exist(rendered);
@@ -94,7 +93,7 @@ describe('{{url}} helper', function () {
             parent: null
         });
 
-        urlService.getUrlByResourceId.withArgs(tag.id, {absolute: undefined, secure: undefined}).returns('/tag/the-tag/');
+        urlService.getUrlByResourceId.withArgs(tag.id, {absolute: undefined, secure: undefined, withSubdirectory: true}).returns('/tag/the-tag/');
 
         rendered = helpers.url.call(tag);
         should.exist(rendered);
@@ -110,7 +109,7 @@ describe('{{url}} helper', function () {
             slug: 'some-author'
         });
 
-        urlService.getUrlByResourceId.withArgs(user.id, {absolute: undefined, secure: undefined}).returns('/author/some-author/');
+        urlService.getUrlByResourceId.withArgs(user.id, {absolute: undefined, secure: undefined, withSubdirectory: true}).returns('/author/some-author/');
 
         rendered = helpers.url.call(user);
         should.exist(rendered);

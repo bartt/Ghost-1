@@ -1,4 +1,6 @@
-module.exports = {
+const createCard = require('../create-card');
+
+module.exports = createCard({
     name: 'image',
     type: 'dom',
     render(opts) {
@@ -6,25 +8,36 @@ module.exports = {
         // let version = opts.options.version;
         let dom = opts.env.dom;
 
+        if (!payload.src) {
+            return '';
+        }
+
         let figure = dom.createElement('figure');
-        figure.setAttribute('class', 'kg-image-card');
+        let figureClass = 'kg-card kg-image-card';
+        if (payload.cardWidth) {
+            figureClass = `${figureClass} kg-width-${payload.cardWidth}`;
+        }
+        figure.setAttribute('class', figureClass);
 
         let img = dom.createElement('img');
-        let imgClass = 'kg-image';
-        if (payload.imageStyle) {
-            imgClass = `${imgClass} kg-image-${payload.imageStyle}`;
-        }
         img.setAttribute('src', payload.src);
-        img.setAttribute('class', imgClass);
+        img.setAttribute('class', 'kg-image');
+        if (payload.alt) {
+            img.setAttribute('alt', payload.alt);
+        }
+        if (payload.title) {
+            img.setAttribute('title', payload.title);
+        }
 
         figure.appendChild(img);
 
         if (payload.caption) {
             let figcaption = dom.createElement('figcaption');
-            figcaption.appendChild(dom.createTextNode(payload.caption));
+            figcaption.appendChild(dom.createRawHTMLSection(payload.caption));
             figure.appendChild(figcaption);
+            figure.setAttribute('class', `${figure.getAttribute('class')} kg-card-hascaption`);
         }
 
         return figure;
     }
-};
+});

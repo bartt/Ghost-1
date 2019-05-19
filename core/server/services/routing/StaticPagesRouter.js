@@ -1,19 +1,32 @@
 const debug = require('ghost-ignition').debug('services:routing:static-pages-router');
+const urlService = require('../url');
 const ParentRouter = require('./ParentRouter');
 const controllers = require('./controllers');
 const common = require('../../lib/common');
 
+/**
+ * @description Resource: pages
+ */
 class StaticPagesRouter extends ParentRouter {
-    constructor() {
+    constructor(RESOURCE_CONFIG) {
         super('StaticPagesRouter');
 
+        this.RESOURCE_CONFIG = RESOURCE_CONFIG.QUERY.page;
+
+        // @NOTE: Permalink is always /:slug, not configure able
         this.permalinks = {
             value: '/:slug/'
         };
 
-        this.filter = 'page:true';
+        this.permalinks.getValue = (options = {}) => {
+            options = options || {};
 
-        this.permalinks.getValue = () => {
+            // @NOTE: url options are only required when registering urls in express.
+            //        e.g. the UrlService will access the routes and doesn't want to know about possible url options
+            if (options.withUrlOptions) {
+                return urlService.utils.urlJoin(this.permalinks.value, '/:options(edit)?/');
+            }
+
             return this.permalinks.value;
         };
 
@@ -22,34 +35,54 @@ class StaticPagesRouter extends ParentRouter {
         this._registerRoutes();
     }
 
+    /**
+     * @description Register all routes of this router.
+     * @private
+     */
     _registerRoutes() {
+        // REGISTER: prepare context
         this.router().use(this._prepareContext.bind(this));
 
+        this.router().param('slug', this._respectDominantRouter.bind(this));
+
         // REGISTER: permalink for static pages
-        this.mountRoute(this.permalinks.getValue(), controllers.entry);
+        this.mountRoute(this.permalinks.getValue({withUrlOptions: true}), controllers.entry);
 
         common.events.emit('router.created', this);
     }
 
+    /**
+     * @description Prepare context for futher middlewares/controllers.
+     * @param {Object} req
+     * @param {Object} res
+     * @param {Function} next
+     * @private
+     */
     _prepareContext(req, res, next) {
-        res.locals.routerOptions = {
+        res.routerOptions = {
+            type: 'entry',
             filter: this.filter,
-            permalinks: this.permalinks.getValue(),
-            type: this.getType(),
+            permalinks: this.permalinks.getValue({withUrlOptions: true}),
+            resourceType: this.getResourceType(),
+            query: this.RESOURCE_CONFIG,
             context: ['page']
-        };
-
-        res._route = {
-            type: 'entry'
         };
 
         next();
     }
 
-    getType() {
+    /**
+     * @description Resource type.
+     * @returns {string}
+     */
+    getResourceType() {
         return 'pages';
     }
 
+    /**
+     * @description This router has no index/default route. "/:slug/" is dynamic.
+     * @returns {null}
+     */
     getRoute() {
         return null;
     }

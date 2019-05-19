@@ -79,6 +79,50 @@ describe('Validation', function () {
                     {method: 'insert'}
                 );
             });
+
+            it('transforms 0 and 1', function () {
+                const post = models.Post.forge(testUtils.DataGenerator.forKnex.createPost({slug: 'test', featured: 0, page: 1}));
+                post.get('featured').should.eql(0);
+                post.get('page').should.eql(1);
+
+                return validation.validateSchema('posts', post, {method: 'insert'})
+                    .then(function () {
+                        post.get('featured').should.eql(false);
+                        post.get('page').should.eql(true);
+                    });
+            });
+
+            it('keeps true or false', function () {
+                const post = models.Post.forge(testUtils.DataGenerator.forKnex.createPost({slug: 'test', featured: true, page: false}));
+                post.get('featured').should.eql(true);
+                post.get('page').should.eql(false);
+
+                return validation.validateSchema('posts', post, {method: 'insert'})
+                    .then(function () {
+                        post.get('featured').should.eql(true);
+                        post.get('page').should.eql(false);
+                    });
+            });
+        });
+
+        describe('webhooks.add', function () {
+            it('event name is not lowercase', function () {
+                const webhook = models.Webhook.forge(testUtils.DataGenerator.forKnex.createWebhook({event: 'Test'}));
+
+                // NOTE: Fields with `defaultTo` are getting ignored. This is handled on the DB level.
+                return validation.validateSchema('webhooks', webhook, {method: 'insert'})
+                    .then(function () {
+                        throw new Error('Expected ValidationError.');
+                    })
+                    .catch(function (err) {
+                        if (!_.isArray(err)) {
+                            throw err;
+                        }
+
+                        err.length.should.eql(1);
+                        err[0].errorType.should.eql('ValidationError');
+                    });
+            });
         });
 
         describe('models.edit', function () {

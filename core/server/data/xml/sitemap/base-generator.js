@@ -3,8 +3,7 @@ const _ = require('lodash'),
     moment = require('moment'),
     path = require('path'),
     urlService = require('../../../services/url'),
-    localUtils = require('./utils'),
-    CHANGE_FREQ = 'weekly';
+    localUtils = require('./utils');
 
 // Sitemap specific xml namespace declarations that should not change
 const XMLNS_DECLS = {
@@ -65,12 +64,14 @@ class BaseSiteMapGenerator {
         this.lastModified = Date.now();
     }
 
-    getPriorityForDatum() {
-        return 1.0;
-    }
-
     getLastModifiedForDatum(datum) {
-        return datum.updated_at || datum.published_at || datum.created_at;
+        if (datum.updated_at || datum.published_at || datum.created_at) {
+            const modifiedDate = datum.updated_at || datum.published_at || datum.created_at;
+
+            return moment(modifiedDate);
+        } else {
+            return moment();
+        }
     }
 
     updateLastModified(datum) {
@@ -82,15 +83,12 @@ class BaseSiteMapGenerator {
     }
 
     createUrlNodeFromDatum(url, datum) {
-        const priority = this.getPriorityForDatum(datum);
         let node, imgNode;
 
         node = {
             url: [
                 {loc: url},
-                {lastmod: moment(this.getLastModifiedForDatum(datum)).toISOString()},
-                {changefreq: CHANGE_FREQ},
-                {priority: priority}
+                {lastmod: moment(this.getLastModifiedForDatum(datum)).toISOString()}
             ]
         };
 
@@ -161,6 +159,12 @@ class BaseSiteMapGenerator {
     removeFromLookups(datum) {
         delete this.nodeLookup[datum.id];
         delete this.nodeTimeLookup[datum.id];
+    }
+
+    reset() {
+        this.nodeLookup = {};
+        this.nodeTimeLookup = {};
+        this.siteMapContent = null;
     }
 }
 

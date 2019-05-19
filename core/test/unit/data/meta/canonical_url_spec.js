@@ -1,7 +1,6 @@
 const should = require('should'),
     sinon = require('sinon'),
     rewire = require('rewire'),
-    sandbox = sinon.sandbox.create(),
     urlService = require('../../../../server/services/url'),
     testUtils = require('../../../utils');
 
@@ -11,20 +10,20 @@ describe('getCanonicalUrl', function () {
     let getUrlStub;
 
     beforeEach(function () {
-        getUrlStub = sandbox.stub();
+        getUrlStub = sinon.stub();
 
         getCanonicalUrl = rewire('../../../../server/data/meta/canonical_url');
         getCanonicalUrl.__set__('getUrl', getUrlStub);
 
-        sandbox.stub(urlService.utils, 'urlJoin');
-        sandbox.stub(urlService.utils, 'urlFor').withArgs('home', true).returns('http://localhost:9999');
+        sinon.stub(urlService.utils, 'urlJoin');
+        sinon.stub(urlService.utils, 'urlFor').withArgs('home', true).returns('http://localhost:9999');
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
-    it('should return canonical url', function () {
+    it('should return default canonical url', function () {
         const post = testUtils.DataGenerator.forKnex.createPost();
 
         getUrlStub.withArgs(post, false).returns('/post-url/');
@@ -35,6 +34,17 @@ describe('getCanonicalUrl', function () {
         urlService.utils.urlJoin.calledOnce.should.be.true();
         urlService.utils.urlFor.calledOnce.should.be.true();
         getUrlStub.calledOnce.should.be.true();
+    });
+
+    it('should return canonical url field if present', function () {
+        const post = testUtils.DataGenerator.forKnex.createPost({canonical_url: 'https://example.com/canonical'});
+
+        getCanonicalUrl({
+            context: ['post'],
+            post: post
+        }).should.eql('https://example.com/canonical');
+
+        getUrlStub.called.should.equal(false);
     });
 
     it('should return canonical url for amp post without /amp/ in url', function () {

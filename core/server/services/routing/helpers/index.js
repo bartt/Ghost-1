@@ -1,14 +1,14 @@
 module.exports = {
-    get postLookup() {
-        return require('./post-lookup');
+    get entryLookup() {
+        return require('./entry-lookup');
     },
 
     get fetchData() {
         return require('./fetch-data');
     },
 
-    get renderCollection() {
-        return require('./render-collection');
+    get renderEntries() {
+        return require('./render-entries');
     },
 
     get formatResponse() {

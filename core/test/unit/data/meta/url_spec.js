@@ -1,33 +1,74 @@
 const should = require('should'),
     sinon = require('sinon'),
-    sandbox = sinon.sandbox.create(),
     urlService = require('../../../../server/services/url'),
     getUrl = require('../../../../server/data/meta/url'),
     testUtils = require('../../../utils/');
 
 describe('getUrl', function () {
     beforeEach(function () {
-        sandbox.stub(urlService, 'getUrlByResourceId');
-        sandbox.stub(urlService.utils, 'urlFor');
+        sinon.stub(urlService, 'getUrlByResourceId');
+        sinon.stub(urlService.utils, 'urlFor');
     });
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     it('should return url for a post', function () {
         const post = testUtils.DataGenerator.forKnex.createPost();
 
-        urlService.getUrlByResourceId.withArgs(post.id, {absolute: undefined, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(post.id, {absolute: undefined, secure: undefined, withSubdirectory: true})
             .returns('post url');
 
         getUrl(post).should.eql('post url');
     });
 
+    describe('preview url: drafts/scheduled posts', function () {
+        it('not absolute, not secure', function () {
+            const post = testUtils.DataGenerator.forKnex.createPost({status: 'draft'});
+            urlService.getUrlByResourceId.withArgs(post.id).returns('/404/');
+            urlService.utils.urlFor.withArgs({relativeUrl: '/p/' + post.uuid + '/', secure: undefined}, null, undefined).returns('relative');
+            let url = getUrl(post);
+
+            urlService.getUrlByResourceId.calledOnce.should.be.true();
+            urlService.utils.urlFor.withArgs({relativeUrl: '/p/' + post.uuid + '/', secure: undefined}, null, undefined)
+                .calledOnce.should.be.true();
+
+            url.should.eql('relative');
+        });
+
+        it('absolute, not secure', function () {
+            const post = testUtils.DataGenerator.forKnex.createPost({status: 'draft'});
+            urlService.getUrlByResourceId.withArgs(post.id).returns('/404/');
+            urlService.utils.urlFor.withArgs({relativeUrl: '/p/' + post.uuid + '/', secure: undefined}, null, true).returns('absolute');
+            let url = getUrl(post, true);
+
+            urlService.getUrlByResourceId.calledOnce.should.be.true();
+            urlService.utils.urlFor.withArgs({relativeUrl: '/p/' + post.uuid + '/', secure: undefined}, null, true)
+                .calledOnce.should.be.true();
+
+            url.should.eql('absolute');
+        });
+
+        it('absolute, secure', function () {
+            const post = testUtils.DataGenerator.forKnex.createPost({status: 'draft'});
+            post.secure = true;
+            urlService.getUrlByResourceId.withArgs(post.id).returns('/404/');
+            urlService.utils.urlFor.withArgs({relativeUrl: '/p/' + post.uuid + '/', secure: true}, null, true).returns('absolute secure');
+            let url = getUrl(post, true);
+
+            urlService.getUrlByResourceId.calledOnce.should.be.true();
+            urlService.utils.urlFor.withArgs({relativeUrl: '/p/' + post.uuid + '/', secure: true}, null, true)
+                .calledOnce.should.be.true();
+
+            url.should.eql('absolute secure');
+        });
+    });
+
     it('should return absolute url for a post', function () {
         const post = testUtils.DataGenerator.forKnex.createPost();
 
-        urlService.getUrlByResourceId.withArgs(post.id, {absolute: true, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(post.id, {absolute: true, secure: undefined, withSubdirectory: true})
             .returns('absolute post url');
 
         getUrl(post, true).should.eql('absolute post url');
@@ -49,7 +90,7 @@ describe('getUrl', function () {
         //        the tag object contains a `parent` attribute. the tag model contains a `parent_id` attr.
         tag.parent = null;
 
-        urlService.getUrlByResourceId.withArgs(tag.id, {absolute: undefined, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(tag.id, {absolute: undefined, secure: undefined, withSubdirectory: true})
             .returns('tag url');
 
         getUrl(tag).should.eql('tag url');
@@ -66,7 +107,7 @@ describe('getUrl', function () {
         // @TODO: WTF O_O
         tag.secure = true;
 
-        urlService.getUrlByResourceId.withArgs(tag.id, {absolute: undefined, secure: true})
+        urlService.getUrlByResourceId.withArgs(tag.id, {absolute: undefined, secure: true, withSubdirectory: true})
             .returns('secure tag url');
 
         getUrl(tag).should.eql('secure tag url');
@@ -75,7 +116,7 @@ describe('getUrl', function () {
     it('should return url for a author', function () {
         const author = testUtils.DataGenerator.forKnex.createUser();
 
-        urlService.getUrlByResourceId.withArgs(author.id, {absolute: undefined, secure: undefined})
+        urlService.getUrlByResourceId.withArgs(author.id, {absolute: undefined, secure: undefined, withSubdirectory: true})
             .returns('author url');
 
         getUrl(author).should.eql('author url');
@@ -87,7 +128,7 @@ describe('getUrl', function () {
         // @TODO: WTF
         author.secure = true;
 
-        urlService.getUrlByResourceId.withArgs(author.id, {absolute: true, secure: true})
+        urlService.getUrlByResourceId.withArgs(author.id, {absolute: true, secure: true, withSubdirectory: true})
             .returns('absolute secure author url');
 
         getUrl(author, true).should.eql('absolute secure author url');

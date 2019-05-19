@@ -17,7 +17,7 @@ const proxy = require('./proxy'),
     templates = proxy.templates;
 
 /**
- * @deprecated: will be removed in Ghost 2.0
+ * @deprecated: will be removed in Ghost 3.0
  */
 module.exports = function author(options) {
     if (options.fn) {
@@ -30,7 +30,7 @@ module.exports = function author(options) {
     if (this.author && this.author.name) {
         if (autolink) {
             output = templates.link({
-                url: urlService.getUrlByResourceId(this.author.id),
+                url: urlService.getUrlByResourceId(this.author.id, {withSubdirectory: true}),
                 text: _.escape(this.author.name)
             });
         } else {

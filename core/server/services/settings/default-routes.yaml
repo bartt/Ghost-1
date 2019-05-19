@@ -2,10 +2,8 @@ routes:
 
 collections:
   /:
-    permalink: '{globals.permalinks}' # special 1.0 compatibility setting. See the docs for details.
-    template:
-      - home
-      - index
+    permalink: /{slug}/
+    template: index
 
 taxonomies:
   tag: /tag/{slug}/

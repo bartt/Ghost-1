@@ -8,8 +8,7 @@ const should = require('should'),
     PostGenerator = require('../../../../../server/data/xml/sitemap/post-generator'),
     PageGenerator = require('../../../../../server/data/xml/sitemap/page-generator'),
     TagGenerator = require('../../../../../server/data/xml/sitemap/tag-generator'),
-    UserGenerator = require('../../../../../server/data/xml/sitemap/user-generator'),
-    sandbox = sinon.sandbox.create();
+    UserGenerator = require('../../../../../server/data/xml/sitemap/user-generator');
 
 should.Assertion.add('ValidUrlNode', function (options) {
     // Check urlNode looks correct
@@ -21,9 +20,9 @@ should.Assertion.add('ValidUrlNode', function (options) {
     urlNode.url.should.be.an.Array();
 
     if (options.withImage) {
-        urlNode.url.should.have.lengthOf(5);
+        urlNode.url.should.have.lengthOf(3);
     } else {
-        urlNode.url.should.have.lengthOf(4);
+        urlNode.url.should.have.lengthOf(2);
     }
 
     /**
@@ -31,8 +30,6 @@ should.Assertion.add('ValidUrlNode', function (options) {
      * { url:
      *   [ { loc: 'http://127.0.0.1:2369/author/' },
      *     { lastmod: '2014-12-22T11:54:00.100Z' },
-     *     { changefreq: 'weekly' },
-     *     { priority: 0.6 },
      *     { 'image:image': [
      *       { 'image:loc': 'post-100.jpg' },
      *       { 'image:caption': 'post-100.jpg' }
@@ -42,9 +39,9 @@ should.Assertion.add('ValidUrlNode', function (options) {
     flatNode = _.extend.apply(_, urlNode.url);
 
     if (options.withImage) {
-        flatNode.should.be.an.Object().with.keys('loc', 'lastmod', 'changefreq', 'priority', 'image:image');
+        flatNode.should.be.an.Object().with.keys('loc', 'lastmod', 'image:image');
     } else {
-        flatNode.should.be.an.Object().with.keys('loc', 'lastmod', 'changefreq', 'priority');
+        flatNode.should.be.an.Object().with.keys('loc', 'lastmod');
     }
 });
 
@@ -52,7 +49,7 @@ describe('Generators', function () {
     let generator;
 
     afterEach(function () {
-        sandbox.restore();
+        sinon.restore();
     });
 
     describe('IndexGenerator', function () {
@@ -84,20 +81,6 @@ describe('Generators', function () {
             generator = new PostGenerator();
         });
 
-        describe('fn: getPriorityForDatum', function () {
-            it('uses 0.9 priority for featured posts', function () {
-                generator.getPriorityForDatum({
-                    featured: true
-                }).should.equal(0.9);
-            });
-
-            it('uses 0.8 priority for all other (non-featured) posts', function () {
-                generator.getPriorityForDatum({
-                    featured: false
-                }).should.equal(0.8);
-            });
-        });
-
         describe('fn: createNodeFromDatum', function () {
             it('adds an image:image element if post has a cover image', function () {
                 const urlNode = generator.createUrlNodeFromDatum('https://myblog.com/test/', testUtils.DataGenerator.forKnex.createPost({
@@ -112,11 +95,11 @@ describe('Generators', function () {
 
         describe('fn: getXml', function () {
             beforeEach(function () {
-                sandbox.stub(urlService.utils, 'urlFor');
+                sinon.stub(urlService.utils, 'urlFor');
             });
 
             it('get cached xml', function () {
-                sandbox.spy(generator, 'generateXmlFromNodes');
+                sinon.spy(generator, 'generateXmlFromNodes');
                 generator.siteMapContent = 'something';
                 generator.getXml().should.eql('something');
                 generator.siteMapContent = null;
@@ -221,41 +204,17 @@ describe('Generators', function () {
                 generator.siteMapContent.match(/<loc>/g).length.should.eql(3);
             });
         });
-
-        describe('fn: getPriorityForDatum', function () {
-            it('uses 1 priority for static routes', function () {
-                generator.getPriorityForDatum({
-                    staticRoute: true
-                }).should.equal(1);
-            });
-
-            it('uses 0.8 priority for static pages or collection indexes', function () {
-                generator.getPriorityForDatum({}).should.equal(0.8);
-            });
-        });
     });
 
     describe('TagGenerator', function () {
         beforeEach(function () {
             generator = new TagGenerator();
         });
-
-        describe('fn: getPriorityForDatum', function () {
-            it('uses 0.6 priority for all tags', function () {
-                generator.getPriorityForDatum({}).should.equal(0.6);
-            });
-        });
     });
 
     describe('UserGenerator', function () {
         beforeEach(function () {
             generator = new UserGenerator();
-        });
-
-        describe('fn: getPriorityForDatum', function () {
-            it('uses 0.6 priority for author links', function () {
-                generator.getPriorityForDatum({}).should.equal(0.6);
-            });
         });
 
         describe('fn: validateImageUrl', function () {

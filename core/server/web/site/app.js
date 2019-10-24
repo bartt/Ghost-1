@@ -1,22 +1,60 @@
 const debug = require('ghost-ignition').debug('web:site:app');
 const path = require('path');
 const express = require('express');
+const cors = require('cors');
+const {URL} = require('url');
 
 // App requires
 const config = require('../../config');
+const common = require('../../lib/common');
 const apps = require('../../services/apps');
 const constants = require('../../lib/constants');
 const storage = require('../../adapters/storage');
-const urlService = require('../../services/url');
-const sitemapHandler = require('../../data/xml/sitemap/handler');
-const themeMiddleware = require('../../services/themes').middleware;
+const urlService = require('../../../frontend/services/url');
+const labsService = require('../../services/labs');
+const urlUtils = require('../../lib/url-utils');
+const sitemapHandler = require('../../../frontend/services/sitemap/handler');
+const themeMiddleware = require('../../../frontend/services/themes').middleware;
 const membersService = require('../../services/members');
 const siteRoutes = require('./routes');
 const shared = require('../shared');
 
-const STATIC_IMAGE_URL_PREFIX = `/${urlService.utils.STATIC_IMAGE_URL_PREFIX}`;
+const STATIC_IMAGE_URL_PREFIX = `/${urlUtils.STATIC_IMAGE_URL_PREFIX}`;
 
 let router;
+
+const corsOptionsDelegate = function corsOptionsDelegate(req, callback) {
+    const origin = req.header('Origin');
+    const corsOptions = {
+        origin: false, // disallow cross-origin requests by default
+        credentials: true // required to allow admin-client to login to private sites
+    };
+
+    if (origin) {
+        const originUrl = new URL(origin);
+
+        // allow all localhost and 127.0.0.1 requests no matter the port
+        if (originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1') {
+            corsOptions.origin = true;
+        }
+
+        // allow the configured host through on any protocol
+        const siteUrl = new URL(config.get('url'));
+        if (originUrl.host === siteUrl.host) {
+            corsOptions.origin = true;
+        }
+
+        // allow the configured admin:url host through on any protocol
+        if (config.get('admin:url')) {
+            const adminUrl = new URL(config.get('admin:url'));
+            if (originUrl.host === adminUrl.host) {
+                corsOptions.origin = true;
+            }
+        }
+    }
+
+    callback(null, corsOptions);
+};
 
 function SiteRouter(req, res, next) {
     router(req, res, next);
@@ -27,9 +65,17 @@ module.exports = function setupSiteApp(options = {}) {
 
     const siteApp = express();
 
+    // Make sure 'req.secure' is valid for proxied requests
+    // (X-Forwarded-Proto header will be checked, if present)
+    // NB: required here because it's not passed down via vhost
+    siteApp.enable('trust proxy');
+
     // ## App - specific code
     // set the view engine
     siteApp.set('view engine', 'hbs');
+
+    // enable CORS headers (allows admin client to hit front-end when configured on separate URLs)
+    siteApp.use(cors(corsOptionsDelegate));
 
     // you can extend Ghost with a custom redirects file
     // see https://github.com/TryGhost/Ghost/issues/7707
@@ -46,9 +92,6 @@ module.exports = function setupSiteApp(options = {}) {
     // @TODO make sure all of these have a local 404 error handler
     // Favicon
     siteApp.use(shared.middlewares.serveFavicon());
-    // /public/ghost-sdk.js
-    siteApp.use(shared.middlewares.servePublicFile('public/ghost-sdk.js', 'application/javascript', constants.ONE_HOUR_S));
-    siteApp.use(shared.middlewares.servePublicFile('public/ghost-sdk.min.js', 'application/javascript', constants.ONE_YEAR_S));
 
     // /public/members.js
     siteApp.get('/public/members-theme-bindings.js',
@@ -86,38 +129,65 @@ module.exports = function setupSiteApp(options = {}) {
     // We do this here, at the top level, because helpers require so much stuff.
     // Moving this to being inside themes, where it probably should be requires the proxy to be refactored
     // Else we end up with circular dependencies
-    require('../../helpers').loadCoreHelpers();
+    require('../../../frontend/helpers').loadCoreHelpers();
     debug('Helpers done');
 
     // @TODO only loads this stuff if members is enabled
     // Set req.member & res.locals.member if a cookie is set
-    siteApp.post('/members/ssr', shared.middlewares.labs.members, function (req, res) {
-        membersService.api.ssr.exchangeTokenForSession(req, res).then(() => {
+    siteApp.get('/members/ssr', shared.middlewares.labs.members, async function (req, res) {
+        try {
+            const token = await membersService.ssr.getIdentityTokenForMemberFromSession(req, res);
             res.writeHead(200);
-            res.end();
-        }).catch((err) => {
+            res.end(token);
+        } catch (err) {
+            common.logging.warn(err.message);
             res.writeHead(err.statusCode);
             res.end(err.message);
-        });
+        }
     });
-    siteApp.delete('/members/ssr', shared.middlewares.labs.members, function (req, res) {
-        membersService.api.ssr.deleteSession(req, res).then(() => {
+
+    siteApp.delete('/members/ssr', shared.middlewares.labs.members, async function (req, res) {
+        try {
+            await membersService.ssr.deleteSession(req, res);
             res.writeHead(204);
             res.end();
-        }).catch((err) => {
+        } catch (err) {
+            common.logging.warn(err.message);
             res.writeHead(err.statusCode);
             res.end(err.message);
-        });
+        }
     });
-    siteApp.use(function (req, res, next) {
-        membersService.api.ssr.getMemberDataFromSession(req, res).then((member) => {
-            req.member = member;
-            next();
-        }).catch(() => {
-            // @TODO log error?
+    siteApp.post('/members/webhooks/stripe', (req, res, next) => membersService.api.middleware.handleStripeWebhook(req, res, next));
+    siteApp.use(async function (req, res, next) {
+        if (!labsService.isSet('members')) {
             req.member = null;
+            return next();
+        }
+        try {
+            const member = await membersService.ssr.getMemberDataFromSession(req, res);
+            Object.assign(req, {member});
             next();
-        });
+        } catch (err) {
+            common.logging.warn(err.message);
+            Object.assign(req, {member: null});
+            next();
+        }
+    });
+    siteApp.use(async function (req, res, next) {
+        if (!labsService.isSet('members')) {
+            return next();
+        }
+        if (!req.url.includes('token=')) {
+            return next();
+        }
+        try {
+            const member = await membersService.ssr.exchangeTokenForSession(req, res);
+            Object.assign(req, {member});
+            next();
+        } catch (err) {
+            common.logging.warn(err.message);
+            return next();
+        }
     });
     siteApp.use(function (req, res, next) {
         res.locals.member = req.member;
@@ -143,7 +213,7 @@ module.exports = function setupSiteApp(options = {}) {
     config.get('apps:internal').forEach((appName) => {
         const app = require(path.join(config.get('paths').internalAppPath, appName));
 
-        if (app.hasOwnProperty('setupMiddleware')) {
+        if (Object.prototype.hasOwnProperty.call(app, 'setupMiddleware')) {
             app.setupMiddleware(siteApp);
         }
     });
@@ -170,9 +240,6 @@ module.exports = function setupSiteApp(options = {}) {
             return publicCacheControl(req, res, next);
         }
     });
-
-    // Fetch the frontend client into res.locals
-    siteApp.use(shared.middlewares.frontendClient);
 
     debug('General middleware done');
 

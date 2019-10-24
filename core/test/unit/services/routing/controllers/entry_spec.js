@@ -1,10 +1,12 @@
-const should = require('should'),
-    sinon = require('sinon'),
-    testUtils = require('../../../../utils'),
-    urlService = require('../../../../../server/services/url'),
-    controllers = require('../../../../../server/services/routing/controllers'),
-    helpers = require('../../../../../server/services/routing/helpers'),
-    EDITOR_URL = `/editor/post/`;
+const should = require('should');
+const sinon = require('sinon');
+const testUtils = require('../../../../utils');
+const configUtils = require('../../../../utils/configUtils');
+const urlService = require('../../../../../frontend/services/url');
+const urlUtils = require('../../../../../server/lib/url-utils');
+const controllers = require('../../../../../frontend/services/routing/controllers');
+const helpers = require('../../../../../frontend/services/routing/helpers');
+const EDITOR_URL = `/editor/post/`;
 
 describe('Unit - services/routing/controllers/entry', function () {
     let req, res, entryLookUpStub, secureStub, renderStub, post, page;
@@ -31,8 +33,8 @@ describe('Unit - services/routing/controllers/entry', function () {
             return renderStub;
         });
 
-        sinon.stub(urlService.utils, 'redirectToAdmin');
-        sinon.stub(urlService.utils, 'redirect301');
+        sinon.stub(urlUtils, 'redirectToAdmin');
+        sinon.stub(urlUtils, 'redirect301');
         sinon.stub(urlService, 'getResourceById');
 
         req = {
@@ -46,7 +48,8 @@ describe('Unit - services/routing/controllers/entry', function () {
                 resourceType: 'posts'
             },
             render: sinon.spy(),
-            redirect: sinon.spy()
+            redirect: sinon.spy(),
+            locals: {}
         };
     });
 
@@ -114,13 +117,37 @@ describe('Unit - services/routing/controllers/entry', function () {
                     entry: post
                 });
 
-            urlService.utils.redirectToAdmin.callsFake(function (statusCode, res, editorUrl) {
+            urlUtils.redirectToAdmin.callsFake(function (statusCode, res, editorUrl) {
                 statusCode.should.eql(302);
                 editorUrl.should.eql(EDITOR_URL + post.id);
                 done();
             });
 
             controllers.entry(req, res, (err) => {
+                done(err);
+            });
+        });
+
+        it('isEditURL: true with admin redirects disabled', function (done) {
+            configUtils.set('admin:redirects', false);
+
+            req.path = post.url;
+
+            entryLookUpStub.withArgs(req.path, res.routerOptions)
+                .resolves({
+                    isEditURL: true,
+                    entry: post
+                });
+
+            urlUtils.redirectToAdmin.callsFake(function (statusCode, res, editorUrl) {
+                configUtils.restore();
+                done(new Error('redirectToAdmin was called'));
+            });
+
+            controllers.entry(req, res, (err) => {
+                configUtils.restore();
+                urlUtils.redirectToAdmin.called.should.eql(false);
+                should.not.exist(err);
                 done(err);
             });
         });
@@ -164,7 +191,7 @@ describe('Unit - services/routing/controllers/entry', function () {
                     entry: post
                 });
 
-            urlService.utils.redirect301.callsFake(function (res, postUrl) {
+            urlUtils.redirect301.callsFake(function (res, postUrl) {
                 postUrl.should.eql(post.url);
                 done();
             });
@@ -193,7 +220,7 @@ describe('Unit - services/routing/controllers/entry', function () {
                     entry: post
                 });
 
-            urlService.utils.redirect301.callsFake(function (res, postUrl) {
+            urlUtils.redirect301.callsFake(function (res, postUrl) {
                 postUrl.should.eql(post.url + '?query=true');
                 done();
             });

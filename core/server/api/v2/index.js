@@ -6,6 +6,10 @@ module.exports = {
         return shared.http;
     },
 
+    get authentication() {
+        return shared.pipeline(require('./authentication'), localUtils);
+    },
+
     get db() {
         return shared.pipeline(require('./db'), localUtils);
     },
@@ -17,6 +21,10 @@ module.exports = {
     // @TODO: transform
     get session() {
         return require('./session');
+    },
+
+    get schedules() {
+        return shared.pipeline(require('./schedules'), localUtils);
     },
 
     get pages() {
@@ -57,14 +65,6 @@ module.exports = {
 
     get settings() {
         return shared.pipeline(require('./settings'), localUtils);
-    },
-
-    get subscribers() {
-        return shared.pipeline(require('./subscribers'), localUtils);
-    },
-
-    get members() {
-        return shared.pipeline(require('./members'), localUtils);
     },
 
     get images() {

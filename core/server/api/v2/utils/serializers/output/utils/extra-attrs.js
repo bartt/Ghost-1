@@ -1,7 +1,7 @@
 module.exports.forPost = (frame, model, attrs) => {
     const _ = require('lodash');
 
-    if (!frame.options.hasOwnProperty('columns') ||
+    if (!Object.prototype.hasOwnProperty.call(frame.options, 'columns') ||
         (frame.options.columns.includes('excerpt') && frame.options.formats && frame.options.formats.includes('plaintext'))) {
         if (_.isEmpty(attrs.custom_excerpt)) {
             const plaintext = model.get('plaintext');
@@ -17,7 +17,6 @@ module.exports.forPost = (frame, model, attrs) => {
     }
 };
 
-// @NOTE: ghost_head & ghost_foot are deprecated, remove in Ghost 3.0
 module.exports.forSettings = (attrs, frame) => {
     const _ = require('lodash');
 

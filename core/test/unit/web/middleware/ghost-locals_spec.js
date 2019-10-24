@@ -1,7 +1,7 @@
 const should = require('should');
 const sinon = require('sinon');
 const ghostLocals = require('../../../../server/web/shared/middlewares/ghost-locals');
-const themeService = require('../../../../server/services/themes');
+const themeService = require('../../../../frontend/services/themes');
 
 describe('Theme Handler', function () {
     let req, res, next;
@@ -12,11 +12,11 @@ describe('Theme Handler', function () {
         next = sinon.spy();
 
         sinon.stub(themeService, 'getActive').callsFake(() => {
-           return {
-               engine() {
-                   return 'v0.1';
-               }
-           };
+            return {
+                engine() {
+                    return 'v3';
+                }
+            };
         });
     });
 
@@ -35,7 +35,7 @@ describe('Theme Handler', function () {
             should.exist(res.locals.safeVersion);
             should.exist(res.locals.apiVersion);
             res.locals.relativeUrl.should.equal(req.path);
-            res.locals.apiVersion.should.equal('v0.1');
+            res.locals.apiVersion.should.equal('v3');
             next.called.should.be.true();
         });
     });

@@ -9,11 +9,11 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
                 apiType: 'content',
                 options: {
                     context: {}
-                },
+                }
             };
 
             serializers.input.pages.browse(apiConfig, frame);
-            frame.options.filter.should.eql('page:true');
+            frame.options.filter.should.eql('type:page');
         });
 
         it('combine filters', function () {
@@ -27,7 +27,7 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
             };
 
             serializers.input.pages.browse(apiConfig, frame);
-            frame.options.filter.should.eql('(status:published+tag:eins)+page:true');
+            frame.options.filter.should.eql('(status:published+tag:eins)+type:page');
         });
 
         it('combine filters', function () {
@@ -41,7 +41,7 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
             };
 
             serializers.input.pages.browse(apiConfig, frame);
-            frame.options.filter.should.eql('(page:false+tag:eins)+page:true');
+            frame.options.filter.should.eql('(page:false+tag:eins)+type:page');
         });
 
         it('combine filters', function () {
@@ -55,7 +55,7 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
             };
 
             serializers.input.pages.browse(apiConfig, frame);
-            frame.options.filter.should.eql('(page:false)+page:true');
+            frame.options.filter.should.eql('(page:false)+type:page');
         });
 
         it('remove mobiledoc option from formats', function () {
@@ -87,7 +87,7 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
             };
 
             serializers.input.pages.read(apiConfig, frame);
-            frame.options.filter.should.eql('page:true');
+            frame.options.filter.should.eql('type:page');
         });
 
         it('content api default', function () {
@@ -100,14 +100,14 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
                         api_key: {
                             id: 1,
                             type: 'content'
-                        },
+                        }
                     }
                 },
                 data: {}
             };
 
             serializers.input.pages.read(apiConfig, frame);
-            frame.options.filter.should.eql('page:true');
+            frame.options.filter.should.eql('type:page');
         });
 
         it('admin api default', function () {
@@ -120,14 +120,14 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
                         api_key: {
                             id: 1,
                             type: 'admin'
-                        },
+                        }
                     }
                 },
                 data: {}
             };
 
             serializers.input.pages.read(apiConfig, frame);
-            frame.options.filter.should.eql('(page:true)+status:[draft,published,scheduled]');
+            frame.options.filter.should.eql('(type:page)+status:[draft,published,scheduled]');
         });
 
         it('custom page filter', function () {
@@ -142,7 +142,7 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
             };
 
             serializers.input.pages.read(apiConfig, frame);
-            frame.options.filter.should.eql('(page:false)+page:true');
+            frame.options.filter.should.eql('(page:false)+type:page');
         });
 
         it('custom status filter', function () {
@@ -156,14 +156,14 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
                         api_key: {
                             id: 1,
                             type: 'admin'
-                        },
+                        }
                     }
                 },
                 data: {}
             };
 
             serializers.input.pages.read(apiConfig, frame);
-            frame.options.filter.should.eql('(status:draft)+page:true');
+            frame.options.filter.should.eql('(status:draft)+type:page');
         });
 
         it('remove mobiledoc option from formats', function () {
@@ -222,7 +222,7 @@ describe('Unit: v2/utils/serializers/input/pages', function () {
                         {
                             id: 'id1',
                             authors: ['email1', 'email2'],
-                            tags: ['name1', 'name2'],
+                            tags: ['name1', 'name2']
                         }
                     ]
                 }

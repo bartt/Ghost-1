@@ -2,8 +2,7 @@ const should = require('should');
 const sinon = require('sinon');
 const _ = require('lodash');
 
-const themes = require('../../../../server/services/themes');
-const validate = themes.validate;
+const validate = require('../../../../frontend/services/themes/validate');
 
 const gscan = require('gscan');
 
@@ -70,8 +69,8 @@ describe('Themes', function () {
                             fatal: true,
                             level: 'error',
                             rule: 'Replace the <code>{{#if author.cover}}</code> helper with <code>{{#if author.cover_image}}</code>',
-                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://docs.ghost.org/api/handlebars-themes/context/author/#author-object-attributes" target=_blank>here</a>.',
-                            failures: [ {} ],
+                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://ghost.org/docs/api/handlebars-themes/context/author/#author-object-attributes" target=_blank>here</a>.',
+                            failures: [{}],
                             code: 'GS001-DEPR-CON-AC'
                         }
                     ]
@@ -98,8 +97,8 @@ describe('Themes', function () {
                             fatal: true,
                             level: 'error',
                             rule: 'Replace the <code>{{#if author.cover}}</code> helper with <code>{{#if author.cover_image}}</code>',
-                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://docs.ghost.org/api/handlebars-themes/context/author/#author-object-attributes" target=_blank>here</a>.',
-                            failures: [ {} ],
+                            details: 'The <code>cover</code> attribute was replaced with <code>cover_image</code>.<br>Instead of <code>{{#if author.cover}}</code> you need to use <code>{{#if author.cover_image}}</code>.<br>See the object attributes of <code>author</code> <a href="https://ghost.org/docs/api/handlebars-themes/context/author/#author-object-attributes" target=_blank>here</a>.',
+                            failures: [{}],
                             code: 'GS001-DEPR-CON-AC'
                         }
                     ]

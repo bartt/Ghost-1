@@ -1,9 +1,9 @@
 var should = require('should'),
-    hbs = require('../../../server/services/themes/engine'),
+    hbs = require('../../../frontend/services/themes/engine'),
     configUtils = require('../../utils/configUtils'),
     path = require('path'),
 
-    helpers = require('../../../server/helpers');
+    helpers = require('../../../frontend/helpers');
 
 describe('{{pagination}} helper', function () {
     before(function (done) {
@@ -25,10 +25,10 @@ describe('{{pagination}} helper', function () {
 
     it('should throw if pagination data is incorrect', function () {
         var runHelper = function (data) {
-            return function () {
-                helpers.pagination.call(data);
-            };
-        }, expectedMessage = 'The {{pagination}} helper was used outside of a paginated context. See https://docs.ghost.org/api/handlebars-themes/helpers/pagination/.';
+                return function () {
+                    helpers.pagination.call(data);
+                };
+            }, expectedMessage = 'The {{pagination}} helper was used outside of a paginated context. See https://ghost.org/docs/api/handlebars-themes/helpers/pagination/.';
 
         runHelper('not an object').should.throwError(expectedMessage);
         runHelper(function () {
@@ -129,13 +129,13 @@ describe('{{pagination}} helper with custom template', function () {
         });
     });
 
-    it('can render single page with @blog.title', function () {
+    it('can render single page with @site.title', function () {
         var rendered = helpers.pagination.call({
             pagination: {page: 1, prev: null, next: null, limit: 15, total: 8, pages: 1},
             tag: {slug: 'slug'}
         }, {
             data: {
-                blog: {
+                site: {
                     title: 'Chaos is a ladder.'
                 }
             }
@@ -154,7 +154,7 @@ describe('{{pagination}} helper with custom template', function () {
         }, {
             hash: {isHeader: true},
             data: {
-                blog: {}
+                site: {}
             }
         });
         should.exist(rendered);

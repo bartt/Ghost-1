@@ -48,9 +48,9 @@ describe('Unit: models/settings', function () {
             });
 
             return models.Settings.edit({
-                    key: 'description',
-                    value: 'added value'
-                })
+                key: 'description',
+                value: 'added value'
+            })
                 .then(() => {
                     eventSpy.calledTwice.should.be.true();
                     eventSpy.firstCall.calledWith('settings.added').should.be.true();
@@ -63,7 +63,7 @@ describe('Unit: models/settings', function () {
                 return [
                     function fetchEditQuery() {
                         query.response([{
-                            id: 1,    // NOTE: `id` imitates existing value for 'edit' event
+                            id: 1, // NOTE: `id` imitates existing value for 'edit' event
                             key: 'description',
                             value: 'db value'
                         }]);
@@ -72,9 +72,9 @@ describe('Unit: models/settings', function () {
             });
 
             return models.Settings.edit({
-                    key: 'description',
-                    value: 'edited value'
-                })
+                key: 'description',
+                value: 'edited value'
+            })
                 .then(() => {
                     eventSpy.calledTwice.should.be.true();
                     eventSpy.firstCall.calledWith('settings.edited').should.be.true();
@@ -113,16 +113,15 @@ describe('Unit: models/settings', function () {
 
             return models.Settings.populateDefaults()
                 .then(() => {
-                    eventSpy.callCount.should.equal(62);
+                    eventSpy.callCount.should.equal(82);
+                    const eventsEmitted = eventSpy.args.map(args => args[0]);
+                    const checkEventEmitted = event => should.ok(eventsEmitted.includes(event), `${event} event should be emitted`);
 
-                    eventSpy.args[1][0].should.equal('settings.db_hash.added');
-                    eventSpy.args[1][1].attributes.type.should.equal('core');
+                    checkEventEmitted('settings.db_hash.added');
+                    checkEventEmitted('settings.description.added');
 
-                    eventSpy.args[13][0].should.equal('settings.description.added');
-                    eventSpy.args[13][1].attributes.type.should.equal('blog');
-                    eventSpy.args[13][1].attributes.value.should.equal('The professional publishing platform');
-
-                    eventSpy.args[61][0].should.equal('settings.members_subscription_settings.added');
+                    checkEventEmitted('settings.default_content_visibility.added');
+                    checkEventEmitted('settings.members_subscription_settings.added');
                 });
         });
 
@@ -136,7 +135,7 @@ describe('Unit: models/settings', function () {
 
             return models.Settings.populateDefaults()
                 .then(() => {
-                    eventSpy.callCount.should.equal(60);
+                    eventSpy.callCount.should.equal(80);
 
                     eventSpy.args[13][0].should.equal('settings.logo.added');
                 });

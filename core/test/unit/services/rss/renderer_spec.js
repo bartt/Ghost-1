@@ -2,8 +2,8 @@ var should = require('should'),
     sinon = require('sinon'),
     Promise = require('bluebird'),
 
-    rssCache = require('../../../../server/services/rss/cache'),
-    renderer = require('../../../../server/services/rss/renderer');
+    rssCache = require('../../../../frontend/services/rss/cache'),
+    renderer = require('../../../../frontend/services/rss/renderer');
 
 describe('RSS: Renderer', function () {
     var rssCacheStub, res, baseUrl;
@@ -21,7 +21,7 @@ describe('RSS: Renderer', function () {
     });
 
     afterEach(function () {
-       sinon.restore();
+        sinon.restore();
     });
 
     it('calls the cache and attempts to render, even without data', function (done) {

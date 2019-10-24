@@ -3,8 +3,8 @@ const Promise = require('bluebird');
 const should = require('should');
 const nql = require('@nexes/nql');
 const sinon = require('sinon');
-const urlUtils = require('../../../../server/services/url/utils');
-const UrlGenerator = require('../../../../server/services/url/UrlGenerator');
+const urlUtils = require('../../../../server/lib/url-utils');
+const UrlGenerator = require('../../../../frontend/services/url/UrlGenerator');
 
 describe('Unit: services/url/UrlGenerator', function () {
     let queue, router, urls, resources, resource, resource2;
@@ -259,10 +259,11 @@ describe('Unit: services/url/UrlGenerator', function () {
             });
 
             const urlGenerator = new UrlGenerator(router, queue, resources, urls);
-            sinon.stub(urlUtils, 'replacePermalink').returns('/url/');
+            const replacePermalink = sinon.stub().returns('/url/');
+            sinon.stub(urlUtils, 'replacePermalink').get(() => replacePermalink);
 
             urlGenerator._generateUrl(resource).should.eql('/url/');
-            urlUtils.replacePermalink.calledWith('/:slug/', resource.data).should.be.true();
+            replacePermalink.calledWith('/:slug/', resource.data).should.be.true();
         });
     });
 

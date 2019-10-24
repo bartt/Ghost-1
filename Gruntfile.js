@@ -9,7 +9,7 @@
 require('./core/server/overrides');
 
 const config = require('./core/server/config');
-const urlService = require('./core/server/services/url');
+const urlService = require('./core/frontend/services/url');
 const _ = require('lodash');
 const chalk = require('chalk');
 const fs = require('fs-extra');
@@ -78,6 +78,7 @@ const configureGrunt = function (grunt) {
                 files: [
                     'core/ghost-server.js',
                     'core/server/**/*.js',
+                    'core/frontend/**/*.js',
                     'config.*.json',
                     '!config.testing.json'
                 ],
@@ -248,17 +249,6 @@ const configureGrunt = function (grunt) {
             }
         },
 
-        uglify: {
-            prod: {
-                options: {
-                    sourceMap: false
-                },
-                files: {
-                    'core/server/public/ghost-sdk.min.js': 'core/server/public/ghost-sdk.js'
-                }
-            }
-        },
-
         cssnano: {
             prod: {
                 options: {
@@ -342,27 +332,6 @@ const configureGrunt = function (grunt) {
         function () {
             grunt.log.writeln('Type `grunt --help` to get the details of available grunt tasks.');
         });
-
-    // ### Documentation
-    // Run `grunt docs` to generate annotated source code using the documentation described in the code comments.
-    grunt.registerTask('docs', 'Generate Docs', ['docker']);
-
-    // Run `grunt watch-docs` to setup livereload & watch whilst you're editing the docs
-    grunt.registerTask('watch-docs', function () {
-        grunt.config.merge({
-            watch: {
-                docs: {
-                    files: ['core/server/**/*', 'index.js', 'Gruntfile.js'],
-                    tasks: ['docker'],
-                    options: {
-                        livereload: true
-                    }
-                }
-            }
-        });
-
-        grunt.task.run('watch:docs');
-    });
 
     // ## Testing
 
@@ -546,7 +515,7 @@ const configureGrunt = function (grunt) {
     //
     // It is otherwise the same as running `grunt`, but is only used when running Ghost in the `production` env.
     grunt.registerTask('prod', 'Build JS & templates for production',
-        ['subgrunt:prod', 'uglify:prod', 'cssnano:prod', 'master-warn']);
+        ['subgrunt:prod', 'cssnano:prod', 'master-warn']);
 
     // ### Live reload
     // `grunt dev` - build assets on the fly whilst developing

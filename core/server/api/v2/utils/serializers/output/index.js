@@ -3,6 +3,10 @@ module.exports = {
         return require('./all');
     },
 
+    get authentication() {
+        return require('./authentication');
+    },
+
     get db() {
         return require('./db');
     },
@@ -27,6 +31,10 @@ module.exports = {
         return require('./slugs');
     },
 
+    get schedules() {
+        return require('./schedules');
+    },
+
     get webhooks() {
         return require('./webhooks');
     },
@@ -49,14 +57,6 @@ module.exports = {
 
     get mail() {
         return require('./mail');
-    },
-
-    get subscribers() {
-        return require('./subscribers');
-    },
-
-    get members() {
-        return require('./members');
     },
 
     get images() {

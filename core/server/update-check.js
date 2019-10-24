@@ -16,7 +16,7 @@ const crypto = require('crypto'),
     debug = require('ghost-ignition').debug('update-check'),
     api = require('./api').v2,
     config = require('./config'),
-    urlService = require('./services/url'),
+    urlUtils = require('./lib/url-utils'),
     common = require('./lib/common'),
     request = require('./lib/request'),
     ghostVersion = require('./lib/ghost-version'),
@@ -49,7 +49,7 @@ function updateCheckError(err) {
     }, internal);
 
     err.context = common.i18n.t('errors.updateCheck.checkingForUpdatesFailed.error');
-    err.help = common.i18n.t('errors.updateCheck.checkingForUpdatesFailed.help', {url: 'https://docs.ghost.org'});
+    err.help = common.i18n.t('errors.updateCheck.checkingForUpdatesFailed.help', {url: 'https://ghost.org/docs/'});
     common.logging.error(err);
 }
 
@@ -72,7 +72,7 @@ function createCustomNotification(notification) {
             status: message.status || 'alert',
             type: message.type || 'info',
             id: message.id,
-            dismissible: message.hasOwnProperty('dismissible') ? message.dismissible : true,
+            dismissible: Object.prototype.hasOwnProperty.call(message, 'dismissible') ? message.dismissible : true,
             top: !!message.top,
             message: message.content
         };
@@ -111,7 +111,7 @@ function updateCheckData() {
             posts = descriptors.posts.value(),
             users = descriptors.users.value(),
             npm = descriptors.npm.value(),
-            blogUrl = url.parse(urlService.utils.urlFor('home', true)),
+            blogUrl = url.parse(urlUtils.urlFor('home', true)),
             blogId = blogUrl.hostname + blogUrl.pathname.replace(/\//, '') + hash.value;
 
         data.blog_id = crypto.createHash('md5').update(blogId).digest('hex');
@@ -131,7 +131,7 @@ function updateCheckData() {
  * With the privacy setting `useUpdateCheck` you can control if you want to expose data/stats from your blog to the
  * service. Enabled or disabled, you will receive the latest notification available from the service.
  *
- * @see https://docs.ghost.org/concepts/config/#privacy
+ * @see https://ghost.org/docs/concepts/config/#privacy
  * @returns {Promise}
  */
 function updateCheckRequest() {
@@ -240,7 +240,7 @@ function updateCheckResponse(response) {
              */
             if (_.isArray(response)) {
                 notifications = response;
-            } else if ((response.hasOwnProperty('notifications') && _.isArray(response.notifications))) {
+            } else if ((Object.prototype.hasOwnProperty.call(response, 'notifications') && _.isArray(response.notifications))) {
                 notifications = response.notifications;
             } else {
                 // CASE: default right now

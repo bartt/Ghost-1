@@ -1,10 +1,9 @@
-/*globals describe, beforeEach, afterEach, it*/
 var should = require('should'),
     sinon = require('sinon'),
     path = require('path'),
     configUtils = require('../../../utils/configUtils'),
-    themes = require('../../../../server/services/themes'),
-    privateController = require('../../../../server/apps/private-blogging/lib/router');
+    themes = require('../../../../frontend/services/themes'),
+    privateController = require('../../../../frontend/apps/private-blogging/lib/router');
 
 describe('Private Controller', function () {
     var res, req, defaultPath, hasTemplateStub;
@@ -37,7 +36,7 @@ describe('Private Controller', function () {
             params: {}
         };
 
-        defaultPath = path.join(configUtils.config.get('paths').appRoot, '/core/server/apps/private-blogging/lib/views/private.hbs');
+        defaultPath = path.join(configUtils.config.get('paths').appRoot, '/core/frontend/apps/private-blogging/lib/views/private.hbs');
 
         configUtils.set({
             theme: {

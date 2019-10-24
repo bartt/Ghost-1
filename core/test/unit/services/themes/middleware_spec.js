@@ -1,9 +1,9 @@
 const should = require('should');
 const sinon = require('sinon');
-const hbs = require('../../../../server/services/themes/engine');
-const themes = require('../../../../server/services/themes');
+const hbs = require('../../../../frontend/services/themes/engine');
+const themes = require('../../../../frontend/services/themes');
 // is only exposed via themes.getActive()
-const activeTheme = require('../../../../server/services/themes/active');
+const activeTheme = require('../../../../frontend/services/themes/active');
 const settingsCache = require('../../../../server/services/settings/cache');
 const middleware = themes.middleware;
 
@@ -121,7 +121,7 @@ describe('Themes middleware', function () {
             const templateOptions = hbs.updateTemplateOptions.firstCall.args[0];
             const data = templateOptions.data;
 
-            data.should.be.an.Object().with.properties('site', 'blog', 'labs', 'config');
+            data.should.be.an.Object().with.properties('site', 'labs', 'config');
 
             // Check Theme Config
             data.config.should.be.an.Object()
@@ -134,7 +134,6 @@ describe('Themes middleware', function () {
             should.deepEqual(data.labs, fakeLabsData);
 
             should.equal(data.site, fakeSiteData);
-            should.equal(data.blog, fakeSiteData);
 
             done();
         });

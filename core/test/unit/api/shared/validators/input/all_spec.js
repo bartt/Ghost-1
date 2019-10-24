@@ -41,7 +41,7 @@ describe('Unit: api/shared/validators/input/all', function () {
         it('should run global validations on an type that has validation defined', function () {
             const frame = {
                 options: {
-                    slug: 'not a valid slug %%%%% http://',
+                    slug: 'not a valid slug %%%%% http://'
                 }
             };
 
@@ -250,7 +250,7 @@ describe('Unit: api/shared/validators/input/all', function () {
                 .catch((err) => {
                     should.exist(err);
                 });
-            });
+        });
     });
 
     describe('read', function () {

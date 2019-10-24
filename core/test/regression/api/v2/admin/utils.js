@@ -25,18 +25,22 @@ const expectedProperties = {
         .without('visibility')
         .without('locale')
         .without('page')
-        .without('author_id')
+        .without('author_id', 'author')
         // always returns computed properties
         .concat('url', 'primary_tag', 'primary_author', 'excerpt')
         .concat('authors', 'tags')
+        // returns meta fields from `posts_meta` schema
+        .concat(
+            ..._(schema.posts_meta).keys().without('post_id', 'id')
+        )
     ,
     user: _(schema.users)
         .keys()
         .without('visibility')
         .without('password')
         .without('locale')
-        .without('ghost_auth_access_token')
         .without('ghost_auth_id')
+        .concat('url')
     ,
     tag: _(schema.tags)
         .keys()
@@ -49,7 +53,7 @@ const expectedProperties = {
     subscriber: _(schema.subscribers)
         .keys()
     ,
-    accesstoken: _(schema.accesstokens)
+    member: _(schema.members)
         .keys()
     ,
     role: _(schema.roles)
@@ -65,7 +69,7 @@ const expectedProperties = {
         .without('token')
     ,
     webhook: _(schema.webhooks)
-            .keys()
+        .keys()
 };
 
 _.each(expectedProperties, (value, key) => {
@@ -101,10 +105,12 @@ module.exports = {
         return testUtils.API.doAuth(`${API_URL}session/`, ...args);
     },
 
-    getValidAdminToken(endpoint) {
+    getValidAdminToken(endpoint, key) {
         const jwt = require('jsonwebtoken');
+        key = key || testUtils.DataGenerator.Content.api_keys[0];
+
         const JWT_OPTIONS = {
-            keyid: testUtils.DataGenerator.Content.api_keys[0].id,
+            keyid: key.id,
             algorithm: 'HS256',
             expiresIn: '5m',
             audience: endpoint
@@ -112,7 +118,7 @@ module.exports = {
 
         return jwt.sign(
             {},
-            Buffer.from(testUtils.DataGenerator.Content.api_keys[0].secret, 'hex'),
+            Buffer.from(key.secret, 'hex'),
             JWT_OPTIONS
         );
     }

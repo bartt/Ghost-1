@@ -1,18 +1,14 @@
-var should = require('should'),
-    hbs = require('../../../server/services/themes/engine'),
+const should = require('should');
+const hbs = require('../../../frontend/services/themes/engine');
+const configUtils = require('../../utils/configUtils');
+const path = require('path');
+const helpers = require('../../../frontend/helpers');
 
-    configUtils = require('../../utils/configUtils'),
-    path = require('path'),
-
-    helpers = require('../../../server/helpers');
+const runHelper = data => helpers.navigation.call({}, data);
+const runHelperThunk = data => () => runHelper(data);
 
 describe('{{navigation}} helper', function () {
-    var runHelper = function (data) {
-            return function () {
-                helpers.navigation(data);
-            };
-        },
-        optionsData;
+    let optionsData;
 
     before(function (done) {
         hbs.express4({
@@ -25,13 +21,16 @@ describe('{{navigation}} helper', function () {
 
         // The navigation partial expects this helper
         // @TODO: change to register with Ghost's own registration tools
+        hbs.registerHelper('link_class', helpers.link_class);
+        hbs.registerHelper('concat', helpers.concat);
         hbs.registerHelper('url', helpers.url);
+        hbs.registerHelper('foreach', helpers.foreach);
     });
 
     beforeEach(function () {
         optionsData = {
             data: {
-                blog: {
+                site: {
                     navigation: []
                 },
                 root: {
@@ -43,25 +42,25 @@ describe('{{navigation}} helper', function () {
 
     it('should throw errors on invalid data', function () {
         // Test 1: navigation = string
-        optionsData.data.blog.navigation = 'not an object';
-        runHelper(optionsData).should.throwError('navigation data is not an object or is a function');
+        optionsData.data.site.navigation = 'not an object';
+        runHelperThunk(optionsData).should.throwError('navigation data is not an object or is a function');
 
         // Test 2: navigation = function
-        optionsData.data.blog.navigation = function () {
+        optionsData.data.site.navigation = function () {
         };
-        runHelper(optionsData).should.throwError('navigation data is not an object or is a function');
+        runHelperThunk(optionsData).should.throwError('navigation data is not an object or is a function');
 
         // Test 3: invalid label
-        optionsData.data.blog.navigation = [{label: 1, url: 'bar'}];
-        runHelper(optionsData).should.throwError('Invalid value, Url and Label must be strings');
+        optionsData.data.site.navigation = [{label: 1, url: 'bar'}];
+        runHelperThunk(optionsData).should.throwError('Invalid value, Url and Label must be strings');
 
         // Test 4: invalid url
-        optionsData.data.blog.navigation = [{label: 'foo', url: 1}];
-        runHelper(optionsData).should.throwError('Invalid value, Url and Label must be strings');
+        optionsData.data.site.navigation = [{label: 'foo', url: 1}];
+        runHelperThunk(optionsData).should.throwError('Invalid value, Url and Label must be strings');
     });
 
     it('can render empty nav', function () {
-        var rendered = helpers.navigation(optionsData);
+        var rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.be.equal('');
@@ -72,8 +71,8 @@ describe('{{navigation}} helper', function () {
             rendered;
         delete optionsData.data.root.relativeUrl;
 
-        optionsData.data.blog.navigation = [singleItem];
-        rendered = helpers.navigation(optionsData);
+        optionsData.data.site.navigation = [singleItem];
+        rendered = runHelper(optionsData);
         rendered.string.should.containEql('li');
         rendered.string.should.containEql('nav-foo');
         rendered.string.should.containEql('/foo');
@@ -84,8 +83,8 @@ describe('{{navigation}} helper', function () {
             testUrl = 'href="' + configUtils.config.get('url') + '/foo"',
             rendered;
 
-        optionsData.data.blog.navigation = [singleItem];
-        rendered = helpers.navigation(optionsData);
+        optionsData.data.site.navigation = [singleItem];
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.containEql('li');
@@ -100,8 +99,8 @@ describe('{{navigation}} helper', function () {
             testUrl2 = 'href="' + configUtils.config.get('url') + '/qux"',
             rendered;
 
-        optionsData.data.blog.navigation = [firstItem, secondItem];
-        rendered = helpers.navigation(optionsData);
+        optionsData.data.site.navigation = [firstItem, secondItem];
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.containEql('nav-foo');
@@ -115,9 +114,9 @@ describe('{{navigation}} helper', function () {
             secondItem = {label: 'Bar', url: '/qux'},
             rendered;
 
-        optionsData.data.blog.navigation = [firstItem, secondItem];
+        optionsData.data.site.navigation = [firstItem, secondItem];
         optionsData.data.root.relativeUrl = '/foo';
-        rendered = helpers.navigation(optionsData);
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.containEql('nav-foo');
@@ -131,9 +130,9 @@ describe('{{navigation}} helper', function () {
             secondItem = {label: 'Bar', url: '/qux'},
             rendered;
 
-        optionsData.data.blog.navigation = [firstItem, secondItem];
+        optionsData.data.site.navigation = [firstItem, secondItem];
         optionsData.data.root.relativeUrl = '/foo/';
-        rendered = helpers.navigation(optionsData);
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.containEql('nav-foo');
@@ -146,8 +145,8 @@ describe('{{navigation}} helper', function () {
         var firstItem = {label: 'Foo', url: '/?foo=bar&baz=qux'},
             rendered;
 
-        optionsData.data.blog.navigation = [firstItem];
-        rendered = helpers.navigation(optionsData);
+        optionsData.data.site.navigation = [firstItem];
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.not.containEql('&#x3D;');
@@ -159,8 +158,8 @@ describe('{{navigation}} helper', function () {
         var firstItem = {label: 'Foo', url: '/?foo=space bar&<script>alert("gotcha")</script>'},
             rendered;
 
-        optionsData.data.blog.navigation = [firstItem];
-        rendered = helpers.navigation(optionsData);
+        optionsData.data.site.navigation = [firstItem];
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.containEql('foo=space%20bar');
@@ -172,8 +171,8 @@ describe('{{navigation}} helper', function () {
         var firstItem = {label: 'Foo', url: '/?foo=space%20bar'},
             rendered;
 
-        optionsData.data.blog.navigation = [firstItem];
-        rendered = helpers.navigation(optionsData);
+        optionsData.data.site.navigation = [firstItem];
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.not.containEql('foo=space%2520bar');
@@ -196,7 +195,7 @@ describe('{{navigation}} helper with custom template', function () {
     beforeEach(function () {
         optionsData = {
             data: {
-                blog: {
+                site: {
                     navigation: [{label: 'Foo', url: '/foo'}]
                 },
                 root: {
@@ -206,14 +205,14 @@ describe('{{navigation}} helper with custom template', function () {
         };
     });
 
-    it('can render one item and @blog title', function () {
+    it('can render one item and @site title', function () {
         var testUrl = 'href="' + configUtils.config.get('url') + '/foo"',
             rendered;
 
-        // Set @blog.title
-        optionsData.data.blog.title = 'Chaos is a ladder.';
+        // Set @site.title
+        optionsData.data.site.title = 'Chaos is a ladder.';
 
-        rendered = helpers.navigation(optionsData);
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.containEql('Chaos is a ladder');
@@ -229,7 +228,7 @@ describe('{{navigation}} helper with custom template', function () {
         // Simulate {{navigation isHeader=true}}
         optionsData.hash = {isHeader: true};
 
-        rendered = helpers.navigation(optionsData);
+        rendered = runHelper(optionsData);
 
         should.exist(rendered);
         rendered.string.should.not.containEql('Chaos is a ladder');

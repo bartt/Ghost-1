@@ -7,8 +7,8 @@ const cleanUtil = require('../../../../../../../../server/api/v2/utils/serialize
 const extraAttrsUtils = require('../../../../../../../../server/api/v2/utils/serializers/output/utils/extra-attrs');
 const mapper = require('../../../../../../../../server/api/v2/utils/serializers/output/utils/mapper');
 
-describe('Unit: v2/utils/serializers/output/utils/mapper', () => {
-    beforeEach(() => {
+describe('Unit: v2/utils/serializers/output/utils/mapper', function () {
+    beforeEach(function () {
         sinon.stub(dateUtil, 'forPost').returns({});
 
         sinon.stub(urlUtil, 'forPost').returns({});
@@ -22,14 +22,14 @@ describe('Unit: v2/utils/serializers/output/utils/mapper', () => {
         sinon.stub(cleanUtil, 'author').returns({});
     });
 
-    afterEach(() => {
+    afterEach(function () {
         sinon.restore();
     });
 
-    describe('mapPost', () => {
+    describe('mapPost', function () {
         let postModel;
 
-        beforeEach(() => {
+        beforeEach(function () {
             postModel = (data) => {
                 return Object.assign(data, {
                     toJSON: sinon.stub().returns(data)
@@ -37,7 +37,7 @@ describe('Unit: v2/utils/serializers/output/utils/mapper', () => {
             };
         });
 
-        it('calls mapper on relations', () => {
+        it('calls mapper on relations', function () {
             const frame = {
                 options: {
                     withRelated: ['tags', 'authors'],
@@ -79,16 +79,16 @@ describe('Unit: v2/utils/serializers/output/utils/mapper', () => {
         });
     });
 
-    describe('mapUser', () => {
+    describe('mapUser', function () {
         let userModel;
 
-        beforeEach(() => {
+        beforeEach(function () {
             userModel = (data) => {
                 return Object.assign(data, {toJSON: sinon.stub().returns(data)});
             };
         });
 
-        it('calls utils', () => {
+        it('calls utils', function () {
             const frame = {
                 options: {
                     context: {}
@@ -107,20 +107,20 @@ describe('Unit: v2/utils/serializers/output/utils/mapper', () => {
         });
     });
 
-    describe('mapTag', () => {
+    describe('mapTag', function () {
         let tagModel;
 
-        beforeEach(() => {
+        beforeEach(function () {
             tagModel = (data) => {
                 return Object.assign(data, {toJSON: sinon.stub().returns(data)});
             };
         });
 
-        it('calls utils', () => {
+        it('calls utils', function () {
             const frame = {
                 options: {
                     context: {}
-                },
+                }
             };
 
             const tag = tagModel(testUtils.DataGenerator.forKnex.createTag({
@@ -135,16 +135,16 @@ describe('Unit: v2/utils/serializers/output/utils/mapper', () => {
         });
     });
 
-    describe('mapIntegration', () => {
+    describe('mapIntegration', function () {
         let integrationModel;
 
-        beforeEach(() => {
+        beforeEach(function () {
             integrationModel = (data) => {
                 return Object.assign(data, {toJSON: sinon.stub().returns(data)});
             };
         });
 
-        it('formats admin keys', () => {
+        it('formats admin keys', function () {
             const frame = {
             };
 
@@ -156,7 +156,7 @@ describe('Unit: v2/utils/serializers/output/utils/mapper', () => {
 
             should.exist(mapped.api_keys);
 
-            mapped.api_keys.forEach(key => {
+            mapped.api_keys.forEach((key) => {
                 if (key.type === 'admin') {
                     const [id, secret] = key.secret.split(':');
                     should.exist(id);

@@ -8,7 +8,7 @@ const config = require('../../../../../server/config');
 const ghost = testUtils.startGhost;
 let request;
 
-describe('Tags', function () {
+describe('api/v2/content/tags', function () {
     before(function () {
         return ghost()
             .then(function () {
@@ -32,7 +32,7 @@ describe('Tags', function () {
             .expect('Content-Type', /json/)
             .expect('Cache-Control', testUtils.cacheRules.private)
             .expect(200)
-            .then((res)=> {
+            .then((res) => {
                 localUtils.API.checkResponse(res.body.tags[0], 'tag', null, null, ['id', 'name', 'slug']);
             });
     });

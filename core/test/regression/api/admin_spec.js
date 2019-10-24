@@ -7,6 +7,7 @@ var should = require('should'),
     supertest = require('supertest'),
     testUtils = require('../../utils/index'),
     configUtils = require('../../utils/configUtils'),
+    urlUtils = require('../../utils/urlUtils'),
     ghost = testUtils.startGhost,
     common = require('../../../server/lib/common/index'),
     config = require('../../../server/config/index'),
@@ -64,48 +65,7 @@ describe('Admin Routing', function () {
         });
     });
 
-    describe('Legacy Redirects', function () {
-        it('should redirect /logout/ to /ghost/#/signout/', function (done) {
-            request.get('/logout/')
-                .expect('Location', '/ghost/#/signout/')
-                .expect('Cache-Control', testUtils.cacheRules.year)
-                .expect(301)
-                .end(doEndNoAuth(done));
-        });
-
-        it('should redirect /signout/ to /ghost/#/signout/', function (done) {
-            request.get('/signout/')
-                .expect('Location', '/ghost/#/signout/')
-                .expect('Cache-Control', testUtils.cacheRules.year)
-                .expect(301)
-                .end(doEndNoAuth(done));
-        });
-
-        it('should redirect /signup/ to /ghost/#/signup/', function (done) {
-            request.get('/signup/')
-                .expect('Location', '/ghost/#/signup/')
-                .expect('Cache-Control', testUtils.cacheRules.year)
-                .expect(301)
-                .end(doEndNoAuth(done));
-        });
-
-        // Admin aliases
-        it('should redirect /signin/ to /ghost/', function (done) {
-            request.get('/signin/')
-                .expect('Location', '/ghost/')
-                .expect('Cache-Control', testUtils.cacheRules.year)
-                .expect(301)
-                .end(doEndNoAuth(done));
-        });
-
-        it('should redirect /admin/ to /ghost/', function (done) {
-            request.get('/admin/')
-                .expect('Location', '/ghost/')
-                .expect('Cache-Control', testUtils.cacheRules.year)
-                .expect(301)
-                .end(doEndNoAuth(done));
-        });
-
+    describe('Admin Redirects', function () {
         it('should redirect /GHOST/ to /ghost/', function (done) {
             request.get('/GHOST/')
                 .expect('Location', '/ghost/')
@@ -120,6 +80,7 @@ describe('Admin Routing', function () {
 
         before(function () {
             configUtils.set('url', 'https://localhost:2390');
+            urlUtils.stubUrlUtilsFromConfig();
 
             return ghost({forceStart: true})
                 .then(function (_ghostServer) {
@@ -129,6 +90,7 @@ describe('Admin Routing', function () {
         });
 
         after(function () {
+            urlUtils.restore();
             configUtils.restore();
         });
 

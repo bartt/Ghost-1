@@ -1,6 +1,6 @@
 const should = require('should');
 const sinon = require('sinon');
-const themeEngines = require('../../../../../server/services/themes/engines');
+const themeEngines = require('../../../../../frontend/services/themes/engines');
 
 describe('Themes: engines', function () {
     afterEach(function () {
@@ -10,7 +10,7 @@ describe('Themes: engines', function () {
     it('no engines', function () {
         const engines = themeEngines.create();
         engines.should.eql({
-            'ghost-api': 'v0.1'
+            'ghost-api': 'v3'
         });
     });
 
@@ -35,7 +35,7 @@ describe('Themes: engines', function () {
             });
 
             engines.should.eql({
-                'ghost-api': 'v0.1'
+                'ghost-api': 'v3'
             });
         });
 
@@ -47,7 +47,7 @@ describe('Themes: engines', function () {
             });
 
             engines.should.eql({
-                'ghost-api': 'v0.1'
+                'ghost-api': 'v3'
             });
         });
 
@@ -87,6 +87,18 @@ describe('Themes: engines', function () {
             });
         });
 
+        it('canary', function () {
+            const engines = themeEngines.create({
+                engines: {
+                    'ghost-api': 'canary'
+                }
+            });
+
+            engines.should.eql({
+                'ghost-api': 'canary'
+            });
+        });
+
         it('3', function () {
             const engines = themeEngines.create({
                 engines: {
@@ -95,7 +107,31 @@ describe('Themes: engines', function () {
             });
 
             engines.should.eql({
-                'ghost-api': 'v0.1'
+                'ghost-api': 'v3'
+            });
+        });
+
+        it('v3', function () {
+            const engines = themeEngines.create({
+                engines: {
+                    'ghost-api': 'v3'
+                }
+            });
+
+            engines.should.eql({
+                'ghost-api': 'v3'
+            });
+        });
+
+        it('4', function () {
+            const engines = themeEngines.create({
+                engines: {
+                    'ghost-api': '4'
+                }
+            });
+
+            engines.should.eql({
+                'ghost-api': 'v3'
             });
         });
     });

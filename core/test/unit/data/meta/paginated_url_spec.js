@@ -1,6 +1,7 @@
 var should = require('should'),
-    getPaginatedUrl = require('../../../../server/data/meta/paginated_url'),
-    configUtils = require('../../../utils/configUtils');
+    sinon = require('sinon'),
+    getPaginatedUrl = require('../../../../frontend/meta/paginated_url'),
+    urlUtils = require('../../../utils/urlUtils');
 
 describe('getPaginatedUrl', function () {
     var data, getTestUrls;
@@ -124,12 +125,15 @@ describe('getPaginatedUrl', function () {
     });
 
     describe('with /blog subdirectory', function () {
+        let sandbox;
+
         before(function () {
-            configUtils.set({url: 'http://localhost:82832/blog'});
+            sandbox = sinon.createSandbox();
+            urlUtils.stubUrlUtils({url: 'http://localhost:65535/blog'}, sandbox);
         });
 
         after(function () {
-            configUtils.restore();
+            sandbox.restore();
         });
 
         it('should calculate correct urls for index', function () {
@@ -141,8 +145,8 @@ describe('getPaginatedUrl', function () {
             var urls = getTestUrls();
 
             // Check results
-            urls.should.have.property('next', 'http://localhost:82832/blog/page/3/');
-            urls.should.have.property('prev', 'http://localhost:82832/blog/');
+            urls.should.have.property('next', 'http://localhost:65535/blog/page/3/');
+            urls.should.have.property('prev', 'http://localhost:65535/blog/');
             urls.should.have.property('page1', '/blog/');
             urls.should.have.property('page5', '/blog/page/5/');
             urls.should.have.property('page10', '/blog/page/10/');
@@ -157,8 +161,8 @@ describe('getPaginatedUrl', function () {
             var urls = getTestUrls();
 
             // Check results
-            urls.should.have.property('next', 'http://localhost:82832/blog/featured/page/3/');
-            urls.should.have.property('prev', 'http://localhost:82832/blog/featured/');
+            urls.should.have.property('next', 'http://localhost:65535/blog/featured/page/3/');
+            urls.should.have.property('prev', 'http://localhost:65535/blog/featured/');
             urls.should.have.property('page1', '/blog/featured/');
             urls.should.have.property('page5', '/blog/featured/page/5/');
             urls.should.have.property('page10', '/blog/featured/page/10/');

@@ -1,6 +1,7 @@
 const should = require('should');
+const sinon = require('sinon');
 const serializers = require('../../../../../../../server/api/v2/utils/serializers');
-const configUtils = require('../../../../../../utils/configUtils');
+const urlUtils = require('../../../../../../utils/urlUtils');
 
 describe('Unit: v2/utils/serializers/input/posts', function () {
     describe('browse', function () {
@@ -14,13 +15,13 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
                         api_key: {
                             id: 1,
                             type: 'content'
-                        },
+                        }
                     }
                 }
             };
 
             serializers.input.posts.browse(apiConfig, frame);
-            frame.options.filter.should.eql('page:false');
+            frame.options.filter.should.eql('type:post');
         });
 
         it('should not work for non public context', function () {
@@ -35,7 +36,7 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
             };
 
             serializers.input.posts.browse(apiConfig, frame);
-            should.equal(frame.options.filter, '(page:false)+status:[draft,published,scheduled]');
+            should.equal(frame.options.filter, '(type:post)+status:[draft,published,scheduled]');
         });
 
         it('combine filters', function () {
@@ -48,14 +49,14 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
                         api_key: {
                             id: 1,
                             type: 'content'
-                        },
+                        }
                     },
                     filter: 'status:published+tag:eins'
                 }
             };
 
             serializers.input.posts.browse(apiConfig, frame);
-            frame.options.filter.should.eql('(status:published+tag:eins)+page:false');
+            frame.options.filter.should.eql('(status:published+tag:eins)+type:post');
         });
 
         it('combine filters', function () {
@@ -68,14 +69,14 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
                         api_key: {
                             id: 1,
                             type: 'content'
-                        },
+                        }
                     },
                     filter: 'page:true+tag:eins'
                 }
             };
 
             serializers.input.posts.browse(apiConfig, frame);
-            frame.options.filter.should.eql('(page:true+tag:eins)+page:false');
+            frame.options.filter.should.eql('(page:true+tag:eins)+type:post');
         });
 
         it('combine filters', function () {
@@ -88,14 +89,14 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
                         api_key: {
                             id: 1,
                             type: 'content'
-                        },
+                        }
                     },
                     filter: 'page:true'
                 }
             };
 
             serializers.input.posts.browse(apiConfig, frame);
-            frame.options.filter.should.eql('(page:true)+page:false');
+            frame.options.filter.should.eql('(page:true)+type:post');
         });
 
         it('combine filters', function () {
@@ -108,14 +109,14 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
                         api_key: {
                             id: 1,
                             type: 'content'
-                        },
+                        }
                     },
                     filter: '(page:true,page:false)'
                 }
             };
 
             serializers.input.posts.browse(apiConfig, frame);
-            frame.options.filter.should.eql('((page:true,page:false))+page:false');
+            frame.options.filter.should.eql('((page:true,page:false))+type:post');
         });
 
         it('remove mobiledoc option from formats', function () {
@@ -136,7 +137,7 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
     });
 
     describe('read', function () {
-        it('with apiType of "content" it forces page filter', function () {
+        it('with apiType of "content" it forces type filter', function () {
             const apiConfig = {};
             const frame = {
                 apiType: 'content',
@@ -145,24 +146,24 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
             };
 
             serializers.input.posts.read(apiConfig, frame);
-            frame.options.filter.should.eql('page:false');
+            frame.options.filter.should.eql('type:post');
         });
 
-        it('with apiType of "content" it forces page false filter', function () {
+        it('with apiType of "content" it forces type:post filter', function () {
             const apiConfig = {};
             const frame = {
                 apiType: 'content',
                 options: {
-                    filter: 'page:true'
+                    filter: 'type:page'
                 },
                 data: {}
             };
 
             serializers.input.posts.read(apiConfig, frame);
-            frame.options.filter.should.eql('(page:true)+page:false');
+            frame.options.filter.should.eql('(type:page)+type:post');
         });
 
-        it('with apiType of "admin" it forces page & status false filter', function () {
+        it('with apiType of "admin" it forces type & status false filter', function () {
             const apiConfig = {};
             const frame = {
                 apiType: 'admin',
@@ -178,10 +179,10 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
             };
 
             serializers.input.posts.read(apiConfig, frame);
-            frame.options.filter.should.eql('(page:false)+status:[draft,published,scheduled]');
+            frame.options.filter.should.eql('(type:post)+status:[draft,published,scheduled]');
         });
 
-        it('with apiType of "admin" it forces page filter & respects custom status filter', function () {
+        it('with apiType of "admin" it forces type:post filter & respects custom status filter', function () {
             const apiConfig = {};
             const frame = {
                 apiType: 'admin',
@@ -198,7 +199,7 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
             };
 
             serializers.input.posts.read(apiConfig, frame);
-            frame.options.filter.should.eql('(status:draft)+page:false');
+            frame.options.filter.should.eql('(status:draft)+type:post');
         });
 
         it('remove mobiledoc option from formats', function () {
@@ -220,164 +221,7 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
     });
 
     describe('edit', function () {
-        describe('Ensure relative urls are returned for standard image urls', function () {
-            after(function () {
-                configUtils.restore();
-            });
-
-            it('when mobiledoc contains an absolute URL to image', function () {
-                configUtils.set({url: 'https://mysite.com'});
-                const apiConfig = {};
-                const frame = {
-                    options: {
-                        context: {
-                            user: 0,
-                            api_key: {
-                                id: 1,
-                                type: 'content'
-                            },
-                        },
-                    },
-                    data: {
-                        posts: [
-                            {
-                                id: 'id1',
-                                mobiledoc: '{"version":"0.3.1","atoms":[],"cards":[["image",{"src":"https://mysite.com/content/images/2019/02/image.jpg"}]]}'
-                            }
-                        ]
-                    }
-                };
-
-                serializers.input.posts.edit(apiConfig, frame);
-
-                let postData = frame.data.posts[0];
-                postData.mobiledoc.should.equal('{"version":"0.3.1","atoms":[],"cards":[["image",{"src":"/content/images/2019/02/image.jpg"}]]}');
-            });
-
-            it('when mobiledoc contains multiple absolute URLs to images with different protocols', function () {
-                configUtils.set({url: 'https://mysite.com'});
-                const apiConfig = {};
-                const frame = {
-                    options: {
-                        context: {
-                            user: 0,
-                            api_key: {
-                                id: 1,
-                                type: 'content'
-                            },
-                        },
-                    },
-                    data: {
-                        posts: [
-                            {
-                                id: 'id1',
-                                mobiledoc: '{"version":"0.3.1","atoms":[],"cards":[["image",{"src":"https://mysite.com/content/images/2019/02/image.jpg"}],["image",{"src":"http://mysite.com/content/images/2019/02/image.png"}]]'
-                            }
-                        ]
-                    }
-                };
-
-                serializers.input.posts.edit(apiConfig, frame);
-
-                let postData = frame.data.posts[0];
-                postData.mobiledoc.should.equal('{"version":"0.3.1","atoms":[],"cards":[["image",{"src":"/content/images/2019/02/image.jpg"}],["image",{"src":"/content/images/2019/02/image.png"}]]');
-            });
-
-            it('when blog url is without subdir', function () {
-                configUtils.set({url: 'https://mysite.com'});
-                const apiConfig = {};
-                const frame = {
-                    options: {
-                        context: {
-                            user: 0,
-                            api_key: {
-                                id: 1,
-                                type: 'content'
-                            },
-                        },
-                        withRelated: ['tags', 'authors']
-                    },
-                    data: {
-                        posts: [
-                            {
-                                id: 'id1',
-                                feature_image: 'https://mysite.com/content/images/image.jpg',
-                                og_image: 'https://mysite.com/mycustomstorage/images/image.jpg',
-                                twitter_image: 'https://mysite.com/blog/content/images/image.jpg',
-                                tags: [{
-                                    id: 'id3',
-                                    feature_image: 'http://mysite.com/content/images/image.jpg'
-                                }],
-                                authors: [{
-                                    id: 'id4',
-                                    name: 'Ghosty',
-                                    profile_image: 'https://somestorage.com/blog/images/image.jpg'
-                                }]
-                            }
-                        ]
-                    }
-                };
-                serializers.input.posts.edit(apiConfig, frame);
-                let postData = frame.data.posts[0];
-                postData.feature_image.should.eql('/content/images/image.jpg');
-                postData.og_image.should.eql('https://mysite.com/mycustomstorage/images/image.jpg');
-                postData.twitter_image.should.eql('https://mysite.com/blog/content/images/image.jpg');
-                postData.tags[0].feature_image.should.eql('/content/images/image.jpg');
-                postData.authors[0].profile_image.should.eql('https://somestorage.com/blog/images/image.jpg');
-            });
-
-            it('when blog url is with subdir', function () {
-                configUtils.set({url: 'https://mysite.com/blog'});
-                const apiConfig = {};
-                const frame = {
-                    options: {
-                        context: {
-                            user: 0,
-                            api_key: {
-                                id: 1,
-                                type: 'content'
-                            },
-                        },
-                        withRelated: ['tags', 'authors']
-                    },
-                    data: {
-                        posts: [
-                            {
-                                id: 'id1',
-                                feature_image: 'https://mysite.com/blog/content/images/image.jpg',
-                                og_image: 'https://mysite.com/content/images/image.jpg',
-                                twitter_image: 'https://mysite.com/mycustomstorage/images/image.jpg',
-                                tags: [{
-                                    id: 'id3',
-                                    feature_image: 'http://mysite.com/blog/mycustomstorage/content/images/image.jpg'
-                                }],
-                                authors: [{
-                                    id: 'id4',
-                                    name: 'Ghosty',
-                                    profile_image: 'https://somestorage.com/blog/content/images/image.jpg'
-                                }]
-                            }
-                        ]
-                    }
-                };
-                serializers.input.posts.edit(apiConfig, frame);
-                let postData = frame.data.posts[0];
-                postData.feature_image.should.eql('/blog/content/images/image.jpg');
-                postData.og_image.should.eql('https://mysite.com/content/images/image.jpg');
-                postData.twitter_image.should.eql('https://mysite.com/mycustomstorage/images/image.jpg');
-                postData.tags[0].feature_image.should.eql('http://mysite.com/blog/mycustomstorage/content/images/image.jpg');
-                postData.authors[0].profile_image.should.eql('https://somestorage.com/blog/content/images/image.jpg');
-            });
-        });
-
         describe('Ensure html to mobiledoc conversion', function () {
-            before(function () {
-                // NOTE: only supported in node v8 and higher
-                if (process.version.startsWith('v6.')) {
-                    this.skip();
-                }
-            });
-
             it('no transformation when no html source option provided', function () {
                 const apiConfig = {};
                 const mobiledoc = '{"version":"0.3.1","atoms":[],"cards":[],"sections":[]}';
@@ -459,7 +303,7 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
                         posts: [
                             {
                                 id: 'id1',
-                                html: '<p>this is great feature</p>\n<!--kg-card-begin: html--><div class="custom">My Custom HTML</div><!--kg-card-end: html-->\n<p>custom html preserved!</p>',
+                                html: '<p>this is great feature</p>\n<!--kg-card-begin: html--><div class="custom">My Custom HTML</div><!--kg-card-end: html-->\n<p>custom html preserved!</p>'
                             }
                         ]
                     }
@@ -505,7 +349,7 @@ describe('Unit: v2/utils/serializers/input/posts', function () {
                             {
                                 id: 'id1',
                                 authors: ['email1', 'email2'],
-                                tags: ['name1', 'name2'],
+                                tags: ['name1', 'name2']
                             }
                         ]
                     }

@@ -1,11 +1,10 @@
-/*globals describe, beforeEach, afterEach, it*/
 var should = require('should'),
     sinon = require('sinon'),
     crypto = require('crypto'),
     fs = require('fs-extra'),
     common = require('../../../../server/lib/common'),
     settingsCache = require('../../../../server/services/settings/cache'),
-    privateBlogging = require('../../../../server/apps/private-blogging/lib/middleware');
+    privateBlogging = require('../../../../frontend/apps/private-blogging/lib/middleware');
 
 function hash(password, salt) {
     var hasher = crypto.createHash('sha256');
@@ -287,23 +286,6 @@ describe('Private Blogging', function () {
                 it('filterPrivateRoutes should 404 for tag rss requests', function () {
                     var salt = Date.now().toString();
                     req.url = req.path = '/tag/welcome/rss/';
-
-                    req.session = {
-                        token: hash('rightpassword', salt),
-                        salt: salt
-                    };
-
-                    res.isPrivateBlog = true;
-                    res.redirect = sinon.spy();
-
-                    privateBlogging.filterPrivateRoutes(req, res, next);
-                    next.called.should.be.true();
-                    (next.firstCall.args[0] instanceof common.errors.NotFoundError).should.eql(true);
-                });
-
-                it('filterPrivateRoutes should 404 for tag rss with pagination requests', function () {
-                    var salt = Date.now().toString();
-                    req.url = req.path = '/tag/welcome/rss/2';
 
                     req.session = {
                         token: hash('rightpassword', salt),

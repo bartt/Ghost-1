@@ -1,10 +1,10 @@
 const should = require('should'),
     sinon = require('sinon'),
     rewire = require('rewire'),
-    urlService = require('../../../../server/services/url'),
+    urlUtils = require('../../../../server/lib/url-utils'),
     testUtils = require('../../../utils');
 
-let getCanonicalUrl = rewire('../../../../server/data/meta/canonical_url');
+let getCanonicalUrl = rewire('../../../../frontend/meta/canonical_url');
 
 describe('getCanonicalUrl', function () {
     let getUrlStub;
@@ -12,11 +12,11 @@ describe('getCanonicalUrl', function () {
     beforeEach(function () {
         getUrlStub = sinon.stub();
 
-        getCanonicalUrl = rewire('../../../../server/data/meta/canonical_url');
+        getCanonicalUrl = rewire('../../../../frontend/meta/canonical_url');
         getCanonicalUrl.__set__('getUrl', getUrlStub);
 
-        sinon.stub(urlService.utils, 'urlJoin');
-        sinon.stub(urlService.utils, 'urlFor').withArgs('home', true).returns('http://localhost:9999');
+        sinon.stub(urlUtils, 'urlJoin');
+        sinon.stub(urlUtils, 'urlFor').withArgs('home', true).returns('http://localhost:9999');
     });
 
     afterEach(function () {
@@ -27,12 +27,12 @@ describe('getCanonicalUrl', function () {
         const post = testUtils.DataGenerator.forKnex.createPost();
 
         getUrlStub.withArgs(post, false).returns('/post-url/');
-        urlService.utils.urlJoin.withArgs('http://localhost:9999', '/post-url/').returns('canonical url');
+        urlUtils.urlJoin.withArgs('http://localhost:9999', '/post-url/').returns('canonical url');
 
         getCanonicalUrl(post).should.eql('canonical url');
 
-        urlService.utils.urlJoin.calledOnce.should.be.true();
-        urlService.utils.urlFor.calledOnce.should.be.true();
+        urlUtils.urlJoin.calledOnce.should.be.true();
+        urlUtils.urlFor.calledOnce.should.be.true();
         getUrlStub.calledOnce.should.be.true();
     });
 
@@ -51,23 +51,23 @@ describe('getCanonicalUrl', function () {
         const post = testUtils.DataGenerator.forKnex.createPost();
 
         getUrlStub.withArgs(post, false).returns('/post-url/amp/');
-        urlService.utils.urlJoin.withArgs('http://localhost:9999', '/post-url/amp/').returns('*/amp/');
+        urlUtils.urlJoin.withArgs('http://localhost:9999', '/post-url/amp/').returns('*/amp/');
 
         getCanonicalUrl(post).should.eql('*/');
 
-        urlService.utils.urlJoin.calledOnce.should.be.true();
-        urlService.utils.urlFor.calledOnce.should.be.true();
+        urlUtils.urlJoin.calledOnce.should.be.true();
+        urlUtils.urlFor.calledOnce.should.be.true();
         getUrlStub.calledOnce.should.be.true();
     });
 
     it('should return home if empty secure data', function () {
         getUrlStub.withArgs({secure: true}, false).returns('/');
-        urlService.utils.urlJoin.withArgs('http://localhost:9999', '/').returns('canonical url');
+        urlUtils.urlJoin.withArgs('http://localhost:9999', '/').returns('canonical url');
 
         getCanonicalUrl({secure: true}).should.eql('canonical url');
 
-        urlService.utils.urlJoin.calledOnce.should.be.true();
-        urlService.utils.urlFor.calledOnce.should.be.true();
+        urlUtils.urlJoin.calledOnce.should.be.true();
+        urlUtils.urlFor.calledOnce.should.be.true();
         getUrlStub.calledOnce.should.be.true();
     });
 });

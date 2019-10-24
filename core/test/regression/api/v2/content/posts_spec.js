@@ -4,12 +4,13 @@ const _ = require('lodash');
 const testUtils = require('../../../../utils');
 const localUtils = require('./utils');
 const configUtils = require('../../../../utils/configUtils');
+const urlUtils = require('../../../../utils/urlUtils');
 const config = require('../../../../../server/config');
 
 const ghost = testUtils.startGhost;
 let request;
 
-describe('Posts', function () {
+describe('api/v2/content/posts', function () {
     before(function () {
         return ghost()
             .then(function () {
@@ -22,6 +23,7 @@ describe('Posts', function () {
 
     afterEach(function () {
         configUtils.restore();
+        urlUtils.restore();
     });
 
     const validKey = localUtils.getValidKey();
@@ -89,6 +91,7 @@ describe('Posts', function () {
     it('ensure origin header on redirect is not getting lost', function (done) {
         // NOTE: force a redirect to the admin url
         configUtils.set('admin:url', 'http://localhost:9999');
+        urlUtils.stubUrlUtilsFromConfig();
 
         request.get(localUtils.API.getApiQuery(`posts?key=${validKey}`))
             .set('Origin', 'https://example.com')
@@ -104,29 +107,6 @@ describe('Posts', function () {
                 res.headers.location.should.eql(`http://localhost:9999/ghost/api/v2/content/posts/?key=${validKey}`);
                 should.exist(res.headers['access-control-allow-origin']);
                 should.not.exist(res.headers['x-cache-invalidate']);
-                done();
-            });
-    });
-
-    it('browse posts, ignores staticPages', function (done) {
-        request.get(localUtils.API.getApiQuery(`posts/?key=${validKey}&staticPages=true`))
-            .set('Origin', testUtils.API.getURL())
-            .expect('Content-Type', /json/)
-            .expect('Cache-Control', testUtils.cacheRules.private)
-            .expect(200)
-            .end(function (err, res) {
-                if (err) {
-                    return done(err);
-                }
-
-                should.not.exist(res.headers['x-cache-invalidate']);
-                var jsonResponse = res.body;
-                should.exist(jsonResponse.posts);
-                localUtils.API.checkResponse(jsonResponse, 'posts');
-                jsonResponse.posts.should.have.length(11);
-                localUtils.API.checkResponse(jsonResponse.posts[0], 'post');
-                localUtils.API.checkResponse(jsonResponse.meta.pagination, 'pagination');
-                _.isBoolean(jsonResponse.posts[0].featured).should.eql(true);
                 done();
             });
     });
@@ -147,8 +127,17 @@ describe('Posts', function () {
             .expect('Content-Type', /json/)
             .expect('Cache-Control', testUtils.cacheRules.private)
             .expect(200)
-            .then((res)=> {
+            .then((res) => {
                 localUtils.API.checkResponse(res.body.posts[0], 'post', null, null, ['id', 'title', 'slug']);
             });
+    });
+
+    it('can\'t read page with multiple keys', function () {
+        return request
+            .get(localUtils.API.getApiQuery(`posts?key=${validKey}&key=&fields=title,slug`))
+            .set('Origin', testUtils.API.getURL())
+            .expect('Content-Type', /json/)
+            .expect('Cache-Control', testUtils.cacheRules.private)
+            .expect(400);
     });
 });

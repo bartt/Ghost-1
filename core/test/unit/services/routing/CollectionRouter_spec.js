@@ -3,8 +3,8 @@ const should = require('should'),
     express = require('express'),
     settingsCache = require('../../../../server/services/settings/cache'),
     common = require('../../../../server/lib/common'),
-    controllers = require('../../../../server/services/routing/controllers'),
-    CollectionRouter = require('../../../../server/services/routing/CollectionRouter'),
+    controllers = require('../../../../frontend/services/routing/controllers'),
+    CollectionRouter = require('../../../../frontend/services/routing/CollectionRouter'),
     RESOURCE_CONFIG = {QUERY: {post: {controller: 'posts', resource: 'posts'}}};
 
 describe('UNIT - services/routing/CollectionRouter', function () {
@@ -47,7 +47,7 @@ describe('UNIT - services/routing/CollectionRouter', function () {
             common.events.on.calledTwice.should.be.false();
 
             collectionRouter.mountRoute.callCount.should.eql(3);
-            express.Router.param.callCount.should.eql(3);
+            express.Router.param.callCount.should.eql(2);
 
             // parent route
             collectionRouter.mountRoute.args[0][0].should.eql('/');

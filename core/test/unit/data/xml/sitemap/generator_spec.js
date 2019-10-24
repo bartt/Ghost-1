@@ -3,12 +3,12 @@ const should = require('should'),
     ObjectId = require('bson-objectid'),
     _ = require('lodash'),
     testUtils = require('../../../../utils'),
-    urlService = require('../../../../../server/services/url'),
-    IndexGenerator = require('../../../../../server/data/xml/sitemap/index-generator'),
-    PostGenerator = require('../../../../../server/data/xml/sitemap/post-generator'),
-    PageGenerator = require('../../../../../server/data/xml/sitemap/page-generator'),
-    TagGenerator = require('../../../../../server/data/xml/sitemap/tag-generator'),
-    UserGenerator = require('../../../../../server/data/xml/sitemap/user-generator');
+    urlUtils = require('../../../../../server/lib/url-utils'),
+    IndexGenerator = require('../../../../../frontend/services/sitemap/index-generator'),
+    PostGenerator = require('../../../../../frontend/services/sitemap/post-generator'),
+    PageGenerator = require('../../../../../frontend/services/sitemap/page-generator'),
+    TagGenerator = require('../../../../../frontend/services/sitemap/tag-generator'),
+    UserGenerator = require('../../../../../frontend/services/sitemap/user-generator');
 
 should.Assertion.add('ValidUrlNode', function (options) {
     // Check urlNode looks correct
@@ -95,7 +95,7 @@ describe('Generators', function () {
 
         describe('fn: getXml', function () {
             beforeEach(function () {
-                sinon.stub(urlService.utils, 'urlFor');
+                sinon.stub(urlUtils, 'urlFor');
             });
 
             it('get cached xml', function () {
@@ -109,10 +109,10 @@ describe('Generators', function () {
             it('compare content output', function () {
                 let idxFirst, idxSecond, idxThird;
 
-                urlService.utils.urlFor.withArgs('image', {image: 'post-100.jpg'}, true).returns('http://my-ghost-blog.com/images/post-100.jpg');
-                urlService.utils.urlFor.withArgs('image', {image: 'post-200.jpg'}, true).returns('http://my-ghost-blog.com/images/post-200.jpg');
-                urlService.utils.urlFor.withArgs('image', {image: 'post-300.jpg'}, true).returns('http://my-ghost-blog.com/images/post-300.jpg');
-                urlService.utils.urlFor.withArgs('sitemap_xsl', true).returns('http://my-ghost-blog.com/sitemap.xsl');
+                urlUtils.urlFor.withArgs('image', {image: 'post-100.jpg'}, true).returns('http://my-ghost-blog.com/images/post-100.jpg');
+                urlUtils.urlFor.withArgs('image', {image: 'post-200.jpg'}, true).returns('http://my-ghost-blog.com/images/post-200.jpg');
+                urlUtils.urlFor.withArgs('image', {image: 'post-300.jpg'}, true).returns('http://my-ghost-blog.com/images/post-300.jpg');
+                urlUtils.urlFor.withArgs('sitemap_xsl', true).returns('http://my-ghost-blog.com/sitemap.xsl');
 
                 generator.addUrl('http://my-ghost-blog.com/url/100/', testUtils.DataGenerator.forKnex.createPost({
                     feature_image: 'post-100.jpg',

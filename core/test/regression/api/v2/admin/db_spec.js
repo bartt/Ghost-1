@@ -16,11 +16,11 @@ let ghost = testUtils.startGhost;
 let request;
 let eventsTriggered;
 
-describe('DB API', () => {
-    let backupClient;
-    let schedulerClient;
+describe('DB API', function () {
+    let backupKey;
+    let schedulerKey;
 
-    before(() => {
+    before(function () {
         return ghost()
             .then(() => {
                 request = supertest.agent(config.get('url'));
@@ -29,16 +29,12 @@ describe('DB API', () => {
                 return localUtils.doAuth(request);
             })
             .then(() => {
-                return models.Client.findAll();
-            })
-            .then((result) => {
-                const clients = result.toJSON();
-                backupClient = _.find(clients, {slug: 'ghost-backup'});
-                schedulerClient = _.find(clients, {slug: 'ghost-scheduler'});
+                backupKey = _.find(testUtils.existingData.apiKeys, {integration: {slug: 'ghost-backup'}});
+                schedulerKey = _.find(testUtils.existingData.apiKeys, {integration: {slug: 'ghost-scheduler'}});
             });
     });
 
-    beforeEach(() => {
+    beforeEach(function () {
         eventsTriggered = {};
 
         sinon.stub(common.events, 'emit').callsFake((eventName, eventObj) => {
@@ -50,11 +46,12 @@ describe('DB API', () => {
         });
     });
 
-    afterEach(() => {
+    afterEach(function () {
         sinon.restore();
     });
 
-    it('can export the database with more tables', () => {
+    // SKIPPED: we no longer have the "extra" clients and client_trusted_domains tables
+    it.skip('can export the database with more tables', function () {
         return request.get(localUtils.API.getApiQuery('db/?include=clients,client_trusted_domains'))
             .set('Origin', config.get('url'))
             .expect('Content-Type', /json/)
@@ -63,12 +60,12 @@ describe('DB API', () => {
                 const jsonResponse = res.body;
                 should.exist(jsonResponse.db);
                 jsonResponse.db.should.have.length(1);
-                Object.keys(jsonResponse.db[0].data).length.should.eql(28);
+                Object.keys(jsonResponse.db[0].data).length.should.eql(29);
             });
     });
 
-    it('can export & import', () => {
-        const exportFolder = path.join(os.tmpdir(), uuid.v1());
+    it('can export & import', function () {
+        const exportFolder = path.join(os.tmpdir(), uuid.v4());
         const exportPath = path.join(exportFolder, 'export.json');
 
         return request.put(localUtils.API.getApiQuery('settings/'))
@@ -110,7 +107,7 @@ describe('DB API', () => {
             });
     });
 
-    it('import should fail without file', () => {
+    it('import should fail without file', function () {
         return request.post(localUtils.API.getApiQuery('db/'))
             .set('Origin', config.get('url'))
             .set('Accept', 'application/json')
@@ -118,7 +115,7 @@ describe('DB API', () => {
             .expect(422);
     });
 
-    it('import should fail with unsupported file', () => {
+    it('import should fail with unsupported file', function () {
         return request.post(localUtils.API.getApiQuery('db/'))
             .set('Origin', config.get('url'))
             .expect('Content-Type', /json/)
@@ -126,11 +123,13 @@ describe('DB API', () => {
             .expect(415);
     });
 
-    it('export can be triggered by backup client', () => {
-        const backupQuery = `?client_id=${backupClient.slug}&client_secret=${backupClient.secret}&filename=test`;
+    it('export can be triggered by backup integration', function () {
+        const backupQuery = `?filename=test`;
         const fsStub = sinon.stub(fs, 'writeFile').resolves();
 
         return request.post(localUtils.API.getApiQuery(`db/backup${backupQuery}`))
+            .set('Authorization', `Ghost ${localUtils.getValidAdminToken('/v2/admin/', backupKey)}`)
+            .set('Origin', config.get('url'))
             .expect('Content-Type', /json/)
             .expect(200)
             .then((res) => {
@@ -140,31 +139,27 @@ describe('DB API', () => {
             });
     });
 
-    it('export can not be triggered by client other than backup', () => {
-        const schedulerQuery = `?client_id=${schedulerClient.slug}&client_secret=${schedulerClient.secret}`;
+    it('export can not be triggered by integration other than backup', function () {
         const fsStub = sinon.stub(fs, 'writeFile').resolves();
 
-        return request.post(localUtils.API.getApiQuery(`db/backup${schedulerQuery}`))
+        return request.post(localUtils.API.getApiQuery(`db/backup`))
+            .set('Authorization', `Ghost ${localUtils.getValidAdminToken('/v2/admin/', schedulerKey)}`)
+            .set('Origin', config.get('url'))
             .expect('Content-Type', /json/)
             .expect(403)
-            .then(res => {
+            .then((res) => {
                 should.exist(res.body.errors);
                 res.body.errors[0].type.should.eql('NoPermissionError');
                 fsStub.called.should.eql(false);
             });
     });
 
-    it('export can not be triggered by regular authentication', () => {
+    it('export can be triggered by Admin authentication', function () {
         const fsStub = sinon.stub(fs, 'writeFile').resolves();
 
         return request.post(localUtils.API.getApiQuery(`db/backup`))
             .set('Origin', config.get('url'))
             .expect('Content-Type', /json/)
-            .expect(401)
-            .then(res => {
-                should.exist(res.body.errors);
-                res.body.errors[0].type.should.eql('UnauthorizedError');
-                fsStub.called.should.eql(false);
-            });
+            .expect(200);
     });
 });

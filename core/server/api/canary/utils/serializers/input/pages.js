@@ -1,8 +1,9 @@
 const _ = require('lodash');
 const debug = require('ghost-ignition').debug('api:canary:utils:serializers:input:pages');
-const mapNQLKeyValues = require('../../../../../../shared/nql-map-key-values');
-const converters = require('../../../../../lib/mobiledoc/converters');
+const mapNQLKeyValues = require('@nexes/nql').utils.mapKeyValues;
+const mobiledoc = require('../../../../../lib/mobiledoc');
 const url = require('./utils/url');
+const slugFilterOrder = require('./utils/slug-filter-order');
 const localUtils = require('../../index');
 const postsMetaSchema = require('../../../../../data/schema').tables.posts_meta;
 
@@ -48,8 +49,18 @@ function setDefaultOrder(frame) {
         includesOrderedRelations = _.intersection(orderedRelations, frame.options.withRelated).length > 0;
     }
 
-    if (!frame.options.order && !includesOrderedRelations) {
+    if (!frame.options.order && !includesOrderedRelations && frame.options.filter) {
+        frame.options.autoOrder = slugFilterOrder('posts', frame.options.filter);
+    }
+
+    if (!frame.options.order && !frame.options.autoOrder && !includesOrderedRelations) {
         frame.options.order = 'title asc';
+    }
+}
+
+function forceVisibilityColumn(frame) {
+    if (frame.options.columns && !frame.options.columns.includes('visibility')) {
+        frame.options.columns.push('visibility');
     }
 }
 
@@ -100,6 +111,7 @@ module.exports = {
         if (localUtils.isContentAPI(frame)) {
             removeMobiledocFormat(frame);
             setDefaultOrder(frame);
+            forceVisibilityColumn(frame);
         }
 
         if (!localUtils.isContentAPI(frame)) {
@@ -119,6 +131,7 @@ module.exports = {
         if (localUtils.isContentAPI(frame)) {
             removeMobiledocFormat(frame);
             setDefaultOrder(frame);
+            forceVisibilityColumn(frame);
         }
 
         if (!localUtils.isContentAPI(frame)) {
@@ -135,7 +148,7 @@ module.exports = {
             const html = frame.data.pages[0].html;
 
             if (frame.options.source === 'html' && !_.isEmpty(html)) {
-                frame.data.pages[0].mobiledoc = JSON.stringify(converters.htmlToMobiledocConverter(html));
+                frame.data.pages[0].mobiledoc = JSON.stringify(mobiledoc.htmlToMobiledocConverter(html));
             }
         }
 

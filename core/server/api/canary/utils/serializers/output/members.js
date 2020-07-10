@@ -1,18 +1,27 @@
-const common = require('../../../../../lib/common');
+const {i18n} = require('../../../../../lib/common');
+const errors = require('@tryghost/errors');
 const debug = require('ghost-ignition').debug('api:canary:utils:serializers:output:members');
+const mapper = require('./utils/mapper');
+const {unparse} = require('@tryghost/members-csv');
 
 module.exports = {
+    hasActiveStripeSubscriptions(data, apiConfig, frame) {
+        frame.response = data;
+    },
     browse(data, apiConfig, frame) {
         debug('browse');
 
-        frame.response = data;
+        frame.response = {
+            members: data.members.map(member => mapper.mapMember(member, frame)),
+            meta: data.meta
+        };
     },
 
     add(data, apiConfig, frame) {
         debug('add');
 
         frame.response = {
-            members: [data]
+            members: [mapper.mapMember(data, frame)]
         };
     },
 
@@ -20,7 +29,7 @@ module.exports = {
         debug('edit');
 
         frame.response = {
-            members: [data]
+            members: [mapper.mapMember(data, frame)]
         };
     },
 
@@ -28,50 +37,33 @@ module.exports = {
         debug('read');
 
         if (!data) {
-            return Promise.reject(new common.errors.NotFoundError({
-                message: common.i18n.t('errors.api.members.memberNotFound')
+            return Promise.reject(new errors.NotFoundError({
+                message: i18n.t('errors.api.members.memberNotFound')
             }));
         }
 
         frame.response = {
-            members: [data]
+            members: [mapper.mapMember(data, frame)]
         };
     },
 
-    exportCSV(models, apiConfig, frame) {
+    exportCSV(data, apiConfig, frame) {
         debug('exportCSV');
 
-        const fields = ['id', 'email', 'name', 'note', 'created_at', 'deleted_at'];
+        const members = data.members.map((member) => {
+            return mapper.mapMember(member, frame);
+        });
 
-        function formatCSV(data) {
-            let csv = `${fields.join(',')}\r\n`,
-                entry,
-                field,
-                j,
-                i;
-
-            for (j = 0; j < data.length; j = j + 1) {
-                entry = data[j];
-
-                for (i = 0; i < fields.length; i = i + 1) {
-                    field = fields[i];
-                    csv += entry[field] !== null ? entry[field] : '';
-                    if (i !== fields.length - 1) {
-                        csv += ',';
-                    }
-                }
-                csv += '\r\n';
-            }
-
-            return csv;
-        }
-
-        frame.response = formatCSV(models.members);
+        frame.response = unparse(members);
     },
 
     importCSV(data, apiConfig, frame) {
         debug('importCSV');
+        frame.response = data;
+    },
 
+    stats(data, apiConfig, frame) {
+        debug('stats');
         frame.response = data;
     }
 };

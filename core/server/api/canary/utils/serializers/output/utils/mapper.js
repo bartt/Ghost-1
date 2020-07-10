@@ -2,10 +2,11 @@ const _ = require('lodash');
 const utils = require('../../../index');
 const url = require('./url');
 const date = require('./date');
-const members = require('./members');
+const gating = require('./post-gating');
 const clean = require('./clean');
 const extraAttrs = require('./extra-attrs');
 const postsMetaSchema = require('../../../../../../data/schema').tables.posts_meta;
+const config = require('../../../../../../../shared/config');
 
 const mapUser = (model, frame) => {
     const jsonModel = model.toJSON ? model.toJSON(frame.options) : model;
@@ -43,7 +44,7 @@ const mapPost = (model, frame) => {
             jsonModel.page = true;
         }
         date.forPost(jsonModel);
-        members.forPost(jsonModel, frame);
+        gating.forPost(jsonModel, frame);
     }
 
     clean.post(jsonModel, frame);
@@ -60,6 +61,10 @@ const mapPost = (model, frame) => {
             if (relation === 'authors' && jsonModel.authors) {
                 jsonModel.authors = jsonModel.authors.map(author => mapUser(author, frame));
             }
+
+            if (relation === 'email' && _.isEmpty(jsonModel.email)) {
+                jsonModel.email = null;
+            }
         });
     }
 
@@ -75,6 +80,15 @@ const mapPost = (model, frame) => {
     return jsonModel;
 };
 
+const mapPage = (model, frame) => {
+    const jsonModel = mapPost(model, frame);
+
+    delete jsonModel.email_subject;
+    delete jsonModel.send_email_when_published;
+
+    return jsonModel;
+};
+
 const mapSettings = (attrs, frame) => {
     url.forSettings(attrs);
     extraAttrs.forSettings(attrs, frame);
@@ -85,11 +99,15 @@ const mapSettings = (attrs, frame) => {
     //      fields completely.
     if (_.isArray(attrs)) {
         attrs = _.filter(attrs, (o) => {
+            if (o.key === 'accent_color' && !config.get('enableDeveloperExperiments')) {
+                return false;
+            }
             return o.key !== 'ghost_head' && o.key !== 'ghost_foot';
         });
     } else {
-        delete attrs.ghost_head;
-        delete attrs.ghost_foot;
+        if (!config.get('enableDeveloperExperiments')) {
+            delete attrs.accent_color;
+        }
     }
 
     return attrs;
@@ -119,10 +137,35 @@ const mapAction = (model, frame) => {
     return attrs;
 };
 
+const mapMember = (model, frame) => {
+    const jsonModel = model.toJSON ? model.toJSON(frame.options) : model;
+
+    if (_.get(jsonModel, 'stripe.subscriptions')) {
+        let compedSubscriptions = _.get(jsonModel, 'stripe.subscriptions').filter(sub => (sub.plan.nickname === 'Complimentary'));
+        const hasCompedSubscription = !!(compedSubscriptions.length);
+
+        // NOTE: `frame.options.fields` has to be taken into account in the same way as for `stripe.subscriptions`
+        //       at the moment of implementation fields were not fully supported by members endpoints
+        Object.assign(jsonModel, {
+            comped: hasCompedSubscription
+        });
+    }
+
+    return jsonModel;
+};
+
+const mapLabel = (model, frame) => {
+    const jsonModel = model.toJSON ? model.toJSON(frame.options) : model;
+    return jsonModel;
+};
+
 module.exports.mapPost = mapPost;
+module.exports.mapPage = mapPage;
 module.exports.mapUser = mapUser;
 module.exports.mapTag = mapTag;
+module.exports.mapLabel = mapLabel;
 module.exports.mapIntegration = mapIntegration;
 module.exports.mapSettings = mapSettings;
 module.exports.mapImage = mapImage;
 module.exports.mapAction = mapAction;
+module.exports.mapMember = mapMember;

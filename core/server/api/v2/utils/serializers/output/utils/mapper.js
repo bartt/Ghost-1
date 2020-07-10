@@ -2,7 +2,7 @@ const _ = require('lodash');
 const utils = require('../../../index');
 const url = require('./url');
 const date = require('./date');
-const members = require('./members');
+const gating = require('./post-gating');
 const clean = require('./clean');
 const extraAttrs = require('./extra-attrs');
 const postsMetaSchema = require('../../../../../../data/schema').tables.posts_meta;
@@ -21,9 +21,9 @@ const mapTag = (model, frame) => {
     const jsonModel = model.toJSON ? model.toJSON(frame.options) : model;
 
     url.forTag(model.id, jsonModel, frame.options);
-    clean.tag(jsonModel, frame);
+    const cleanedAttrs = clean.tag(jsonModel, frame);
 
-    return jsonModel;
+    return cleanedAttrs;
 };
 
 const mapPost = (model, frame) => {
@@ -45,7 +45,7 @@ const mapPost = (model, frame) => {
             }
         }
         date.forPost(jsonModel);
-        members.forPost(jsonModel, frame);
+        gating.forPost(jsonModel, frame);
     }
 
     extraAttrs.forPost(frame, model, jsonModel);
@@ -73,7 +73,10 @@ const mapPost = (model, frame) => {
     }).each((attr) => {
         jsonModel[attr] = _.get(jsonModel.posts_meta, attr) || null;
     });
+
     delete jsonModel.posts_meta;
+    delete jsonModel.send_email_when_published;
+    delete jsonModel.email_subject;
 
     return jsonModel;
 };
@@ -81,6 +84,19 @@ const mapPost = (model, frame) => {
 const mapSettings = (attrs, frame) => {
     url.forSettings(attrs);
     extraAttrs.forSettings(attrs, frame);
+
+    if (_.isArray(attrs)) {
+        attrs = _.filter(attrs, (o) => {
+            return o.key !== 'lang' && o.key !== 'timezone' && o.key !== 'accent_color';
+        });
+    } else {
+        delete attrs.lang;
+        delete attrs.timezone;
+        delete attrs.codeinjection_head;
+        delete attrs.codeinjection_foot;
+        delete attrs.accent_color;
+    }
+
     return attrs;
 };
 

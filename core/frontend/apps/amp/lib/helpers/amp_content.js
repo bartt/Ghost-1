@@ -9,12 +9,11 @@
 const Promise = require('bluebird');
 
 const moment = require('moment');
-const proxy = require('../../../../services/proxy');
-const SafeString = proxy.SafeString;
-const logging = proxy.logging;
-const i18n = proxy.i18n;
-const errors = proxy.errors;
-const urlUtils = proxy.urlUtils;
+const errors = require('@tryghost/errors');
+const logging = require('@tryghost/logging');
+
+const {SafeString} = require('../../../../services/rendering');
+
 const amperizeCache = {};
 let allowedAMPTags = [];
 let allowedAMPAttributes = {};
@@ -124,9 +123,6 @@ function getAmperizeHTML(html, post) {
 
     amperize = amperize || new Amperize();
 
-    // make relative URLs abolute
-    html = urlUtils.htmlRelativeToAbsolute(html, post.url);
-
     if (!amperizeCache[post.id] || moment(new Date(amperizeCache[post.id].updated_at)).diff(new Date(post.updated_at)) < 0) {
         return new Promise((resolve) => {
             amperize.parse(html, (err, res) => {
@@ -136,11 +132,11 @@ function getAmperizeHTML(html, post) {
                     if (err.src) {
                         // This is a valid 500 GhostError because it means the amperize parser is unable to handle some Ghost HTML.
                         logging.error(new errors.GhostError({
-                            message: `AMP HTML couldn't get parsed: ${err.src}`,
+                            message: `AMP HTML couldn't be parsed: ${err.src}`,
                             code: 'AMP_PARSER_ERROR',
                             err: err,
                             context: post.url,
-                            help: i18n.t('errors.apps.appWillNotBeLoaded.help')
+                            help: 'Please share this error on GitHub or https://forum.ghost.org'
                         }));
                     } else {
                         logging.error(new errors.GhostError({err, code: 'AMP_PARSER_ERROR'}));
@@ -205,3 +201,5 @@ function ampContent() {
 }
 
 module.exports = ampContent;
+
+module.exports.async = true;

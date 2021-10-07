@@ -1,4 +1,4 @@
-const debug = require('ghost-ignition').debug('services:routing:controllers:preview');
+const debug = require('@tryghost/debug')('services:routing:controllers:preview');
 const config = require('../../../../shared/config');
 const urlService = require('../../url');
 const urlUtils = require('../../../../shared/url-utils');
@@ -14,7 +14,7 @@ const helpers = require('../helpers');
 module.exports = function previewController(req, res, next) {
     debug('previewController');
 
-    const api = require('../../../../server/api')[res.locals.apiVersion];
+    const api = require('../../proxy').api[res.locals.apiVersion];
 
     const params = {
         uuid: req.params.uuid,

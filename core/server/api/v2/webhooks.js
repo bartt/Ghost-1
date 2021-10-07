@@ -1,13 +1,25 @@
 const models = require('../../models');
-const {i18n} = require('../../lib/common');
+const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
+
+const messages = {
+    resourceNotFound: '{resource} not found.',
+    noPermissionToEdit: {
+        message: 'You do not have permission to {method} this webhook.',
+        context: 'You may only {method} webhooks that belong to the authenticated integration. Check the supplied Admin API Key.'
+    },
+    webhookAlreadyExists: 'Target URL has already been used for this event.'
+};
 
 module.exports = {
     docName: 'webhooks',
 
     add: {
         statusCode: 201,
-        headers: {},
+        headers: {
+            // NOTE: remove if there is ever a 'read' method
+            location: false
+        },
         options: [],
         data: [],
         validation: {
@@ -29,7 +41,7 @@ module.exports = {
             ).then((webhook) => {
                 if (webhook) {
                     return Promise.reject(
-                        new errors.ValidationError({message: i18n.t('errors.api.webhooks.webhookAlreadyExists')})
+                        new errors.ValidationError({message: tpl(messages.webhookAlreadyExists)})
                     );
                 }
 
@@ -41,15 +53,23 @@ module.exports = {
     edit: {
         permissions: {
             before: (frame) => {
-                if (frame.options.context && frame.options.context.api_key && frame.options.context.api_key.id) {
+                if (frame.options.context && frame.options.context.integration && frame.options.context.integration.id) {
                     return models.Webhook.findOne({id: frame.options.id})
                         .then((webhook) => {
-                            if (webhook.get('integration_id') !== frame.options.context.api_key.id) {
+                            if (!webhook) {
+                                throw new errors.NotFoundError({
+                                    message: tpl(messages.resourceNotFound, {
+                                        resource: 'Webhook'
+                                    })
+                                });
+                            }
+
+                            if (webhook.get('integration_id') !== frame.options.context.integration.id) {
                                 throw new errors.NoPermissionError({
-                                    message: i18n.t('errors.api.webhooks.noPermissionToEdit.message', {
+                                    message: tpl(messages.noPermissionToEdit.message, {
                                         method: 'edit'
                                     }),
-                                    context: i18n.t('errors.api.webhooks.noPermissionToEdit.context', {
+                                    context: tpl(messages.noPermissionToEdit.context, {
                                         method: 'edit'
                                     })
                                 });
@@ -79,7 +99,7 @@ module.exports = {
             return models.Webhook.edit(data.webhooks[0], Object.assign(options, {require: true}))
                 .catch(models.Webhook.NotFoundError, () => {
                     throw new errors.NotFoundError({
-                        message: i18n.t('errors.api.resource.resourceNotFound', {
+                        message: tpl(messages.resourceNotFound, {
                             resource: 'Webhook'
                         })
                     });
@@ -102,15 +122,23 @@ module.exports = {
         },
         permissions: {
             before: (frame) => {
-                if (frame.options.context && frame.options.context.api_key && frame.options.context.api_key.id) {
+                if (frame.options.context && frame.options.context.integration && frame.options.context.integration.id) {
                     return models.Webhook.findOne({id: frame.options.id})
                         .then((webhook) => {
-                            if (webhook.get('integration_id') !== frame.options.context.api_key.id) {
+                            if (!webhook) {
+                                throw new errors.NotFoundError({
+                                    message: tpl(messages.resourceNotFound, {
+                                        resource: 'Webhook'
+                                    })
+                                });
+                            }
+
+                            if (webhook.get('integration_id') !== frame.options.context.integration.id) {
                                 throw new errors.NoPermissionError({
-                                    message: i18n.t('errors.api.webhooks.noPermissionToEdit.message', {
+                                    message: tpl(messages.noPermissionToEdit.message, {
                                         method: 'destroy'
                                     }),
-                                    context: i18n.t('errors.api.webhooks.noPermissionToEdit.context', {
+                                    context: tpl(messages.noPermissionToEdit.context, {
                                         method: 'destroy'
                                     })
                                 });
@@ -125,7 +153,7 @@ module.exports = {
                 .then(() => null)
                 .catch(models.Webhook.NotFoundError, () => {
                     return Promise.reject(new errors.NotFoundError({
-                        message: i18n.t('errors.api.resource.resourceNotFound', {
+                        message: tpl(messages.resourceNotFound, {
                             resource: 'Webhook'
                         })
                     }));

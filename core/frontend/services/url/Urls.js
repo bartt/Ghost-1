@@ -1,9 +1,11 @@
 const _ = require('lodash');
-const debug = require('ghost-ignition').debug('services:url:urls');
-const {events} = require('../../../server/lib/common');
+const debug = require('@tryghost/debug')('services:url:urls');
 const urlUtils = require('../../../shared/url-utils');
-const logging = require('../../../shared/logging');
+const logging = require('@tryghost/logging');
 const errors = require('@tryghost/errors');
+
+// This emits its own url added/removed events
+const events = require('../../../server/lib/common/events');
 
 /**
  * This class keeps track of all urls in the system.
@@ -11,9 +13,9 @@ const errors = require('@tryghost/errors');
  * This is a connector for url generator and resources.
  * Stores relative urls by default.
  *
- * We have to have a centralised place where we keep track of all urls, otherwise
+ * We have to have a centralized place where we keep track of all urls, otherwise
  * we will never know if we generate the same url twice. Furthermore, it's easier
- * to ask a centralised class instance if you want a url for a resource than
+ * to ask a centralized class instance if you want a url for a resource than
  * iterating over all url generators and asking for it.
  * You can easily ask `this.urls[resourceId]`.
  */

@@ -1,4 +1,5 @@
-const logging = require('../../../../../shared/logging');
+const Promise = require('bluebird');
+const logging = require('@tryghost/logging');
 
 // settings with new groups
 const typeGroupMapping = [{

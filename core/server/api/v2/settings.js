@@ -1,10 +1,11 @@
 const Promise = require('bluebird');
 const _ = require('lodash');
 const models = require('../../models');
-const routing = require('../../../frontend/services/routing');
-const {i18n} = require('../../lib/common');
+const routeSettings = require('../../services/route-settings');
+const i18n = require('../../../shared/i18n');
 const {NoPermissionError, NotFoundError} = require('@tryghost/errors');
-const settingsCache = require('../../services/settings/cache');
+const settingsService = require('../../services/settings');
+const settingsCache = require('../../../shared/settings-cache');
 
 module.exports = {
     docName: 'settings',
@@ -22,12 +23,14 @@ module.exports = {
                 }));
             }
 
-            // CASE: omit core settings unless internal request
             if (!frame.options.context.internal) {
+                // CASE: omit core settings unless internal request
                 settings = _.filter(settings, (setting) => {
                     const isCore = setting.group === 'core';
                     return !isCore;
                 });
+                // CASE: omit secret settings unless internal request
+                settings = settings.map(settingsService.hideValueIfSecret);
             }
 
             return settings;
@@ -49,7 +52,22 @@ module.exports = {
             }
         },
         query(frame) {
-            let setting = settingsCache.get(frame.options.key, {resolve: false});
+            let setting;
+            if (frame.options.key === 'slack') {
+                const slackURL = settingsCache.get('slack_url', {resolve: false});
+                const slackUsername = settingsCache.get('slack_username', {resolve: false});
+
+                setting = slackURL || slackUsername;
+                setting.key = 'slack';
+                setting.value = [{
+                    url: slackURL && slackURL.value,
+                    username: slackUsername && slackUsername.value
+                }];
+            } else if (frame.options.key === 'slack_url' || frame.options.key === 'slack_username') {
+                // leave the value empty returning 404 for unknown in current API keys
+            } else {
+                setting = settingsCache.get(frame.options.key, {resolve: false});
+            }
 
             if (!setting) {
                 return Promise.reject(new NotFoundError({
@@ -65,6 +83,8 @@ module.exports = {
                     message: i18n.t('errors.api.settings.accessCoreSettingFromExtReq')
                 }));
             }
+
+            setting = settingsService.hideValueIfSecret(setting);
 
             return {
                 [frame.options.key]: setting
@@ -106,7 +126,10 @@ module.exports = {
             }
 
             frame.data.settings = _.reject(frame.data.settings, (setting) => {
-                return setting.key === 'type';
+                return setting.key === 'type'
+                    // Remove obfuscated settings
+                    || (setting.value === settingsService.obfuscatedSetting
+                        && settingsService.isSecretSetting(setting));
             });
 
             const errors = [];
@@ -143,8 +166,10 @@ module.exports = {
         permissions: {
             method: 'edit'
         },
-        query(frame) {
-            return routing.settings.setFromFilePath(frame.file.path);
+        async query(frame) {
+            await routeSettings.api.setFromFilePath(frame.file.path);
+            const getRoutesHash = () => routeSettings.api.getCurrentHash();
+            await settingsService.syncRoutesHash(getRoutesHash);
         }
     },
 
@@ -162,7 +187,7 @@ module.exports = {
             method: 'browse'
         },
         query() {
-            return routing.settings.get();
+            return routeSettings.api.get();
         }
     }
 };

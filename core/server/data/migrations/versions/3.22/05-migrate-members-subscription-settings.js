@@ -1,4 +1,4 @@
-const logging = require('../../../../../shared/logging');
+const logging = require('@tryghost/logging');
 const ObjectId = require('bson-objectid').default;
 
 module.exports = {
@@ -149,7 +149,7 @@ module.exports = {
         logging.info(`Inserting members_subscription_settings setting`);
         await knex('settings')
             .insert({
-                id: ObjectId.generate(),
+                id: ObjectId().toHexString(),
                 key: 'members_subscription_settings',
                 value: JSON.stringify(membersSubscriptionSettings),
                 group: 'members',

@@ -1,9 +1,11 @@
-const {events} = require('../../../server/lib/common');
 const IndexMapGenerator = require('./index-generator');
 const PagesMapGenerator = require('./page-generator');
 const PostsMapGenerator = require('./post-generator');
 const UsersMapGenerator = require('./user-generator');
 const TagsMapGenerator = require('./tag-generator');
+
+// This uses events from the routing service and the URL service
+const events = require('../../../server/lib/common/events');
 
 class SiteMapManager {
     constructor(options) {
@@ -13,7 +15,7 @@ class SiteMapManager {
         this.posts = options.posts || this.createPostsGenerator(options);
         this.users = this.authors = options.authors || this.createUsersGenerator(options);
         this.tags = options.tags || this.createTagsGenerator(options);
-        this.index = options.index || this.createIndexGenerator(options);
+        this.index = options.index || this.createIndexGenerator();
 
         events.on('router.created', (router) => {
             if (router.name === 'StaticRoutesRouter') {

@@ -1,4 +1,5 @@
-const logging = require('../../../../../shared/logging');
+const Promise = require('bluebird');
+const logging = require('@tryghost/logging');
 const commands = require('../../../schema').commands;
 
 const tables = [

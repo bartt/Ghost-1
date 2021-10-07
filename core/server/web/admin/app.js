@@ -1,8 +1,8 @@
-const debug = require('ghost-ignition').debug('web:admin:app');
+const debug = require('@tryghost/debug')('web:admin:app');
 const express = require('../../../shared/express');
 const serveStatic = express.static;
 const config = require('../../../shared/config');
-const constants = require('../../lib/constants');
+const constants = require('@tryghost/constants');
 const urlUtils = require('../../../shared/url-utils');
 const shared = require('../shared');
 const adminMiddleware = require('./middleware');
@@ -40,6 +40,7 @@ module.exports = function setupAdminApp() {
     // Cache headers go last before serving the request
     // Admin is currently set to not be cached at all
     adminApp.use(shared.middlewares.cacheControl('private'));
+
     // Special redirects for the admin (these should have their own cache-control headers)
     adminApp.use(adminMiddleware);
 

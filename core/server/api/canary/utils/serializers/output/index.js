@@ -1,3 +1,9 @@
+// ESLint Override Notice
+// This is a valid index.js file - it just exports a lot of stuff!
+// Long term we would like to change the API architecture to reduce this file,
+// but that's not the problem the index.js max - line eslint "proxy" rule is there to solve.
+/* eslint-disable max-lines */
+
 module.exports = {
     get all() {
         return require('./all');
@@ -63,6 +69,10 @@ module.exports = {
         return require('./members');
     },
 
+    get products() {
+        return require('./products');
+    },
+
     get member_signin_urls() {
         return require('./member-signin_urls');
     },
@@ -85,6 +95,10 @@ module.exports = {
 
     get preview() {
         return require('./preview');
+    },
+
+    get email_post() {
+        return require('./email-posts');
     },
 
     get oembed() {
@@ -121,5 +135,13 @@ module.exports = {
 
     get labels() {
         return require('./labels');
+    },
+
+    get snippets() {
+        return require('./snippets');
+    },
+
+    get custom_theme_settings() {
+        return require('./custom-theme-settings');
     }
 };

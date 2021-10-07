@@ -1,7 +1,4 @@
 const omit = require('lodash/omit');
-const logging = require('../../shared/logging');
-const errors = require('@tryghost/errors');
-const _ = require('lodash');
 const crypto = require('crypto');
 const ghostBookshelf = require('./base');
 const {Role} = require('./role');
@@ -29,50 +26,6 @@ const createSecret = (type) => {
     return crypto.randomBytes(bytes).toString('hex');
 };
 
-const addAction = (model, event, options) => {
-    if (!model.wasChanged()) {
-        return;
-    }
-
-    // CASE: model does not support actions at all
-    if (!model.getAction) {
-        return;
-    }
-
-    const action = model.getAction(event, options);
-
-    // CASE: model does not support action for target event
-    if (!action) {
-        return;
-    }
-
-    const insert = (action) => {
-        ghostBookshelf.model('Action')
-            .add(action)
-            .catch((err) => {
-                if (_.isArray(err)) {
-                    err = err[0];
-                }
-
-                logging.error(new errors.InternalServerError({
-                    err
-                }));
-            });
-    };
-
-    if (options.transacting) {
-        options.transacting.once('committed', (committed) => {
-            if (!committed) {
-                return;
-            }
-
-            insert(action);
-        });
-    } else {
-        insert(action);
-    }
-};
-
 const ApiKey = ghostBookshelf.Model.extend({
     tableName: 'api_keys',
 
@@ -90,6 +43,10 @@ const ApiKey = ghostBookshelf.Model.extend({
 
     integration() {
         return this.belongsTo('Integration');
+    },
+
+    user() {
+        return this.belongsTo('User');
     },
 
     format(attrs) {
@@ -115,9 +72,9 @@ const ApiKey = ghostBookshelf.Model.extend({
             }
         }
     },
-    onUpdated(model, attrs, options) {
+    onUpdated(model, options) {
         if (this.previous('secret') !== this.get('secret')) {
-            addAction(model, 'refreshed', options);
+            this.addAction(model, 'refreshed', options);
         }
     },
 

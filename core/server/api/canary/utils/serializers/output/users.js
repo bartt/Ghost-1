@@ -1,6 +1,10 @@
-const debug = require('ghost-ignition').debug('api:canary:utils:serializers:output:users');
-const {i18n} = require('../../../../../lib/common');
+const debug = require('@tryghost/debug')('api:canary:utils:serializers:output:users');
+const tpl = require('@tryghost/tpl');
 const mapper = require('./utils/mapper');
+
+const messages = {
+    pwdChangedSuccessfully: 'Password changed successfully.'
+};
 
 module.exports = {
     browse(models, apiConfig, frame) {
@@ -39,7 +43,7 @@ module.exports = {
         debug('changePassword');
 
         frame.response = {
-            password: [{message: i18n.t('notices.api.users.pwdChangedSuccessfully')}]
+            password: [{message: tpl(messages.pwdChangedSuccessfully)}]
         };
     },
 
@@ -49,5 +53,22 @@ module.exports = {
         frame.response = {
             users: models.map(model => model.toJSON(frame.options))
         };
+    },
+
+    readToken(model, apiConfig, frame) {
+        debug('readToken');
+
+        frame.response = {
+            apiKey: model.toJSON(frame.options)
+        };
+    },
+
+    regenerateToken(model, apiConfig, frame) {
+        debug('regenerateToken');
+
+        frame.response = {
+            apiKey: model.toJSON(frame.options)
+        };
     }
+
 };

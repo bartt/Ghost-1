@@ -4,7 +4,11 @@ const path = require('path');
 const errors = require('@tryghost/errors');
 const config = require('../../../../shared/config');
 const urlUtils = require('../../../../shared/url-utils');
-const {i18n} = require('../../../lib/common');
+const tpl = require('@tryghost/tpl');
+
+const messages = {
+    imageNotFound: 'Image not found'
+};
 
 function createPublicFileMiddleware(file, type, maxAge) {
     let content;
@@ -12,7 +16,7 @@ function createPublicFileMiddleware(file, type, maxAge) {
     const filePath = file.match(/^public/) ? path.join(publicFilePath, file.replace(/^public/, '')) : path.join(publicFilePath, file);
     const blogRegex = /(\{\{blog-url\}\})/g;
 
-    return function servePublicFile(req, res, next) {
+    return function servePublicFileMiddleware(req, res, next) {
         if (content) {
             res.writeHead(200, content.headers);
             return res.end(content.body);
@@ -24,7 +28,7 @@ function createPublicFileMiddleware(file, type, maxAge) {
                 if (err && err.status === 404) {
                     // ensure we're triggering basic asset 404 and not a templated 404
                     return next(new errors.NotFoundError({
-                        message: i18n.t('errors.errors.imageNotFound'),
+                        message: tpl(messages.imageNotFound),
                         code: 'STATIC_FILE_NOT_FOUND',
                         property: err.path
                     }));
@@ -68,7 +72,7 @@ function createPublicFileMiddleware(file, type, maxAge) {
 function servePublicFile(file, type, maxAge) {
     const publicFileMiddleware = createPublicFileMiddleware(file, type, maxAge);
 
-    return function servePublicFile(req, res, next) {
+    return function servePublicFileMiddleware(req, res, next) {
         if (req.path === '/' + file) {
             return publicFileMiddleware(req, res, next);
         } else {

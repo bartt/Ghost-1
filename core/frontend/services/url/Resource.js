@@ -1,11 +1,15 @@
 const EventEmitter = require('events').EventEmitter;
-const logging = require('../../../shared/logging');
+const logging = require('@tryghost/logging');
 const errors = require('@tryghost/errors');
 
 /**
  * Resource cache.
  */
 class Resource extends EventEmitter {
+    /**
+     * @param {('posts'|'pages'|'tags'|'authors')} type - of the resource
+     * @param {Object} obj - object data to sotre
+     */
     constructor(type, obj) {
         super();
 

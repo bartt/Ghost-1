@@ -1,7 +1,6 @@
 const ghostBookshelf = require('./base');
 const uuid = require('uuid');
 const _ = require('lodash');
-const sequence = require('../lib/promise/sequence');
 const config = require('../../shared/config');
 const crypto = require('crypto');
 
@@ -10,26 +9,130 @@ const Member = ghostBookshelf.Model.extend({
 
     defaults() {
         return {
+            status: 'free',
             subscribed: true,
-            uuid: uuid.v4()
+            uuid: uuid.v4(),
+            email_count: 0,
+            email_opened_count: 0
         };
     },
 
-    relationships: ['labels', 'stripeCustomers'],
+    filterExpansions() {
+        return [{
+            key: 'label',
+            replacement: 'labels.slug'
+        }, {
+            key: 'labels',
+            replacement: 'labels.slug'
+        }, {
+            key: 'product',
+            replacement: 'products.slug'
+        }, {
+            key: 'products',
+            replacement: 'products.slug'
+        }];
+    },
+
+    filterRelations() {
+        return {
+            labels: {
+                tableName: 'labels',
+                type: 'manyToMany',
+                joinTable: 'members_labels',
+                joinFrom: 'member_id',
+                joinTo: 'label_id'
+            },
+            products: {
+                tableName: 'products',
+                type: 'manyToMany',
+                joinTable: 'members_products',
+                joinFrom: 'member_id',
+                joinTo: 'product_id'
+            },
+            subscriptions: {
+                tableName: 'members_stripe_customers_subscriptions',
+                tableNameAs: 'subscriptions',
+                type: 'manyToMany',
+                joinTable: 'members_stripe_customers',
+                joinFrom: 'member_id',
+                joinTo: 'customer_id',
+                joinToForeign: 'customer_id'
+            }
+        };
+    },
+
+    relationships: ['products', 'labels', 'stripeCustomers', 'email_recipients'],
+
+    // do not delete email_recipients records when a member is destroyed. Recipient
+    // records are used for analytics and historical records
+    relationshipConfig: {
+        email_recipients: {
+            destroyRelated: false
+        }
+    },
 
     relationshipBelongsTo: {
+        products: 'products',
         labels: 'labels',
-        stripeCustomers: 'members_stripe_customers'
+        stripeCustomers: 'members_stripe_customers',
+        email_recipients: 'email_recipients'
+    },
+
+    productEvents() {
+        return this.hasMany('MemberProductEvent', 'member_id', 'id')
+            .query('orderBy', 'created_at', 'DESC');
+    },
+
+    products() {
+        return this.belongsToMany('Product', 'members_products', 'member_id', 'product_id')
+            .withPivot('sort_order')
+            .query('orderBy', 'sort_order', 'ASC')
+            .query((qb) => {
+                // avoids bookshelf adding a `DISTINCT` to the query
+                // we know the result set will already be unique and DISTINCT hurts query performance
+                qb.columns('products.*');
+            });
     },
 
     labels: function labels() {
         return this.belongsToMany('Label', 'members_labels', 'member_id', 'label_id')
             .withPivot('sort_order')
-            .query('orderBy', 'sort_order', 'ASC');
+            .query('orderBy', 'sort_order', 'ASC')
+            .query((qb) => {
+                // avoids bookshelf adding a `DISTINCT` to the query
+                // we know the result set will already be unique and DISTINCT hurts query performance
+                qb.columns('labels.*');
+            });
     },
 
     stripeCustomers() {
         return this.hasMany('MemberStripeCustomer', 'member_id', 'id');
+    },
+
+    stripeSubscriptions() {
+        return this.belongsToMany(
+            'StripeCustomerSubscription',
+            'members_stripe_customers',
+            'member_id',
+            'customer_id',
+            'id',
+            'customer_id'
+        );
+    },
+
+    email_recipients() {
+        return this.hasMany('EmailRecipient', 'member_id', 'id');
+    },
+
+    serialize(options) {
+        const defaultSerializedObject = ghostBookshelf.Model.prototype.serialize.call(this, options);
+
+        if (defaultSerializedObject.stripeSubscriptions) {
+            defaultSerializedObject.subscriptions = defaultSerializedObject.stripeSubscriptions;
+            delete defaultSerializedObject.stripeSubscriptions;
+        }
+
+        return defaultSerializedObject;
     },
 
     emitChange: function emitChange(event, options) {
@@ -37,13 +140,13 @@ const Member = ghostBookshelf.Model.extend({
         ghostBookshelf.Model.prototype.emitChange.bind(this)(this, eventToTrigger, options);
     },
 
-    onCreated: function onCreated(model, attrs, options) {
+    onCreated: function onCreated(model, options) {
         ghostBookshelf.Model.prototype.onCreated.apply(this, arguments);
 
         model.emitChange('added', options);
     },
 
-    onUpdated: function onUpdated(model, attrs, options) {
+    onUpdated: function onUpdated(model, options) {
         ghostBookshelf.Model.prototype.onUpdated.apply(this, arguments);
 
         model.emitChange('edited', options);
@@ -63,7 +166,11 @@ const Member = ghostBookshelf.Model.extend({
 
     onSaving: function onSaving(model, attr, options) {
         let labelsToSave = [];
-        let ops = [];
+
+        if (_.isUndefined(this.get('labels'))) {
+            this.unset('labels');
+            return;
+        }
 
         // CASE: detect lowercase/uppercase label slugs
         if (!_.isUndefined(this.get('labels')) && !_.isNull(this.get('labels'))) {
@@ -84,26 +191,24 @@ const Member = ghostBookshelf.Model.extend({
             this.set('labels', labelsToSave);
         }
 
-        // CASE: Detect existing labels with same case-insensitive name and replace
-        ops.push(function updateLabels() {
-            return ghostBookshelf.model('Label')
-                .findAll(Object.assign({
-                    columns: ['id', 'name']
-                }, _.pick(options, 'transacting')))
-                .then((labels) => {
-                    labelsToSave.forEach((label) => {
-                        let existingLabel = labels.find((lab) => {
-                            return label.name.toLowerCase() === lab.get('name').toLowerCase();
-                        });
-                        label.name = (existingLabel && existingLabel.get('name')) || label.name;
-                    });
-
-                    model.set('labels', labelsToSave);
-                });
-        });
-
         this.handleAttachedModels(model);
-        return sequence(ops);
+
+        // CASE: Detect existing labels with same case-insensitive name and replace
+        return ghostBookshelf.model('Label')
+            .findAll(Object.assign({
+                columns: ['id', 'name']
+            }, _.pick(options, 'transacting')))
+            .then((labels) => {
+                labelsToSave.forEach((label) => {
+                    let existingLabel = labels.find((lab) => {
+                        return label.name.toLowerCase() === lab.get('name').toLowerCase();
+                    });
+                    label.name = (existingLabel && existingLabel.get('name')) || label.name;
+                    label.id = (existingLabel && existingLabel.id) || label.id;
+                });
+
+                model.set('labels', labelsToSave);
+            });
     },
 
     handleAttachedModels: function handleAttachedModels(model) {
@@ -113,14 +218,14 @@ const Member = ghostBookshelf.Model.extend({
          * For the reason above, `detached` handler is using the scope of `detaching`
          * to access the models that are not present in `detached`.
          */
-        model.related('labels').once('detaching', function onDetached(collection, label) {
+        model.related('labels').once('detaching', function onDetaching(collection, label) {
             model.related('labels').once('detached', function onDetached(detachedCollection, response, options) {
                 label.emitChange('detached', options);
                 model.emitChange('label.detached', options);
             });
         });
 
-        model.related('labels').once('attaching', function onDetached(collection, labels) {
+        model.related('labels').once('attaching', function onDetaching(collection, labels) {
             model.related('labels').once('attached', function onDetached(detachedCollection, response, options) {
                 labels.forEach((label) => {
                     label.emitChange('attached', options);
@@ -164,37 +269,11 @@ const Member = ghostBookshelf.Model.extend({
         queryBuilder.orWhere('members.email', 'like', `%${query}%`);
     },
 
-    // TODO: hacky way to filter by members with an active subscription,
-    // replace with a proper way to do this via filter param.
-    // NOTE: assumes members will have a single subscription
-    customQuery: function customQuery(queryBuilder, options) {
-        if (options.paid === true) {
-            queryBuilder.innerJoin(
-                'members_stripe_customers',
-                'members.id',
-                'members_stripe_customers.member_id'
-            );
-            queryBuilder.innerJoin(
-                'members_stripe_customers_subscriptions',
-                function () {
-                    this.on(
-                        'members_stripe_customers.customer_id',
-                        'members_stripe_customers_subscriptions.customer_id'
-                    ).andOn(
-                        'members_stripe_customers_subscriptions.status',
-                        ghostBookshelf.knex.raw('?', ['active'])
-                    );
-                }
-            );
-        }
-
-        if (options.paid === false) {
-            queryBuilder.leftJoin(
-                'members_stripe_customers',
-                'members.id',
-                'members_stripe_customers.member_id'
-            );
-            queryBuilder.whereNull('members_stripe_customers.member_id');
+    orderRawQuery(field, direction) {
+        if (field === 'email_open_rate') {
+            return {
+                orderByRaw: `members.email_open_rate IS NOT NULL DESC, members.email_open_rate ${direction}`
+            };
         }
     },
 
@@ -223,8 +302,7 @@ const Member = ghostBookshelf.Model.extend({
         let options = ghostBookshelf.Model.permittedOptions.call(this, methodName);
 
         if (['findPage', 'findAll'].includes(methodName)) {
-            // TODO: remove 'paid' once it's possible to use in a filter
-            options = options.concat(['search', 'paid']);
+            options = options.concat(['search']);
         }
 
         return options;
@@ -255,6 +333,19 @@ const Member = ghostBookshelf.Model.extend({
             });
         }
         return ghostBookshelf.Model.destroy.call(this, unfilteredOptions);
+    },
+
+    getLabelRelations(data, unfilteredOptions = {}) {
+        const query = ghostBookshelf.knex('members_labels')
+            .select('id')
+            .where('label_id', data.labelId)
+            .whereIn('member_id', data.memberIds);
+
+        if (unfilteredOptions.transacting) {
+            query.transacting(unfilteredOptions.transacting);
+        }
+
+        return query;
     }
 });
 

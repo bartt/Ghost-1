@@ -17,6 +17,7 @@ const models = [
     'post',
     'role',
     'settings',
+    'custom-theme-setting',
     'session',
     'tag',
     'tag-public',
@@ -28,12 +29,31 @@ const models = [
     'api-key',
     'mobiledoc-revision',
     'member',
-    'action',
+    'offer',
+    'product',
+    'benefit',
+    'stripe-product',
+    'stripe-price',
+    'member-subscribe-event',
+    'member-paid-subscription-event',
+    'member-login-event',
+    'member-email-change-event',
+    'member-payment-event',
+    'member-status-event',
+    'member-product-event',
+    'member-analytic-event',
     'posts-meta',
     'member-stripe-customer',
     'stripe-customer-subscription',
     'email',
-    'label'
+    'email-batch',
+    'email-recipient',
+    'label',
+    'single-use-token',
+    'snippet',
+    // Action model MUST be loaded last as it loops through all of the registered models
+    // Please do not append items to this array.
+    'action'
 ];
 
 function init() {

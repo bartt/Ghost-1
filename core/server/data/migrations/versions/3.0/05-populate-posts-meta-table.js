@@ -1,8 +1,9 @@
+const Promise = require('bluebird');
 const postsMetaSchema = require('../../../schema').tables.posts_meta;
 const ObjectId = require('bson-objectid');
 const _ = require('lodash');
 const models = require('../../../../models');
-const logging = require('../../../../../shared/logging');
+const logging = require('@tryghost/logging');
 
 module.exports.config = {
     transaction: true
@@ -39,7 +40,7 @@ module.exports.up = (options) => {
                         });
                     }, {});
                     postsMetaEntry.post_id = post.get('id');
-                    postsMetaEntry.id = ObjectId.generate();
+                    postsMetaEntry.id = ObjectId().toHexString();
                     return postsMetaEntry;
                 });
 
@@ -66,13 +67,13 @@ module.exports.down = function (options) {
         .then(({models: postsMeta}) => {
             if (postsMeta.length > 0) {
                 logging.info(`Adding metadata for ${postsMeta.length} posts from posts_meta table`);
-                return Promise.map(postsMeta, (postsMeta) => {
+                return Promise.map(postsMeta, (meta) => {
                     let data = metaAttrs.reduce(function (obj, entry) {
                         return Object.assign(obj, {
-                            [entry]: postsMeta.get(entry)
+                            [entry]: meta.get(entry)
                         });
                     }, {});
-                    return localOptions.transacting('posts').where({id: postsMeta.get('post_id')}).update(data);
+                    return localOptions.transacting('posts').where({id: meta.get('post_id')}).update(data);
                 });
             } else {
                 logging.info('Skipping populating meta fields from posts_meta: found 0 entries');

@@ -1,11 +1,49 @@
 const hbs = require('express-hbs');
 const _ = require('lodash');
-const debug = require('ghost-ignition').debug('error-handler');
+const debug = require('@tryghost/debug')('error-handler');
 const errors = require('@tryghost/errors');
+const tpl = require('@tryghost/tpl');
 const config = require('../../../../shared/config');
-const {i18n} = require('../../../lib/common');
 const helpers = require('../../../../frontend/services/routing/helpers');
 const sentry = require('../../../../shared/sentry');
+
+const messages = {
+    oopsErrorTemplateHasError: 'Oops, seems there is an error in the error template.',
+    encounteredError: 'Encountered the error: ',
+    whilstTryingToRender: 'whilst trying to render an error page for the error: ',
+    pageNotFound: 'Page not found',
+    resourceNotFound: 'Resource not found',
+    actions: {
+        images: {
+            upload: 'upload image'
+        }
+    },
+    userMessages: {
+        BookshelfRelationsError: 'Database error, cannot {action}.',
+        InternalServerError: 'Internal server error, cannot {action}.',
+        IncorrectUsageError: 'Incorrect usage error, cannot {action}.',
+        NotFoundError: 'Resource not found error, cannot {action}.',
+        BadRequestError: 'Request not understood error, cannot {action}.',
+        UnauthorizedError: 'Authorisation error, cannot {action}.',
+        NoPermissionError: 'Permission error, cannot {action}.',
+        ValidationError: 'Validation error, cannot {action}.',
+        UnsupportedMediaTypeError: 'Unsupported media error, cannot {action}.',
+        TooManyRequestsError: 'Too many requests error, cannot {action}.',
+        MaintenanceError: 'Server down for maintenance, cannot {action}.',
+        MethodNotAllowedError: 'Method not allowed, cannot {action}.',
+        RequestEntityTooLargeError: 'Request too large, cannot {action}.',
+        TokenRevocationError: 'Token is not available, cannot {action}.',
+        VersionMismatchError: 'Version mismatch error, cannot {action}.',
+        DataExportError: 'Error exporting content.',
+        DataImportError: 'Duplicated entry, cannot save {action}.',
+        DatabaseVersionError: 'Database version compatibility error, cannot {action}.',
+        EmailError: 'Error sending email!',
+        ThemeValidationError: 'Theme validation error, cannot {action}.',
+        HostLimitError: 'Host Limit error, cannot {action}.',
+        DisabledFeatureError: 'Theme validation error, the {{{helperName}}} helper is not available. Cannot {action}.',
+        UpdateCollisionError: 'Saving failed! Someone else is editing this post.'
+    }
+};
 
 const escapeExpression = hbs.Utils.escapeExpression;
 const _private = {};
@@ -77,8 +115,10 @@ _private.JSONErrorRenderer = (err, req, res, next) => { // eslint-disable-line n
         errors: [{
             message: err.message,
             context: err.context,
+            help: err.help,
             errorType: err.errorType,
-            errorDetails: err.errorDetails
+            errorDetails: err.errorDetails,
+            ghostErrorCode: err.ghostErrorCode
         }]
     });
 };
@@ -103,8 +143,8 @@ _private.prepareUserMessage = (err, res) => {
             destroy: 'delete'
         };
 
-        if (i18n.doesTranslationKeyExist(`common.api.actions.${docName}.${method}`)) {
-            action = i18n.t(`common.api.actions.${docName}.${method}`);
+        if (_.get(messages.actions, [docName, method])) {
+            action = tpl(messages.actions[docName][method]);
         } else if (Object.keys(actionMap).includes(method)) {
             let resource = docName;
 
@@ -122,7 +162,7 @@ _private.prepareUserMessage = (err, res) => {
                 userError.context = err.message;
             }
 
-            userError.message = i18n.t(`errors.api.userMessages.${err.name}`, {action: action});
+            userError.message = tpl(messages.userMessages[err.name], {action: action});
         }
     }
 
@@ -146,10 +186,10 @@ _private.JSONErrorRendererV2 = (err, req, res, next) => { // eslint-disable-line
     });
 };
 
-_private.ErrorFallbackMessage = err => `<h1>${i18n.t('errors.errors.oopsErrorTemplateHasError')}</h1>
-     <p>${i18n.t('errors.errors.encounteredError')}</p>
+_private.ErrorFallbackMessage = err => `<h1>${tpl(messages.oopsErrorTemplateHasError)}</h1>
+     <p>${tpl(messages.encounteredError)}</p>
      <pre>${escapeExpression(err.message || err)}</pre>
-     <br ><p>${i18n.t('errors.errors.whilstTryingToRender')}</p>
+     <br ><p>${tpl(messages.whilstTryingToRender)}</p>
      ${err.statusCode} <pre>${escapeExpression(err.message || err)}</pre>`;
 
 _private.ThemeErrorRenderer = (err, req, res, next) => {
@@ -165,7 +205,7 @@ _private.ThemeErrorRenderer = (err, req, res, next) => {
     // Format Data
     const data = {
         message: err.message,
-        // @deprecated Remove in Ghost 4.0
+        // @deprecated Remove in Ghost 5.0
         code: err.statusCode,
         statusCode: err.statusCode,
         errorDetails: err.errorDetails || []
@@ -187,17 +227,17 @@ _private.ThemeErrorRenderer = (err, req, res, next) => {
 
     // @TODO use renderer here?!
     // Render Call - featuring an error handler for what happens if rendering fails
-    res.render(res._template, data, (err, html) => {
-        if (!err) {
+    res.render(res._template, data, (_err, html) => {
+        if (!_err) {
             return res.send(html);
         }
 
         // re-attach new error e.g. error template has syntax error or misusage
-        req.err = err;
+        req.err = _err;
 
         // And then try to explain things to the user...
         // Cheat and output the error using handlebars escapeExpression
-        return res.status(500).send(_private.ErrorFallbackMessage(err));
+        return res.status(500).send(_private.ErrorFallbackMessage(_err));
     });
 };
 
@@ -218,17 +258,17 @@ _private.HTMLErrorRenderer = (err, req, res, next) => { // eslint-disable-line n
         req.app.set('views', config.get('paths').defaultViews);
     }
 
-    res.render('error', data, (err, html) => {
-        if (!err) {
+    res.render('error', data, (_err, html) => {
+        if (!_err) {
             return res.send(html);
         }
 
         // re-attach new error e.g. error template has syntax error or misusage
-        req.err = err;
+        req.err = _err;
 
         // And then try to explain things to the user...
         // Cheat and output the error using handlebars escapeExpression
-        return res.status(500).send(_private.ErrorFallbackMessage(err));
+        return res.status(500).send(_private.ErrorFallbackMessage(_err));
     });
 };
 
@@ -239,11 +279,11 @@ _private.BasicErrorRenderer = (err, req, res, next) => { // eslint-disable-line 
 errorHandler.resourceNotFound = (req, res, next) => {
     // TODO, handle unknown resources & methods differently, so that we can also produce
     // 405 Method Not Allowed
-    next(new errors.NotFoundError({message: i18n.t('errors.errors.resourceNotFound')}));
+    next(new errors.NotFoundError({message: tpl(messages.resourceNotFound)}));
 };
 
 errorHandler.pageNotFound = (req, res, next) => {
-    next(new errors.NotFoundError({message: i18n.t('errors.errors.pageNotFound')}));
+    next(new errors.NotFoundError({message: tpl(messages.pageNotFound)}));
 };
 
 errorHandler.handleJSONResponse = [

@@ -7,7 +7,7 @@ const _ = require('lodash');
 const path = require('path');
 const url = require('url');
 const config = require('../../../../shared/config');
-const themes = require('../../themes');
+const themeEngine = require('../../theme-engine');
 const _private = {};
 
 /**
@@ -116,15 +116,15 @@ _private.pickTemplate = function pickTemplate(templateList, fallback) {
         templateList = [templateList];
     }
 
-    if (!themes.getActive()) {
+    if (!themeEngine.getActive()) {
         template = fallback;
     } else {
-        template = _.find(templateList, function (template) {
-            if (!template) {
+        template = _.find(templateList, function (templateName) {
+            if (!templateName) {
                 return;
             }
 
-            return themes.getActive().hasTemplate(template);
+            return themeEngine.getActive().hasTemplate(templateName);
         });
     }
 

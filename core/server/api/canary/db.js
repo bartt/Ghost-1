@@ -17,7 +17,7 @@ module.exports = {
         validation: {
             options: {
                 include: {
-                    values: exporter.EXCLUDED_TABLES
+                    values: exporter.BACKUP_TABLES
                 }
             }
         },
@@ -37,7 +37,7 @@ module.exports = {
         validation: {
             options: {
                 include: {
-                    values: exporter.EXCLUDED_TABLES
+                    values: exporter.BACKUP_TABLES
                 }
             }
         },
@@ -68,13 +68,16 @@ module.exports = {
     },
 
     importContent: {
+        headers: {
+            cacheInvalidate: true
+        },
         options: [
             'include'
         ],
         validation: {
             options: {
                 include: {
-                    values: exporter.EXCLUDED_TABLES
+                    values: exporter.BACKUP_TABLES
                 }
             }
         },
@@ -85,6 +88,9 @@ module.exports = {
     },
 
     deleteAllContent: {
+        headers: {
+            cacheInvalidate: true
+        },
         statusCode: 204,
         permissions: true,
         query() {

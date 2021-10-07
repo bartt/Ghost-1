@@ -1,6 +1,10 @@
 const models = require('../../models');
-const {i18n} = require('../../lib/common');
+const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
+
+const messages = {
+    couldNotGenerateSlug: 'Could not generate slug.'
+};
 
 const allowedTypes = {
     post: models.Post,
@@ -11,6 +15,9 @@ const allowedTypes = {
 module.exports = {
     docName: 'slugs',
     generate: {
+        headers: {
+            cacheInvalidate: true
+        },
         options: [
             'include',
             'type'
@@ -37,7 +44,7 @@ module.exports = {
                 .then((slug) => {
                     if (!slug) {
                         return Promise.reject(new errors.GhostError({
-                            message: i18n.t('errors.api.slugs.couldNotGenerateSlug')
+                            message: tpl(messages.couldNotGenerateSlug)
                         }));
                     }
                     return slug;

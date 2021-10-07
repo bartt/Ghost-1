@@ -1,6 +1,6 @@
 const path = require('path');
 const errors = require('@tryghost/errors');
-const logging = require('../../shared/logging');
+const logging = require('@tryghost/logging');
 const config = require('../../shared/config');
 const storage = require('../adapters/storage');
 const imageTransform = require('@tryghost/image-transform');
@@ -13,6 +13,7 @@ module.exports = {
     get blankDocument() {
         return {
             version: '0.3.1',
+            ghostVersion: '4.0',
             markups: [],
             atoms: [],
             cards: [],
@@ -31,8 +32,7 @@ module.exports = {
 
             cardFactory = new CardFactory({
                 siteUrl: config.get('url'),
-                contentImageSizes: config.get('imageOptimization:contentImageSizes'),
-                srcsets: config.get('imageOptimization:srcsets'),
+                imageOptimization: config.get('imageOptimization'),
                 canTransformImage(storagePath) {
                     const {ext} = path.parse(storagePath);
 
@@ -93,9 +93,7 @@ module.exports = {
     populateImageSizes: async function (mobiledocJson) {
         // do not require image-size until it's requested to avoid circular dependencies
         // shared/url-utils > server/lib/mobiledoc > server/lib/image/image-size > server/adapters/storage/utils
-        const imageSize = require('./image/image-size');
-        const urlUtils = require('../../shared/url-utils');
-        const storageInstance = storage.getStorage();
+        const {imageSize} = require('./image');
 
         async function getUnsplashSize(url) {
             const parsedUrl = new URL(url);
@@ -105,27 +103,6 @@ module.exports = {
             parsedUrl.searchParams.delete('dpr');
 
             return await imageSize.getImageSizeFromUrl(parsedUrl.href);
-        }
-
-        async function getLocalSize(url) {
-            // local storage adapter's .exists() expects image paths without any prefixes
-            const subdirRegex = new RegExp(`^${urlUtils.getSubdir()}`);
-            const contentRegex = new RegExp(`^/${urlUtils.STATIC_IMAGE_URL_PREFIX}`);
-            const storagePath = url.replace(subdirRegex, '').replace(contentRegex, '');
-
-            const {dir, name, ext} = path.parse(storagePath);
-            const [imageNameMatched, imageName, imageNumber] = name.match(/^(.+?)(-\d+)?$/) || [null];
-
-            if (!imageNameMatched || !(await storageInstance.exists(storagePath))) {
-                return;
-            }
-
-            // get the original/unoptimized image if it exists as that will have
-            // the maximum dimensions that srcset/handle-image-sizes can use
-            const originalImagePath = path.join(dir, `${imageName}_o${imageNumber || ''}${ext}`);
-            const imagePath = await storageInstance.exists(originalImagePath) ? originalImagePath : storagePath;
-
-            return await imageSize.getImageSizeFromStoragePath(imagePath);
         }
 
         const mobiledoc = JSON.parse(mobiledocJson);
@@ -140,7 +117,7 @@ module.exports = {
 
             const isUnsplash = payload.src.match(/images\.unsplash\.com/);
             try {
-                const size = isUnsplash ? await getUnsplashSize(payload.src) : await getLocalSize(payload.src);
+                const size = isUnsplash ? await getUnsplashSize(payload.src) : await imageSize.getOriginalImageSizeFromStorageUrl(payload.src);
 
                 if (size && size.width && size.height) {
                     payload.width = size.width;

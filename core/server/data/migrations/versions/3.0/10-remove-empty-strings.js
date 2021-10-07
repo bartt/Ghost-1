@@ -1,5 +1,5 @@
 const Promise = require('bluebird');
-const logging = require('../../../../../shared/logging');
+const logging = require('@tryghost/logging');
 const schema = require('../../../schema');
 
 /*
@@ -8,16 +8,16 @@ const schema = require('../../../schema');
  *   columns: ['custom_excerpt', 'description', 'etc...']
  * }]
  * */
-const tablesToUpdate = Object.keys(schema.tables).reduce((tablesToUpdate, tableName) => {
+const tablesToUpdate = Object.keys(schema.tables).reduce((tables, tableName) => {
     const table = schema.tables[tableName];
     const columns = Object.keys(table).filter((columnName) => {
         const column = table[columnName];
         return column.nullable && ['string', 'text'].includes(column.type);
     });
     if (!columns.length) {
-        return tablesToUpdate;
+        return tables;
     }
-    return tablesToUpdate.concat({
+    return tables.concat({
         tableName,
         columns
     });

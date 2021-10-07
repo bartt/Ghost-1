@@ -6,7 +6,7 @@
         "helperTemplates": "core/frontend/helpers/tpl/",
         "adminViews": "core/server/web/admin/views/",
         "defaultViews": "core/server/views/",
-        "defaultSettings": "core/frontend/services/settings/",
+        "defaultSettings": "core/server/services/route-settings/",
         "internalAppPath": "core/frontend/apps/",
         "internalAdaptersPath": "core/server/adapters/",
         "migrationPath": "core/server/data/migrations",
@@ -27,8 +27,8 @@
             "contentTypes": ["text/csv", "application/csv", "application/octet-stream", "application/vnd.ms-excel"]
         },
         "images": {
-            "extensions": [".jpg", ".jpeg", ".gif", ".png", ".svg", ".svgz", ".ico"],
-            "contentTypes": ["image/jpeg", "image/png", "image/gif", "image/svg+xml", "image/x-icon", "image/vnd.microsoft.icon"]
+            "extensions": [".jpg", ".jpeg", ".gif", ".png", ".svg", ".svgz", ".ico", ".webp"],
+            "contentTypes": ["image/jpeg", "image/png", "image/gif", "image/svg+xml", "image/x-icon", "image/vnd.microsoft.icon", "image/webp"]
         },
         "icons": {
             "extensions": [".png", ".ico"],
@@ -43,8 +43,8 @@
             "contentTypes": ["application/zip", "application/x-zip-compressed", "application/octet-stream"]
         },
         "redirects": {
-            "extensions": [".json"],
-            "contentTypes": ["text/plain", "application/octet-stream", "application/json"]
+            "extensions": [".json", ".yaml"],
+            "contentTypes": ["text/plain", "text/yaml", "application/octet-stream", "application/json", "application/yaml", "application/x-yaml"]
         },
         "routes": {
             "extensions": [".yaml"],
@@ -61,10 +61,15 @@
     },
     "api": {
         "versions": {
-            "all": ["v2", "v3", "canary"],
+            "all": ["v2", "v3", "v4", "canary"],
+            "default": "v4",
             "canary": {
                 "admin": "canary/admin",
                 "content": "canary/content"
+            },
+            "v4": {
+                "admin": "v4/admin",
+                "content": "v4/content"
             },
             "v3": {
                 "admin": "v3/admin",
@@ -77,6 +82,7 @@
         }
     },
     "imageOptimization": {
+        "defaultMaxWidth": 2000,
         "contentImageSizes": {
             "w600": {"width": 600},
             "w1000": {"width": 1000},

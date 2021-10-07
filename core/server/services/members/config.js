@@ -1,12 +1,12 @@
+const errors = require('@tryghost/errors');
+const tpl = require('@tryghost/tpl');
 const {URL} = require('url');
 const crypto = require('crypto');
+const createKeypair = require('keypair');
 const path = require('path');
 
-const COMPLIMENTARY_PLAN = {
-    name: 'Complimentary',
-    currency: 'usd',
-    interval: 'year',
-    amount: '0'
+const messages = {
+    incorrectKeyType: 'type must be one of "direct" or "connect".'
 };
 
 class MembersConfigProvider {
@@ -30,8 +30,12 @@ class MembersConfigProvider {
      * @private
      */
     _getDomain() {
-        const domain = this._urlUtils.urlFor('home', true).match(new RegExp('^https?://([^/:?#]+)(?:[/:?#]|$)', 'i'));
-        return domain && domain[1];
+        const url = this._urlUtils.urlFor('home', true).match(new RegExp('^https?://([^/:?#]+)(?:[/:?#]|$)', 'i'));
+        const domain = (url && url[1]) || '';
+        if (domain.startsWith('www.')) {
+            return domain.replace(/^(www)\.(?=[^/]*\..{2,5})/, '');
+        }
+        return domain;
     }
 
     getEmailFromAddress() {
@@ -44,21 +48,25 @@ class MembersConfigProvider {
         return fromAddress;
     }
 
-    getPublicPlans() {
-        const CURRENCY_SYMBOLS = {
-            USD: '$',
-            AUD: '$',
-            CAD: '$',
-            GBP: '£',
-            EUR: '€',
-            INR: '₹'
-        };
+    getEmailSupportAddress() {
+        const supportAddress = this._settingsCache.get('members_support_address') || 'noreply';
 
+        // Any fromAddress without domain uses site domain, like default setting `noreply`
+        if (supportAddress.indexOf('@') < 0) {
+            return `${supportAddress}@${this._getDomain()}`;
+        }
+        return supportAddress;
+    }
+
+    getAuthEmailFromAddress() {
+        return this.getEmailSupportAddress() || this.getEmailFromAddress();
+    }
+
+    getPublicPlans() {
         const defaultPriceData = {
             monthly: 0,
             yearly: 0,
-            currency: 'USD',
-            currency_symbol: CURRENCY_SYMBOLS.USD
+            currency: 'USD'
         };
 
         try {
@@ -73,7 +81,6 @@ class MembersConfigProvider {
             }, {});
 
             priceData.currency = plans[0].currency || 'USD';
-            priceData.currency_symbol = CURRENCY_SYMBOLS[priceData.currency.toUpperCase()];
 
             if (Number.isInteger(priceData.monthly) && Number.isInteger(priceData.yearly)) {
                 return priceData;
@@ -91,7 +98,7 @@ class MembersConfigProvider {
      */
     getStripeKeys(type) {
         if (type !== 'direct' && type !== 'connect') {
-            throw new Error();
+            throw new errors.IncorrectUsageError(tpl(messages.incorrectKeyType));
         }
 
         const secretKey = this._settingsCache.get(`stripe_${type === 'connect' ? 'connect_' : ''}secret_key`);
@@ -167,8 +174,6 @@ class MembersConfigProvider {
         }
 
         return {
-            publicKey: stripeApiKeys.publicKey,
-            secretKey: stripeApiKeys.secretKey,
             checkoutSuccessUrl: urls.checkoutSuccess,
             checkoutCancelUrl: urls.checkoutCancel,
             billingSuccessUrl: urls.billingSuccess,
@@ -181,13 +186,7 @@ class MembersConfigProvider {
             product: {
                 name: this._settingsCache.get('stripe_product_name')
             },
-            plans: [COMPLIMENTARY_PLAN].concat(this._settingsCache.get('stripe_plans') || []),
-            appInfo: {
-                name: 'Ghost',
-                partner_id: 'pp_partner_DKmRVtTs4j9pwZ',
-                version: this._ghostVersion.original,
-                url: 'https://ghost.org/'
-            }
+            plans: this._settingsCache.get('stripe_plans') || []
         };
     }
 
@@ -206,19 +205,47 @@ class MembersConfigProvider {
     }
 
     getAllowSelfSignup() {
-        return this._settingsCache.get('members_allow_free_signup');
+        // 'invite' and 'none' members signup access disables all signup
+        if (this._settingsCache.get('members_signup_access') !== 'all') {
+            return false;
+        }
+
+        // if stripe is not connected then selected plans mean nothing.
+        // disabling signup would be done by switching to "invite only" mode
+        if (!this.isStripeConnected()) {
+            return true;
+        }
+
+        // self signup must be available for free plan signup to work
+        const hasFreePlan = this._settingsCache.get('portal_plans').includes('free');
+        if (hasFreePlan) {
+            return true;
+        }
+
+        // signup access is enabled but there's no free plan, don't allow self signup
+        return false;
     }
 
     getTokenConfig() {
         const {href: membersApiUrl} = new URL(
-            this._urlUtils.getApiPath({version: 'v3', type: 'members'}),
+            this._urlUtils.getApiPath({version: 'v4', type: 'members'}),
             this._urlUtils.urlFor('admin', true)
         );
 
+        let privateKey = this._settingsCache.get('members_private_key');
+        let publicKey = this._settingsCache.get('members_public_key');
+
+        if (!privateKey || !publicKey) {
+            this._logging.warn('Could not find members_private_key, using dynamically generated keypair');
+            const keypair = createKeypair({bits: 1024});
+            privateKey = keypair.private;
+            publicKey = keypair.public;
+        }
+
         return {
             issuer: membersApiUrl,
-            publicKey: this._settingsCache.get('members_public_key'),
-            privateKey: this._settingsCache.get('members_private_key')
+            publicKey,
+            privateKey
         };
     }
 

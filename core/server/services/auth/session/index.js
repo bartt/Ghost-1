@@ -13,7 +13,7 @@ function getOriginOfRequest(req) {
     const origin = req.get('origin');
     const referrer = req.get('referrer') || urlUtils.getAdminUrl() || urlUtils.getSiteUrl();
 
-    if (!origin && !referrer) {
+    if (!origin && !referrer || origin === 'null') {
         return null;
     }
 
@@ -43,7 +43,10 @@ const ssoAdapter = adapterManager.getAdapter('sso');
 module.exports.createSessionFromToken = sessionFromToken({
     callNextWithError: false,
     createSession: sessionService.createSessionForUser,
-    findUserByLookup: ssoAdapter.getUserForIdentity,
-    getLookupFromToken: ssoAdapter.getIdentityFromCredentials,
-    getTokenFromRequest: ssoAdapter.getRequestCredentials
+    findUserByLookup: ssoAdapter.getUserForIdentity.bind(ssoAdapter),
+    getLookupFromToken: ssoAdapter.getIdentityFromCredentials.bind(ssoAdapter),
+    getTokenFromRequest: ssoAdapter.getRequestCredentials.bind(ssoAdapter)
 });
+
+module.exports.sessionService = sessionService;
+module.exports.deleteAllSessions = expressSession.deleteAllSessions;

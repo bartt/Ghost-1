@@ -17,25 +17,49 @@ const expectedProperties = {
     slug: ['slug'],
     invites: ['invites', 'meta'],
     themes: ['themes'],
+    members: ['members', 'meta'],
 
-    post: _(schema.posts)
-        .keys()
-        // by default we only return mobiledoc
-        .without('html', 'plaintext')
-        .without('visibility')
-        .without('locale')
-        .without('page')
-        .without('author_id', 'author')
-        // always returns computed properties
-        // primary_tag and primary_author properties are included
-        // only because authors and tags are always included
-        .concat('url', 'primary_tag', 'primary_author', 'excerpt')
-        .concat('authors', 'tags')
-        // returns meta fields from `posts_meta` schema
-        .concat(
-            ..._(schema.posts_meta).keys().without('post_id', 'id')
-        )
-    ,
+    site: ['title', 'description', 'logo', 'accent_color', 'url', 'version'],
+
+    post: [
+        'id',
+        'uuid',
+        'title',
+        'slug',
+        'mobiledoc',
+        'comment_id',
+        'feature_image',
+        'featured',
+        'status',
+        'visibility',
+        'email_recipient_filter',
+        'created_at',
+        'updated_at',
+        'published_at',
+        'custom_excerpt',
+        'codeinjection_head',
+        'codeinjection_foot',
+        'custom_template',
+        'canonical_url',
+        'url',
+        'primary_tag',
+        'primary_author',
+        'excerpt',
+        'authors',
+        'tags',
+        'email',
+        'og_image',
+        'og_title',
+        'og_description',
+        'twitter_image',
+        'twitter_title',
+        'twitter_description',
+        'meta_title',
+        'meta_description',
+        'email_subject',
+        'frontmatter',
+        'send_email_when_published'
+    ],
     user: _(schema.users)
         .keys()
         .without('visibility')
@@ -54,6 +78,14 @@ const expectedProperties = {
     subscriber: _(schema.subscribers)
         .keys()
     ,
+    member: _(schema.members)
+        .keys()
+        .concat('avatar_image')
+        .concat('comped')
+        .concat('labels')
+        .without('status')
+    ,
+    member_signin_url: ['member_id', 'url'],
     role: _(schema.roles)
         .keys()
     ,
@@ -68,6 +100,8 @@ const expectedProperties = {
     ,
     webhook: _(schema.webhooks)
         .keys()
+    ,
+    email_preview: ['html', 'subject', 'plaintext']
 };
 
 _.each(expectedProperties, (value, key) => {

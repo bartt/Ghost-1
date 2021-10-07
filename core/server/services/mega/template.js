@@ -1,6 +1,8 @@
 /* eslint indent: warn, no-irregular-whitespace: warn */
-module.exports = ({post, site}) => {
+const iff = (cond, yes, no) => (cond ? yes : no);
+module.exports = ({post, site, templateSettings}) => {
     const date = new Date();
+    const hasFeatureImageCaption = templateSettings.showFeatureImage && post.feature_image && post.feature_image_caption;
     return `<!doctype html>
 <html>
 
@@ -144,17 +146,16 @@ dd {
 blockquote {
     margin: 2em 0;
     padding: 0 25px 0 25px;
-    border-left: #15212A 2px solid;
-    font-style: italic;
-    font-size: 20px;
-    line-height: 1.75em;
+    border-left: ${templateSettings.accentColor || '#15212A'} 2px solid;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1.6em;
     letter-spacing: -0.2px;
 }
 
 blockquote p {
     margin: 0.8em 0;
-    font-size: 1.2em;
-    font-weight: 300;
+    font-size: 1em;
 }
 
 blockquote small {
@@ -267,6 +268,10 @@ figure blockquote p {
     font-size: 1em;
 }
 
+.header-image {
+    padding-top: 16px;
+}
+
 .site-icon {
     padding-bottom: 10px;
     padding-top: 20px;
@@ -302,12 +307,21 @@ figure blockquote p {
     font-weight: 600;
     text-align: center;
 }
+.post-title-serif {
+    font-family: Georgia, serif;
+}
+.post-title-left {
+    text-align: left;
+}
 
 .post-title-link {
     color: #15212A;
     display: block;
     text-align: center;
     margin-top: 50px;
+}
+.post-title-link-left {
+    text-align: left;
 }
 
 .post-meta,
@@ -319,6 +333,9 @@ figure blockquote p {
     letter-spacing: 0.2px;
     text-transform: uppercase;
     text-align: center;
+}
+.post-meta-left {
+    text-align: left;
 }
 
 .view-online {
@@ -336,6 +353,18 @@ figure blockquote p {
     width: 100%;
 }
 
+.feature-image-with-caption {
+    padding-bottom: 10px;
+}
+
+.feature-image-caption {
+    width: 100%;
+    padding-bottom: 30px;
+    text-align: center;
+    font-size: 13px;
+    color: #738a94;
+}
+
 .post-content {
     max-width: 600px !important;
     font-family: Georgia, serif;
@@ -346,7 +375,17 @@ figure blockquote p {
     border-bottom: 1px solid #e5eff5;
 }
 
-.post-content a {
+.post-content-sans-serif {
+    max-width: 600px !important;
+    font-size: 17px;
+    line-height: 1.5em;
+    color: #23323D;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e5eff5;
+}
+
+.post-content a,
+.post-content-sans-serif a {
     color: #08121A;
     text-decoration: underline;
 }
@@ -367,6 +406,8 @@ figure blockquote p {
 .kg-image-card img {
     display: block;
     margin: 0 auto;
+    width: auto;
+    height: auto !important;
 }
 
 .kg-bookmark-container {
@@ -380,7 +421,8 @@ figure blockquote p {
 }
 
 .kg-bookmark-content {
-    flex-grow: 1;
+    display: inline-block;
+    width: 100%;
     padding: 20px;
 }
 
@@ -406,21 +448,16 @@ figure blockquote p {
 }
 
 .kg-bookmark-thumbnail {
-    position: relative;
     min-width: 140px;
     max-width: 180px;
-    max-height: 100%;
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center;
+    border-radius: 0 2px 2px 0;
 }
 
 .kg-bookmark-thumbnail img {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 0 3px 3px 0;
-
-    object-fit: cover;
+    display: none;
 }
 
 .kg-bookmark-metadata {
@@ -443,17 +480,17 @@ figure blockquote p {
     line-height: 1.5em;
 }
 
-.kg-bookmark-author:after {
-    content: "•";
-    margin: 0 6px;
-}
-
 .kg-bookmark-publisher {
     overflow: hidden;
     max-width: 240px;
     line-height: 1.5em;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.kg-bookmark-publisher:before {
+    content: "•";
+    margin: 0 6px;
 }
 
 .kg-gallery-container {
@@ -521,8 +558,16 @@ figure blockquote p {
     margin-top: 20px;
     text-align: center;
     font-size: 13px;
-    padding-bottom: 40px;
-    padding-top: 50px;
+    padding-bottom: 10px;
+    padding-top: 10px;
+    padding-left: 30px;
+    padding-right: 30px;
+    line-height: 1.5em;
+}
+
+.footer a {
+    color: #738a94;
+    text-decoration: underline;
 }
 
 /* -------------------------------------
@@ -531,6 +576,7 @@ figure blockquote p {
 .btn {
     box-sizing: border-box;
     width: 100%;
+    display: table;
 }
 
 .btn>tbody>tr>td {
@@ -571,6 +617,16 @@ figure blockquote p {
     background-color: #3498db;
     border-color: #3498db;
     color: #ffffff;
+}
+
+.btn-accent table td {
+    background-color: ${templateSettings.adjustedAccentColor || '#3498db'};
+}
+
+.btn-accent a {
+    background-color: ${templateSettings.adjustedAccentColor || '#3498db'};
+    border-color: ${templateSettings.adjustedAccentColor || '#3498db'};
+    color: ${templateSettings.adjustedAccentContrastColor || '#ffffff'};
 }
 
 /* -------------------------------------
@@ -817,6 +873,23 @@ figure blockquote p {
         border-color: #34495e !important;
     }
 }
+
+
+${ templateSettings.showBadge ? `
+.footer-powered {
+    text-align: center;
+    padding-top: 70px;
+    padding-bottom: 40px;
+}
+
+.gh-powered {
+    width: 142px;
+    height: 30px;
+}
+` : ''}
+
+/* ----- ENDIF THE BROWSER ----- */
+
 </style>
 </head>
 
@@ -844,28 +917,44 @@ figure blockquote p {
                         <tr>
                             <td class="wrapper">
                                 <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+
+                                    ${ templateSettings.headerImage ? `
+                                    <tr>
+                                        <td class="header-image" width="100%" align="center"><img src="${templateSettings.headerImage}"${templateSettings.headerImageWidth ? ` width="${templateSettings.headerImageWidth}"` : ''}></td>
+                                    </tr>
+                                    ` : ''}
+
+
+                                    ${ templateSettings.showHeaderIcon || templateSettings.showHeaderTitle ? `
                                     <tr>
                                         <td class="site-info" width="100%" align="center">
                                             <table role="presentation" border="0" cellpadding="0" cellspacing="0">
-                                                ${ site.iconUrl ? `
+                                                ${ templateSettings.showHeaderIcon && site.iconUrl ? `
                                                 <tr>
                                                     <td class="site-icon"><a href="${site.url}"><img src="${site.iconUrl}" border="0"></a></td>
                                                 </tr>
                                                 ` : ``}
+                                                ${ templateSettings.showHeaderTitle ? `
                                                 <tr>
                                                     <td class="site-url"><div style="width: 100% !important;"><a href="${site.url}">${site.title}</a></div></td>
                                                 </tr>
+                                                ` : ``}
                                             </table>
                                         </td>
                                     </tr>
+                                    ` : ''}
+
+
                                     <tr>
-                                        <td class="post-title"><a href="${post.url}" class="post-title-link">${post.title}</a></td>
+                                        <td class="post-title ${templateSettings.titleFontCategory === 'serif' ? `post-title-serif` : `` } ${templateSettings.titleAlignment === 'left' ? `post-title-left` : ``}">
+                                            <a href="${post.url}" class="post-title-link ${templateSettings.titleAlignment === 'left' ? `post-title-link-left` : ``}">${post.title}</a>
+                                        </td>
                                     </tr>
                                     <tr>
-                                        <td align="center">
+                                        <td>
                                             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
                                                 <tr>
-                                                    <td class="post-meta">
+                                                    <td class="post-meta ${templateSettings.titleAlignment === 'left' ? `post-meta-left` : ``}">
                                                         By ${post.authors} –
                                                         ${post.published_at} –
                                                         <a href="${post.url}" class="view-online-link">View online →</a>
@@ -874,17 +963,21 @@ figure blockquote p {
                                             </table>
                                         </td>
                                     </tr>
-                                    ${post.feature_image ? `
+                                    ${ templateSettings.showFeatureImage && post.feature_image ? `
                                     <tr>
-                                        <td class="feature-image"><img src="${post.feature_image}"></td>
+                                        <td class="feature-image ${hasFeatureImageCaption ? 'feature-image-with-caption' : ''}"><img src="${post.feature_image}"${post.feature_image_width ? ` width="${post.feature_image_width}"` : ''}${post.feature_image_alt ? ` alt="${post.feature_image_alt}"` : ''}></td>
+                                    </tr>
+                                    ` : ``}
+                                    ${ hasFeatureImageCaption ? `
+                                    <tr>
+                                        <td class="feature-image-caption" align="center">${post.feature_image_caption}</td>
                                     </tr>
                                     ` : ``}
                                     <tr>
-                                        <td class="post-content">
+                                        <td class="${(templateSettings.bodyFontCategory === 'sans_serif') ? `post-content-sans-serif` : `post-content` }">
                                             <!-- POST CONTENT START -->
                                             ${post.html}
                                             <!-- POST CONTENT END -->
-
                                         </td>
                                     </tr>
                                 </table>
@@ -895,10 +988,17 @@ figure blockquote p {
 
                         <tr>
                             <td class="wrapper" align="center">
-                                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="padding-top: 40px; padding-bottom: 30px;">
+                                    ${iff(!!templateSettings.footerContent, `<tr><td class="footer">${templateSettings.footerContent}</td></tr>`, '')}
                                     <tr>
                                         <td class="footer">${site.title} &copy; ${date.getFullYear()} – <a href="%recipient.unsubscribe_url%">Unsubscribe</a></td>
                                     </tr>
+
+                                    ${ templateSettings.showBadge ? `
+                                    <tr>
+                                        <td class="footer-powered"><a href="https://ghost.org/"><img src="https://static.ghost.org/v4.0.0/images/powered.png" border="0" width="142" height="30" class="gh-powered" alt="Publish with Ghost"></a></td>
+                                    </tr>
+                                    ` : '' }
                                 </table>
                             </td>
                         </tr>

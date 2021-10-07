@@ -1,7 +1,6 @@
-const _debug = require('ghost-ignition').debug._base;
+const _debug = require('@tryghost/debug')._base;
 const debug = _debug('ghost:services:url:service');
 const _ = require('lodash');
-const {events} = require('../../../server/lib/common');
 const errors = require('@tryghost/errors');
 const UrlGenerator = require('./UrlGenerator');
 const Queue = require('./Queue');
@@ -9,8 +8,11 @@ const Urls = require('./Urls');
 const Resources = require('./Resources');
 const urlUtils = require('../../../shared/url-utils');
 
+// This listens to services.themes.api.changed, routing events, and it's own queue events
+const events = require('../../../server/lib/common/events');
+
 /**
- * The url service class holds all instances in a centralised place.
+ * The url service class holds all instances in a centralized place.
  * It's the public API you can talk to.
  * It will tell you if the url generation is in progress or not.
  */

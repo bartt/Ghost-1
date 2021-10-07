@@ -1,8 +1,12 @@
 const errors = require('@tryghost/errors');
-const {i18n} = require('../../../../lib/common');
+const tpl = require('@tryghost/tpl');
 const auth = require('../../../../services/auth');
 const shared = require('../../../shared');
 const apiMw = require('../../middleware');
+
+const messages = {
+    notImplemented: 'The server does not support the functionality required to fulfill the request.'
+};
 
 const notImplemented = function (req, res, next) {
     // CASE: user is logged in, allow
@@ -11,18 +15,17 @@ const notImplemented = function (req, res, next) {
     }
 
     // @NOTE: integrations have limited access for now
-    const whitelisted = {
-        // @NOTE: stable
+    //        all APIs are considered to be in "maintenance" stability index
+    const allowlisted = {
         site: ['GET'],
         posts: ['GET', 'PUT', 'DELETE', 'POST'],
         pages: ['GET', 'PUT', 'DELETE', 'POST'],
         images: ['POST'],
-        // @NOTE: experimental
+        webhooks: ['POST', 'PUT', 'DELETE'],
         tags: ['GET', 'PUT', 'DELETE', 'POST'],
         users: ['GET'],
         themes: ['POST', 'PUT'],
         config: ['GET'],
-        webhooks: ['POST', 'PUT', 'DELETE'],
         schedules: ['PUT'],
         db: ['POST']
     };
@@ -32,14 +35,14 @@ const notImplemented = function (req, res, next) {
     if (match) {
         const entity = match[1];
 
-        if (whitelisted[entity] && whitelisted[entity].includes(req.method)) {
+        if (allowlisted[entity] && allowlisted[entity].includes(req.method)) {
             return next();
         }
     }
 
     next(new errors.GhostError({
         errorType: 'NotImplementedError',
-        message: i18n.t('errors.api.common.notImplemented'),
+        message: tpl(messages.notImplemented),
         statusCode: '501'
     }));
 };

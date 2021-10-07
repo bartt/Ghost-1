@@ -4,7 +4,7 @@ const Promise = require('bluebird');
 const cheerio = require('cheerio');
 const _ = require('lodash');
 const config = require('../../../shared/config');
-const {i18n} = require('../../lib/common');
+const i18n = require('../../../shared/i18n');
 const externalRequest = require('../../lib/request-external');
 
 const findUrlWithProvider = (url) => {
@@ -39,7 +39,7 @@ function unknownProvider(url) {
 }
 
 function knownProvider(url) {
-    return extract(url, {maxwith: 1280}).catch((err) => {
+    return extract(url, {maxwidth: 1280}).catch((err) => {
         return Promise.reject(new errors.InternalServerError({
             message: err.message
         }));

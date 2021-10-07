@@ -2,13 +2,9 @@ const config = require('./config');
 const sentryConfig = config.get('sentry');
 const errors = require('@tryghost/errors');
 
-const expressNoop = function (req, res, next) {
-    next();
-};
-
 if (sentryConfig && !sentryConfig.disabled) {
     const Sentry = require('@sentry/node');
-    const version = require('../server/lib/ghost-version').full;
+    const version = require('../../package.json').version;
     const environment = config.get('env');
     Sentry.init({
         dsn: sentryConfig.dsn,
@@ -34,6 +30,10 @@ if (sentryConfig && !sentryConfig.disabled) {
         captureException: Sentry.captureException
     };
 } else {
+    const expressNoop = function (req, res, next) {
+        next();
+    };
+
     module.exports = {
         requestHandler: expressNoop,
         errorHandler: expressNoop,

@@ -1,4 +1,4 @@
-const debug = require('ghost-ignition').debug('web:members:app');
+const debug = require('@tryghost/debug')('members');
 const {URL} = require('url');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -7,6 +7,7 @@ const urlUtils = require('../../../shared/url-utils');
 const membersService = require('../../services/members');
 const middleware = membersService.middleware;
 const shared = require('../shared');
+const labs = require('../../../shared/labs');
 
 module.exports = function setupMembersApp() {
     debug('Members App setup start');
@@ -15,8 +16,8 @@ module.exports = function setupMembersApp() {
     // send 503 json response in case of maintenance
     membersApp.use(shared.middlewares.maintenance);
 
-    // Entire app is behind labs flag
-    membersApp.use(shared.middlewares.labs.members);
+    // Members API shouldn't be cached
+    membersApp.use(shared.middlewares.cacheControl('private'));
 
     // Support CORS for requests from the frontend
     const siteUrl = new URL(urlUtils.getSiteUrl());
@@ -34,15 +35,17 @@ module.exports = function setupMembersApp() {
     // We don't want to add global bodyParser middleware as that interfers with stripe webhook requests on - `/webhooks`.
     membersApp.get('/api/member', middleware.getMemberData);
     membersApp.put('/api/member', bodyParser.json({limit: '1mb'}), middleware.updateMemberData);
+    membersApp.post('/api/member/email', bodyParser.json({limit: '1mb'}), (req, res) => membersService.api.middleware.updateEmailAddress(req, res));
     membersApp.get('/api/session', middleware.getIdentityToken);
     membersApp.delete('/api/session', middleware.deleteSession);
     membersApp.get('/api/site', middleware.getMemberSiteData);
 
     // NOTE: this is wrapped in a function to ensure we always go via the getter
-    membersApp.post('/api/send-magic-link', (req, res, next) => membersService.api.middleware.sendMagicLink(req, res, next));
+    membersApp.post('/api/send-magic-link', bodyParser.json(), shared.middlewares.brute.membersAuth, (req, res, next) => membersService.api.middleware.sendMagicLink(req, res, next));
     membersApp.post('/api/create-stripe-checkout-session', (req, res, next) => membersService.api.middleware.createCheckoutSession(req, res, next));
     membersApp.post('/api/create-stripe-update-session', (req, res, next) => membersService.api.middleware.createCheckoutSetupSession(req, res, next));
     membersApp.put('/api/subscriptions/:id', (req, res, next) => membersService.api.middleware.updateSubscription(req, res, next));
+    membersApp.post('/api/events', labs.enabledMiddleware('membersActivity'), middleware.loadMemberSession, (req, res, next) => membersService.api.middleware.createEvents(req, res, next));
 
     // API error handling
     membersApp.use('/api', shared.middlewares.errorHandler.resourceNotFound);

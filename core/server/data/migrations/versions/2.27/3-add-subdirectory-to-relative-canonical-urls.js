@@ -1,4 +1,5 @@
-const logging = require('../../../../../shared/logging');
+const Promise = require('bluebird');
+const logging = require('@tryghost/logging');
 const config = require('../../../../../shared/config');
 const {URL} = require('url');
 

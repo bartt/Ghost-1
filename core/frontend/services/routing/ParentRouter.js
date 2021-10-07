@@ -7,13 +7,13 @@
  * Only allows for .use and .get at the moment - we don't have clear use-cases for anything else yet.
  */
 
-const debug = require('ghost-ignition').debug('services:routing:ParentRouter');
+const debug = require('@tryghost/debug')('routing:parent-router');
 
 const EventEmitter = require('events').EventEmitter;
 const express = require('../../../shared/express');
 const _ = require('lodash');
 const url = require('url');
-const security = require('../../../server/lib/security');
+const security = require('@tryghost/security');
 const urlUtils = require('../../../shared/url-utils');
 const registry = require('./registry');
 
@@ -142,6 +142,7 @@ class ParentRouter extends EventEmitter {
     mountRoute(path, controller) {
         debug(this.name + ': mountRoute for', path, controller.name);
         registry.setRoute(this.name, path);
+        this._router.post(path, controller);
         this._router.get(path, controller);
     }
 

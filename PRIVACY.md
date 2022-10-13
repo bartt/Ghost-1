@@ -22,6 +22,10 @@ All of the information and code related to this service is available in the [upd
 
 Ghost uses a number of third party services for specific functionality within Ghost.
 
+### JSDELIVR
+
+To easily load functionality for membership features & search, Ghost leverages [JSDELIVR](https://www.jsdelivr.com/) to provide a CDN for drop-in scripts. 
+
 ### Gravatar
 
 To automatically populate your profile picture, Ghost pings [Gravatar](http://gravatar.com) to see if your email address is associated with a profile there. If it is, we pull in your profile picture. If not: nothing happens.

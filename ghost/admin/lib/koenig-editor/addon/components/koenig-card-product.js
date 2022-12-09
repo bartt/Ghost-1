@@ -5,6 +5,7 @@ import {
     IMAGE_MIME_TYPES
 } from 'ghost-admin/components/gh-image-uploader';
 import {action} from '@ember/object';
+import {inject} from 'ghost-admin/decorators/inject';
 import {isBlank} from '@ember/utils';
 import {run} from '@ember/runloop';
 import {inject as service} from '@ember/service';
@@ -12,18 +13,19 @@ import {set} from '@ember/object';
 import {tracked} from '@glimmer/tracking';
 
 export default class KoenigCardProductComponent extends Component {
-    @service config;
     @service feature;
     @service store;
     @service membersUtils;
     @service ui;
 
-    @tracked files = null;
-    imageExtensions = IMAGE_EXTENSIONS;
-    imageMimeTypes = IMAGE_MIME_TYPES;
+    @inject config;
 
+    @tracked files = null;
     @tracked previewSrc = null;
     @tracked isDraggedOver = false;
+
+    imageExtensions = IMAGE_EXTENSIONS;
+    imageMimeTypes = IMAGE_MIME_TYPES;
 
     handlesDragDrop = true;
 
@@ -265,6 +267,8 @@ export default class KoenigCardProductComponent extends Component {
             this._productImageWidth = null;
             this._productImageHeight = null;
         });
+
+        this.files = null;
     }
 
     /**

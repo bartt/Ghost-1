@@ -943,10 +943,10 @@ describe('Post Model', function () {
                 });
             });
 
-            it('add scheduled post with published_at not in future-> we expect an error', function (done) {
+            it('add scheduled post with published_at more than 2 minutes in the past -> we expect an error', function (done) {
                 models.Post.add({
                     status: 'scheduled',
-                    published_at: moment().subtract(1, 'minute'),
+                    published_at: moment().subtract(3, 'minute'),
                     title: 'scheduled 1',
                     mobiledoc: markdownToMobiledoc('This is some content')
                 }, context).catch(function (err) {
@@ -957,17 +957,19 @@ describe('Post Model', function () {
                 });
             });
 
-            it('add scheduled post with published_at 1 minutes in future -> we expect an error', function (done) {
-                models.Post.add({
+            it('add scheduled post with published_at 1 minutes in past -> we expect success', async function () {
+                const post = await models.Post.add({
                     status: 'scheduled',
                     published_at: moment().add(1, 'minute'),
                     title: 'scheduled 1',
                     mobiledoc: markdownToMobiledoc('This is some content')
-                }, context).catch(function (err) {
-                    (err instanceof errors.ValidationError).should.eql(true);
-                    Object.keys(eventsTriggered).length.should.eql(0);
-                    done();
-                });
+                }, context);
+                should.exist(post);
+
+                Object.keys(eventsTriggered).length.should.eql(3);
+                should.exist(eventsTriggered['post.added']);
+                should.exist(eventsTriggered['post.scheduled']);
+                should.exist(eventsTriggered['user.attached']);
             });
 
             it('add scheduled post with published_at 10 minutes in future -> we expect success', function (done) {
@@ -1190,15 +1192,15 @@ describe('Post Model', function () {
             it('stores lexical as transform-ready and reads as absolute', async function () {
                 const post = {
                     title: 'Absolute->Transform-ready Lexical URL Transform Test',
-                    lexical: `{"root":{"children":[{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"local link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"http://127.0.0.1:2369/local"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"external link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"https://example.com/external"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}`
+                    lexical: `{"root":{"children":[{"type":"image","src":"http://127.0.0.1:2369/content/images/card.jpg"},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"local link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"http://127.0.0.1:2369/local"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"external link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"https://example.com/external"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}`
                 };
 
                 const createdPost = await models.Post.add(post, context);
-                createdPost.get('lexical').should.equal(`{"root":{"children":[{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"local link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"http://127.0.0.1:2369/local"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"external link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"https://example.com/external"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}`, 'Post.add result');
+                createdPost.get('lexical').should.equal(`{"root":{"children":[{"type":"image","src":"http://127.0.0.1:2369/content/images/card.jpg"},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"local link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"http://127.0.0.1:2369/local"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"external link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"https://example.com/external"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}`, 'Post.add result');
 
                 const knexResult = await db.knex('posts').where({id: createdPost.id});
                 const [knexPost] = knexResult;
-                knexPost.lexical.should.equal('{"root":{"children":[{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"local link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"__GHOST_URL__/local"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"external link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"https://example.com/external"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}', 'knex result');
+                knexPost.lexical.should.equal('{"root":{"children":[{"type":"image","src":"__GHOST_URL__/content/images/card.jpg"},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"local link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"__GHOST_URL__/local"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"external link","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"link","version":1,"rel":null,"target":null,"url":"https://example.com/external"}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}', 'knex result');
             });
         });
 

@@ -7,6 +7,7 @@ import {BLANK_DOC as BLANK_MOBILEDOC} from 'koenig-editor/components/koenig-edit
 import {compare, isBlank} from '@ember/utils';
 import {computed, observer} from '@ember/object';
 import {equal, filterBy, reads} from '@ember/object/computed';
+import {inject} from 'ghost-admin/decorators/inject';
 import {on} from '@ember/object/evented';
 import {inject as service} from '@ember/service';
 
@@ -67,7 +68,6 @@ function publishedAtCompare(postA, postB) {
 }
 
 export default Model.extend(Comparable, ValidationEngine, {
-    config: service(),
     session: service(),
     feature: service(),
     ghostPaths: service(),
@@ -75,10 +75,13 @@ export default Model.extend(Comparable, ValidationEngine, {
     settings: service(),
     membersUtils: service(),
 
+    config: inject(),
+
     displayName: 'post',
     validationType: 'post',
 
     count: attr(),
+    sentiment: attr(),
     createdAtUTC: attr('moment-utc'),
     excerpt: attr('string'),
     customExcerpt: attr('string'),
@@ -195,8 +198,8 @@ export default Model.extend(Comparable, ValidationEngine, {
             && this.email && this.email.status === 'failed';
     }),
 
-    showAudienceFeedback: computed('count', function () {
-        return this.feature.get('audienceFeedback') && this.count.sentiment !== undefined;
+    showAudienceFeedback: computed('sentiment', function () {
+        return this.feature.get('audienceFeedback') && this.sentiment !== undefined;
     }),
 
     showEmailOpenAnalytics: computed('hasBeenEmailed', 'isSent', 'isPublished', function () {
@@ -219,10 +222,10 @@ export default Model.extend(Comparable, ValidationEngine, {
             && this.settings.emailTrackClicks;
     }),
 
-    showAttributionAnalytics: computed('isPage', 'emailOnly', 'isPublished', 'membersUtils.isMembersInviteOnly', function () {
+    showAttributionAnalytics: computed('isPage', 'emailOnly', 'isPublished', 'membersUtils.isMembersInviteOnly', 'settings.membersTrackSources', function () {
         return (this.isPage || !this.emailOnly)
                 && this.isPublished
-                && this.feature.get('memberAttribution')
+                && this.settings.membersTrackSources
                 && !this.membersUtils.isMembersInviteOnly
                 && !this.session.user.isContributor;
     }),
@@ -231,6 +234,7 @@ export default Model.extend(Comparable, ValidationEngine, {
 
     hasAnalyticsPage: computed('isPost', 'showEmailOpenAnalytics', 'showEmailClickAnalytics', 'showAttributionAnalytics', function () {
         return this.isPost
+            && this.session.user.isAdmin
             && (
                 this.showEmailOpenAnalytics
                 || this.showEmailClickAnalytics
@@ -249,6 +253,8 @@ export default Model.extend(Comparable, ValidationEngine, {
         }
         return this.get('ghostPaths.url').join(blogUrl, previewKeyword, uuid);
     }),
+
+    isFeedbackEnabledForEmail: computed.reads('email.feedbackEnabled'),
 
     isPublic: computed('visibility', function () {
         return this.visibility === 'public' ? true : false;

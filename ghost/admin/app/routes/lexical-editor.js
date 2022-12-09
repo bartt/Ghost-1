@@ -1,16 +1,18 @@
 import $ from 'jquery';
 import AuthenticatedRoute from 'ghost-admin/routes/authenticated';
+import {inject} from 'ghost-admin/decorators/inject';
 import {run} from '@ember/runloop';
 import {inject as service} from '@ember/service';
 
 export default AuthenticatedRoute.extend({
-    config: service(),
     feature: service(),
     notifications: service(),
     router: service(),
     ui: service(),
 
     classNames: ['editor'],
+
+    config: inject(),
 
     beforeModel() {
         if (!this.config.editor?.url) {
@@ -21,6 +23,16 @@ export default AuthenticatedRoute.extend({
     activate() {
         this._super(...arguments);
         this.ui.set('isFullScreen', true);
+    },
+
+    setupController(controller, model, transition) {
+        if (transition.from?.name === 'posts.analytics') {
+            controller.fromAnalytics = true;
+        }
+    },
+
+    resetController(controller) {
+        controller.fromAnalytics = false;
     },
 
     deactivate() {

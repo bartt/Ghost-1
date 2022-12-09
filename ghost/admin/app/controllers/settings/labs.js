@@ -3,6 +3,7 @@ import {inject as service} from '@ember/service';
 /* eslint-disable ghost/ember/alias-model-in-controller */
 import Controller from '@ember/controller';
 import DeleteAllModal from '../../components/settings/labs/delete-all-content-modal';
+import ImportContentModal from '../../components/modal-import-content';
 import RSVP from 'rsvp';
 import config from 'ghost-admin/config/environment';
 import {
@@ -11,6 +12,7 @@ import {
     isUnsupportedMediaTypeError
 } from 'ghost-admin/services/ajax';
 import {action} from '@ember/object';
+import {inject} from 'ghost-admin/decorators/inject';
 import {isBlank} from '@ember/utils';
 import {isArray as isEmberArray} from '@ember/array';
 import {run} from '@ember/runloop';
@@ -38,7 +40,6 @@ const YAML_MIME_TYPE = [
 @classic
 export default class LabsController extends Controller {
     @service ajax;
-    @service config;
     @service feature;
     @service ghostPaths;
     @service modals;
@@ -46,6 +47,8 @@ export default class LabsController extends Controller {
     @service session;
     @service settings;
     @service utils;
+
+    @inject config;
 
     importErrors = null;
     importSuccessful = false;
@@ -119,7 +122,7 @@ export default class LabsController extends Controller {
                 // reload settings
                 return this.settings.reload().then((settings) => {
                     this.feature.fetch();
-                    this.config.set('blogTitle', settings.title);
+                    this.config.blogTitle = settings.title;
                 });
             });
         }).catch((response) => {
@@ -135,6 +138,11 @@ export default class LabsController extends Controller {
         }).finally(() => {
             this.set('uploadButtonText', 'Import');
         });
+    }
+
+    @action
+    importContent() {
+        return this.modals.open(ImportContentModal);
     }
 
     @action

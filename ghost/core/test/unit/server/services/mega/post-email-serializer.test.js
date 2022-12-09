@@ -7,7 +7,8 @@ const urlService = require('../../../../../core/server/services/url');
 const labs = require('../../../../../core/shared/labs');
 const {parseReplacements, renderEmailForSegment, serialize, _getTemplateSettings, createUnsubscribeUrl, createPostSignupUrl, _PostEmailSerializer} = require('../../../../../core/server/services/mega/post-email-serializer');
 const {HtmlValidate} = require('html-validate');
-            
+const audienceFeedback = require('../../../../../core/server/services/audience-feedback');
+
 function assertKeys(object, keys) {
     assert.deepStrictEqual(Object.keys(object).sort(), keys.sort());
 }
@@ -16,7 +17,7 @@ describe('Post Email Serializer', function () {
     afterEach(function () {
         sinon.restore();
     });
-    
+
     it('creates replacement pattern for valid format and value', function () {
         const html = '<html>Hey %%{first_name}%%, what is up?</html>';
         const plaintext = 'Hey %%{first_name}%%, what is up?';
@@ -34,6 +35,46 @@ describe('Post Email Serializer', function () {
         assert.equal(replaced[1].recipientProperty, 'member_first_name');
     });
 
+    it('reuses the same replacement pattern when used multiple times', function () {
+        const html = '<html>Hey %%{first_name}%%, what is up? Just repeating %%{first_name}%%</html>';
+        const plaintext = 'Hey %%{first_name}%%, what is up? Just repeating %%{first_name}%%';
+
+        const replaced = parseReplacements({
+            html,
+            plaintext
+        });
+
+        assert.equal(replaced.length, 2);
+        assert.equal(replaced[0].format, 'html');
+        assert.equal(replaced[0].recipientProperty, 'member_first_name');
+
+        assert.equal(replaced[1].format, 'plaintext');
+        assert.equal(replaced[1].recipientProperty, 'member_first_name');
+    });
+
+    it('creates multiple replacement pattern for valid format and value', function () {
+        const html = '<html>Hey %%{first_name}%%, %%{uuid}%% %%{first_name}%% %%{uuid}%%</html>';
+        const plaintext = 'Hey %%{first_name}%%, %%{uuid}%% %%{first_name}%% %%{uuid}%%';
+
+        const replaced = parseReplacements({
+            html,
+            plaintext
+        });
+
+        assert.equal(replaced.length, 4);
+        assert.equal(replaced[0].format, 'html');
+        assert.equal(replaced[0].recipientProperty, 'member_first_name');
+
+        assert.equal(replaced[1].format, 'html');
+        assert.equal(replaced[1].recipientProperty, 'member_uuid');
+
+        assert.equal(replaced[2].format, 'plaintext');
+        assert.equal(replaced[2].recipientProperty, 'member_first_name');
+
+        assert.equal(replaced[3].format, 'plaintext');
+        assert.equal(replaced[3].recipientProperty, 'member_uuid');
+    });
+
     it('does not create replacements for unsupported variable names', function () {
         const html = '<html>Hey %%{last_name}%%, what is up?</html>';
         const plaintext = 'Hey %%{age}%%, what is up?';
@@ -49,6 +90,17 @@ describe('Post Email Serializer', function () {
     describe('serialize', function () {
         afterEach(function () {
             sinon.restore();
+        });
+
+        beforeEach(function () {
+            // Stub not working because service is undefined
+            audienceFeedback.service = {
+                buildLink: (uuid, postId, score) => {
+                    const url = new URL('https://feedback.com');
+                    url.hash = `#/feedback/${postId}/${score}/?uuid=${encodeURIComponent(uuid)}`;
+                    return url;
+                }
+            };
         });
 
         it('should output valid HTML and escape HTML characters in mobiledoc', async function () {
@@ -137,7 +189,7 @@ describe('Post Email Serializer', function () {
 
             // Improve debugging and show a snippet of the invalid HTML instead of just the line number or a huge HTML-dump
             const parsedErrors = [];
-            
+
             if (!report.valid) {
                 const lines = output.html.split('\n');
                 const messages = report.results[0].messages;
@@ -343,6 +395,182 @@ describe('Post Email Serializer', function () {
             assert(output.html.includes('<!-- POST CONTENT END -->'));
             assert(!output.html.includes('<!--members-only-->'));
             assert(!output.html.includes('<!-- PAYWALL -->'));
+        });
+
+        it('should hide feedback buttons and ignore feedback_enabled if alpha flag disabled', async function () {
+            sinon.stub(labs, 'isSet').returns(false);
+            sinon.stub(_PostEmailSerializer, 'serializePostModel').callsFake(async () => {
+                return {
+                    url: 'https://testpost.com/',
+                    title: 'This is a test',
+                    excerpt: 'This is a test',
+                    authors: 'This is a test',
+                    feature_image_alt: 'This is a test',
+                    feature_image_caption: 'This is a test',
+
+                    // eslint-disable-next-line
+                    mobiledoc: JSON.stringify({"version":"0.3.1","atoms":[],"cards":[],"markups":[],"sections":[[1,"p",[[0,[],0,"Free content only"]]]],"ghostVersion":"4.0"})
+                };
+            });
+            const customSettings = {
+                accent_color: '#000099',
+                timezone: 'UTC'
+            };
+
+            const settingsMock = sinon.stub(settingsCache, 'get');
+            settingsMock.callsFake(function (key, options) {
+                if (customSettings[key]) {
+                    return customSettings[key];
+                }
+
+                return settingsMock.wrappedMethod.call(settingsCache, key, options);
+            });
+            const template = {
+                name: 'My newsletter',
+                header_image: '',
+                show_header_icon: true,
+                show_header_title: true,
+                show_feature_image: true,
+                title_font_category: 'sans-serif',
+                title_alignment: 'center',
+                body_font_category: 'serif',
+                show_badge: true,
+                show_header_name: true,
+                feedback_enabled: true,
+                footer_content: 'footer'
+            };
+            const newsletterMock = {
+                get: function (key) {
+                    return template[key];
+                },
+                toJSON: function () {
+                    return template;
+                }
+            };
+
+            const output = await serialize({}, newsletterMock, {isBrowserPreview: false});
+            assert(!output.html.includes('%{feedback_button_like}%'));
+            assert(!output.html.includes('%{feedback_button_dislike}%'));
+
+            template.feedback_enabled = true;
+
+            const outputWithButtons = await serialize({}, newsletterMock, {isBrowserPreview: false});
+            assert(!outputWithButtons.html.includes('%{feedback_button_like}%'));
+            assert(!outputWithButtons.html.includes('%{feedback_button_dislike}%'));
+        });
+
+        /*it('should hide/show feedback buttons depending on feedback_enabled flag', async function () {
+            sinon.stub(labs, 'isSet').returns(true);
+            sinon.stub(_PostEmailSerializer, 'serializePostModel').callsFake(async () => {
+                return {
+                    url: 'https://testpost.com/',
+                    title: 'This is a test',
+                    excerpt: 'This is a test',
+                    authors: 'This is a test',
+                    feature_image_alt: 'This is a test',
+                    feature_image_caption: 'This is a test',
+
+                    // eslint-disable-next-line
+                    mobiledoc: JSON.stringify({"version":"0.3.1","atoms":[],"cards":[],"markups":[],"sections":[[1,"p",[[0,[],0,"Free content only"]]]],"ghostVersion":"4.0"})
+                };
+            });
+            const customSettings = {
+                accent_color: '#000099',
+                timezone: 'UTC'
+            };
+
+            const settingsMock = sinon.stub(settingsCache, 'get');
+            settingsMock.callsFake(function (key, options) {
+                if (customSettings[key]) {
+                    return customSettings[key];
+                }
+
+                return settingsMock.wrappedMethod.call(settingsCache, key, options);
+            });
+            const template = {
+                name: 'My newsletter',
+                header_image: '',
+                show_header_icon: true,
+                show_header_title: true,
+                show_feature_image: true,
+                title_font_category: 'sans-serif',
+                title_alignment: 'center',
+                body_font_category: 'serif',
+                show_badge: true,
+                show_header_name: true,
+                feedback_enabled: false,
+                footer_content: 'footer'
+            };
+            const newsletterMock = {
+                get: function (key) {
+                    return template[key];
+                },
+                toJSON: function () {
+                    return template;
+                }
+            };
+
+            const output = await serialize({}, newsletterMock, {isBrowserPreview: false});
+            assert(!output.html.includes('%{feedback_button_like}%'));
+            assert(!output.html.includes('%{feedback_button_dislike}%'));
+
+            template.feedback_enabled = true;
+
+            const outputWithButtons = await serialize({}, newsletterMock, {isBrowserPreview: false});
+            assert(outputWithButtons.html.includes('%{feedback_button_like}%'));
+            assert(outputWithButtons.html.includes('%{feedback_button_dislike}%'));
+        });*/
+
+        it('handles lexical posts', async function () {
+            sinon.stub(_PostEmailSerializer, 'serializePostModel').callsFake(async () => {
+                return {
+                    url: 'https://testpost.com/',
+                    title: 'This is a lexical test',
+                    excerpt: 'This is a lexical test',
+                    authors: 'Mr. Test',
+
+                    lexical: '{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Bacon ipsum dolor amet porchetta drumstick swine ribeye, tail leberkas beef short loin fatback turducken salami pastrami ball tip shankle ground round. Jowl shankle bacon, short ribs cow ham pork loin meatloaf beef chislic tenderloin.","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"altText":"","caption":"🤤","src":"http://localhost:2368/content/images/2022/11/michelle-shelly-captures-it-TJzhTJ2U8Jo-unsplash.jpg","type":"image"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Spare ribs chicken fatback shoulder. Flank swine kielbasa alcatra, porchetta capicola pork loin corned beef short ribs fatback.","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1},{"altText":"","caption":"","src":"http://localhost:2368/content/images/2022/11/towfiqu-barbhuiya-yPYOG4_j6YI-unsplash-1.jpg","type":"image"},{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Prosciutto drumstick porchetta biltong leberkas tri-tip short ribs sausage picanha ham hock. Turducken buffalo venison hamburger landjaeger. Hamburger burgdoggen meatloaf pork belly picanha drumstick salami short ribs ham hock pork loin biltong chicken.","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}'
+                };
+            });
+            const customSettings = {
+                accent_color: '#000099',
+                timezone: 'UTC'
+            };
+
+            const settingsMock = sinon.stub(settingsCache, 'get');
+            settingsMock.callsFake(function (key, options) {
+                if (customSettings[key]) {
+                    return customSettings[key];
+                }
+
+                return settingsMock.wrappedMethod.call(settingsCache, key, options);
+            });
+            const template = {
+                name: 'My newsletter',
+                header_image: '',
+                show_header_icon: true,
+                show_header_title: true,
+                show_feature_image: true,
+                title_font_category: 'sans-serif',
+                title_alignment: 'center',
+                body_font_category: 'serif',
+                show_badge: true,
+                show_header_name: true,
+                // Note: we don't need to check the footer content because this should contain valid HTML (not text)
+                footer_content: '<span>Footer content with valid HTML</span>'
+            };
+            const newsletterMock = {
+                get: function (key) {
+                    return template[key];
+                },
+                toJSON: function () {
+                    return template;
+                }
+            };
+
+            const output = await serialize({}, newsletterMock, {isBrowserPreview: false});
+            assert(output.html.includes('Bacon ipsum dolor amet'));
+            assert(output.html.includes('michelle-shelly-captures-it-TJzhTJ2U8Jo-unsplash.jpg'));
         });
     });
 
@@ -708,6 +936,7 @@ describe('Post Email Serializer', function () {
                         title_alignment: 'center',
                         body_font_category: 'serif',
                         show_badge: true,
+                        feedback_enabled: false,
                         footer_content: 'footer',
                         show_header_name: true
                     }[key];
@@ -723,6 +952,7 @@ describe('Post Email Serializer', function () {
                 titleAlignment: 'center',
                 bodyFontCategory: 'serif',
                 showBadge: true,
+                feedbackEnabled: false,
                 footerContent: 'footer',
                 accentColor: '#000099',
                 adjustedAccentColor: '#000099',

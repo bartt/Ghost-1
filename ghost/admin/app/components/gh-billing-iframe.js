@@ -1,78 +1,87 @@
-import Component from '@ember/component';
-import classic from 'ember-classic-decorator';
+import Component from '@glimmer/component';
+import {action} from '@ember/object';
 import {htmlSafe} from '@ember/template';
+import {inject} from 'ghost-admin/decorators/inject';
 import {inject as service} from '@ember/service';
+import {tracked} from '@glimmer/tracking';
 
-@classic
 export default class GhBillingIframe extends Component {
-    @service billing;
-    @service config;
-    @service ghostPaths;
     @service ajax;
+    @service billing;
+    @service ghostPaths;
     @service notifications;
+    @service session;
 
-    isOwner = null;
-    fetchingSubscription = false;
+    @inject config;
 
-    didInsertElement() {
-        super.didInsertElement(...arguments);
+    @tracked isOwner = null;
 
+    willDestroy() {
+        super.willDestroy(...arguments);
+        window.removeEventListener('message', this.handleIframeMessage);
+    }
+
+    @action
+    setup() {
         this.billing.getBillingIframe().src = this.billing.getIframeURL();
+        window.addEventListener('message', this.handleIframeMessage);
+    }
 
-        window.addEventListener('message', (event) => {
-            if (event?.data) {
-                if (event.data?.request === 'token') {
-                    this._handleTokenRequest();
-                }
+    @action
+    async handleIframeMessage(event) {
+        if (this.isDestroyed || this.isDestroying) {
+            return;
+        }
 
-                if (event.data?.request === 'forceUpgradeInfo') {
-                    this._handleForceUpgradeRequest();
-                }
-
-                if (event.data?.subscription) {
-                    this._handleSubscriptionUpdate(event.data);
-                }
+        // only process messages coming from the billing iframe
+        if (event?.data && this.billing.getIframeURL().includes(event?.origin)) {
+            if (event.data?.request === 'token') {
+                this._handleTokenRequest();
             }
-        });
+
+            if (event.data?.request === 'forceUpgradeInfo') {
+                this._handleForceUpgradeRequest();
+            }
+
+            if (event.data?.subscription) {
+                this._handleSubscriptionUpdate(event.data);
+            }
+        }
     }
 
     _handleTokenRequest() {
-        this.set('fetchingSubscription', false);
-        let token;
-        const ghostIdentityUrl = this.get('ghostPaths.url').api('identities');
+        const handleNoPermission = () => {
+            // no permission means the current user requesting the token is not the owner of the site.
+            this.isOwner = false;
 
+            // Avoid letting the BMA waiting for a message and send an empty token response instead
+            this.billing.getBillingIframe().contentWindow.postMessage({
+                request: 'token',
+                response: null
+            }, '*');
+        };
+
+        if (!this.session.user?.isOwnerOnly) {
+            handleNoPermission();
+            return;
+        }
+
+        const ghostIdentityUrl = this.ghostPaths.url.api('identities');
         this.ajax.request(ghostIdentityUrl).then((response) => {
-            token = response && response.identities && response.identities[0] && response.identities[0].token;
+            const token = response?.identities?.[0]?.token;
             this.billing.getBillingIframe().contentWindow.postMessage({
                 request: 'token',
                 response: token
             }, '*');
 
-            this.set('isOwner', true);
+            this.isOwner = true;
         }).catch((error) => {
-            if (error.payload?.errors && error.payload.errors[0]?.type === 'NoPermissionError') {
-                // no permission means the current user requesting the token is not the owner of the site.
-                this.set('isOwner', false);
-
-                // Avoid letting the BMA waiting for a message and send an empty token response instead
-                this.billing.getBillingIframe().contentWindow.postMessage({
-                    request: 'token',
-                    response: null
-                }, '*');
+            if (error.payload?.errors?.[0]?.type === 'NoPermissionError') {
+                handleNoPermission();
             } else {
                 throw error;
             }
         });
-
-        // NOTE: the handler is placed here to avoid additional logic to check if iframe has loaded
-        //       receiving a 'token' request is an indication that page is ready
-        if (!this.fetchingSubscription && !this.billing.get('subscription') && token) {
-            this.set('fetchingSubscription', true);
-            this.billing.getBillingIframe().contentWindow.postMessage({
-                query: 'getSubscription',
-                response: 'subscription'
-            }, '*');
-        }
     }
 
     _handleForceUpgradeRequest() {
@@ -97,8 +106,8 @@ export default class GhBillingIframe extends Component {
     }
 
     _handleSubscriptionUpdate(data) {
-        this.billing.set('subscription', data.subscription);
-        this.billing.set('checkoutRoute', data?.checkoutRoute || '/plans');
+        this.billing.subscription = data.subscription;
+        this.billing.checkoutRoute = data?.checkoutRoute ?? '/plans';
 
         if (data.subscription.status === 'active' && this.config.hostSettings?.forceUpgrade) {
             // config might not be updated after a subscription has been set to active.
@@ -123,7 +132,7 @@ export default class GhBillingIframe extends Component {
         ) {
             // The action param will be picked up on a transition from the router and can
             // then send the destination route as a message to the BMA, which then handles the redirect.
-            const checkoutAction = this.billing.get('billingRouteRoot') + '?action=checkout';
+            const checkoutAction = this.billing.billingRouteRoot + '?action=checkout';
 
             this.notifications.showAlert(htmlSafe(`Your audience has grown! To continue publishing, the site owner must confirm pricing for this number of members <a href="${checkoutAction}">here</a>`), {type: 'warn', key: 'billing.exceeded'});
         } else {

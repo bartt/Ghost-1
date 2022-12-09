@@ -7,8 +7,8 @@ import ghostPaths from 'ghost-admin/utils/ghost-paths';
 import moment from 'moment-timezone';
 import {A} from '@ember/array';
 import {action} from '@ember/object';
-import {capitalize} from '@ember/string';
 import {ghPluralize} from 'ghost-admin/helpers/gh-pluralize';
+import {inject} from 'ghost-admin/decorators/inject';
 import {resetQueryParams} from 'ghost-admin/helpers/reset-query-params';
 import {inject as service} from '@ember/service';
 import {task, timeout} from 'ember-concurrency';
@@ -27,7 +27,6 @@ const PAID_PARAMS = [{
 
 export default class MembersController extends Controller {
     @service ajax;
-    @service config;
     @service ellaSparse;
     @service feature;
     @service ghostPaths;
@@ -37,6 +36,8 @@ export default class MembersController extends Controller {
     @service store;
     @service utils;
     @service settings;
+
+    @inject config;
 
     queryParams = [
         'label',
@@ -62,6 +63,11 @@ export default class MembersController extends Controller {
     @tracked _availableLabels = A([]);
 
     @tracked parseFilterParamCounter = 0;
+
+    /**
+     * Flag used to determine if we should return to the analytics page
+     */
+    fromAnalytics = null;
 
     paidParams = PAID_PARAMS;
 
@@ -162,34 +168,32 @@ export default class MembersController extends Controller {
         return !!(this.label || this.paidParam || this.searchParam || this.filterParam);
     }
 
-    get filterColumns() {
-        const defaultColumns = ['name', 'email', 'email_open_rate', 'created_at', 'status', 'tier'];
-        const availableFilters = this.filters.length ? this.filters : this.softFilters;
-        return availableFilters.map((filter) => {
-            return filter.type;
-        }).filter((f, idx, arr) => {
-            return arr.indexOf(f) === idx;
-        }).filter(d => !defaultColumns.includes(d));
+    get availableFilters() {
+        return this.softFilters.length ? this.softFilters : this.filters;
     }
 
-    get filterColumnLabels() {
-        const filterColumnLabelMap = {
-            subscribed: 'Subscribed to email',
-            'subscriptions.plan_interval': 'Billing period',
-            'subscriptions.status': 'Subscription Status',
-            'subscriptions.start_date': 'Paid start date',
-            'subscriptions.current_period_end': 'Next billing date',
-            tier: 'Membership tier'
-        };
-        return this.filterColumns.filter((d) => {
-            // Exclude Signup and conversions (data not yet available in backend when browsing members)
-            return !['signup', 'conversion', 'emails.post_id', 'clicked_links.post_id', 'opened_emails.post_id'].includes(d);
-        }).map((d) => {
-            return {
-                name: d,
-                label: filterColumnLabelMap[d] ? filterColumnLabelMap[d] : capitalize(d.replace(/_/g, ' '))
-            };
-        });
+    get filterColumns() {
+        return this.availableFilters.flatMap((filter) => {
+            if (filter.properties?.getColumns) {
+                return filter.properties?.getColumns(filter).map((c) => {
+                    return {
+                        label: filter.properties.columnLabel, // default value if not provided
+                        ...c, 
+                        name: filter.type
+                    };
+                });
+            }
+            if (filter.properties?.columnLabel) {
+                return [
+                    {
+                        name: filter.type,
+                        label: filter.properties.columnLabel,
+                        getValue: filter.properties.getColumnValue ? (member => filter.properties.getColumnValue(member, filter)) : null
+                    }
+                ];
+            }
+            return [];
+        }).splice(0, 2); // Maximum 2 columns
     }
 
     includeTierQuery() {
@@ -242,6 +246,9 @@ export default class MembersController extends Controller {
         this.orderParam = order.value;
     }
 
+    /**
+     * A user clicked 'Apply filters' when editing the filter
+     */
     @action
     applyFilter(filterStr, filters) {
         this.softFilters = A([]);
@@ -258,6 +265,10 @@ export default class MembersController extends Controller {
         this.filters = filters;
     }
 
+    /**
+     * Already start filtering when the user is editing a filter, without applying it to the URL yet,
+     * and to still allow a cancel action to revert to the previous filters.
+     */
     @action
     applySoftFilter(filterStr, filters) {
         this.softFilters = filters;

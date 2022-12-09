@@ -1,6 +1,7 @@
 const _ = require('lodash');
 const logging = require('@tryghost/logging');
 const membersService = require('./service');
+const emailSuppressionList = require('../email-suppression-list');
 const models = require('../../models');
 const urlUtils = require('../../../shared/url-utils');
 const spamPrevention = require('../../web/shared/middleware/api/spam-prevention');
@@ -29,7 +30,7 @@ const loadMemberSession = async function (req, res, next) {
 
 /**
  * Require member authentication, and make it possible to authenticate via uuid.
- * You can chain this after loadMemberSession to make it possible to authetnicate via both the uuid and the session.
+ * You can chain this after loadMemberSession to make it possible to authenticate via both the uuid and the session.
  */
 const authMemberByUuid = async function (req, res, next) {
     try {
@@ -39,7 +40,7 @@ const authMemberByUuid = async function (req, res, next) {
                 // Already authenticated via session
                 return next();
             }
-            
+
             throw new errors.UnauthorizedError({
                 messsage: tpl(messages.missingUuid)
             });
@@ -94,6 +95,20 @@ const getMemberData = async function (req, res) {
     } catch (err) {
         res.writeHead(204);
         res.end();
+    }
+};
+
+const deleteSuppression = async function (req, res) {
+    try {
+        const member = await membersService.ssr.getMemberDataFromSession(req, res);
+        await emailSuppressionList.removeEmail(member.email);
+        res.writeHead(204);
+        res.end();
+    } catch (err) {
+        res.writeHead(err.statusCode, {
+            'Content-Type': 'text/plain;charset=UTF-8'
+        });
+        res.end(err.message);
     }
 };
 
@@ -165,9 +180,10 @@ const updateMemberData = async function (req, res) {
                 id: member.id,
                 withRelated: ['stripeSubscriptions', 'stripeSubscriptions.customer', 'stripeSubscriptions.stripePrice', 'newsletters']
             };
-            const updatedMember = await membersService.api.members.update(data, options);
+            await membersService.api.members.update(data, options);
+            const updatedMember = await membersService.ssr.getMemberDataFromSession(req, res);
 
-            res.json(formattedMemberResponse(updatedMember.toJSON()));
+            res.json(formattedMemberResponse(updatedMember));
         } else {
             res.json(null);
         }
@@ -262,5 +278,6 @@ module.exports = {
     getMemberData,
     updateMemberData,
     updateMemberNewsletters,
-    deleteSession
+    deleteSession,
+    deleteSuppression
 };

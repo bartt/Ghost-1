@@ -2,14 +2,15 @@ import moment from 'moment-timezone';
 import {Resource} from 'ember-could-get-used-to-this';
 import {TrackedArray} from 'tracked-built-ins';
 import {action} from '@ember/object';
+import {didCancel, task} from 'ember-concurrency';
 import {inject as service} from '@ember/service';
-import {task} from 'ember-concurrency';
 import {tracked} from '@glimmer/tracking';
 
 export default class MembersEventsFetcher extends Resource {
     @service ajax;
     @service ghostPaths;
     @service store;
+    @service feature;
 
     @tracked data = new TrackedArray([]);
     @tracked isLoading = false;
@@ -45,8 +46,15 @@ export default class MembersEventsFetcher extends Resource {
         }
 
         // Can't get this working with Promise.all, somehow results in an infinite loop
-        await this.loadEventsTask.perform({filter});
-        await this.loadMultipleNewslettersTask.perform();
+        try {
+            await this.loadEventsTask.perform({filter});
+            await this.loadMultipleNewslettersTask.perform();
+        } catch (e) {
+            if (!didCancel(e)) {
+                // re-throw the non-cancelation error
+                throw e;
+            }
+        }
     }
 
     @action

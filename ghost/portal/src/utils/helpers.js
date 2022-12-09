@@ -105,13 +105,13 @@ export function getUpgradeProducts({site, member}) {
         return availableProducts;
     }
     return availableProducts.filter((product) => {
-        return (getProductCurrency({product}) === activePriceCurrency);
+        return (isSameCurrency(getProductCurrency({product}), activePriceCurrency));
     });
 }
 
 export function getFilteredPrices({prices, currency}) {
     return prices.filter((d) => {
-        return (d.currency || '').toLowerCase() === (currency || '').toLowerCase();
+        return isSameCurrency((d.currency || ''), (currency || ''));
     });
 }
 
@@ -177,6 +177,26 @@ export function hasPrice({site = {}, plan}) {
         return prices && prices.length > 0 && prices.find(p => p.id === plan);
     }
     return false;
+}
+
+export function getCheckoutSessionDataFromPlanAttribute(site, plan) {
+    const products = getAvailableProducts({site});
+    const defaultTier = products.find(p => p.type === 'paid');
+    if (plan === 'monthly') {
+        return {
+            cadence: 'month',
+            tierId: defaultTier.id
+        };
+    }
+    if (plan === 'yearly') {
+        return {
+            cadence: 'year',
+            tierId: defaultTier.id
+        };
+    }
+    return {
+        priceId: plan
+    };
 }
 
 export function getQueryPrice({site = {}, priceId}) {
@@ -268,7 +288,7 @@ export function transformApiSiteData({site}) {
     }
 
     // self signup must be available for free plan signup to work
-    if (site.portal_plans.includes('free')) {
+    if (site.portal_plans?.includes('free')) {
         site.allow_self_signup = true;
     }
 
@@ -300,6 +320,11 @@ export function getAvailableProducts({site}) {
     }
 
     return products.filter(product => !!product).filter((product) => {
+        if (site.is_stripe_configured) {
+            return true;
+        }
+        return product.type !== 'paid';
+    }).filter((product) => {
         return !!(product.monthlyPrice && product.yearlyPrice);
     }).filter((product) => {
         return !!(Object.keys(product.monthlyPrice).length > 0 && Object.keys(product.yearlyPrice).length > 0);
@@ -472,6 +497,10 @@ export function hasMultipleNewsletters({site}) {
     return newsletters?.length > 1;
 }
 
+export function isEmailSuppressed({member}) {
+    return member?.email_suppression?.suppressed;
+}
+
 export function hasOnlyFreeProduct({site}) {
     const products = getSiteProducts({site});
     return (products.length === 1 && hasFreeProductPrice({site}));
@@ -628,6 +657,13 @@ export const getMemberEmail = ({member}) => {
     return member.email;
 };
 
+export const hasMemberGotEmailSuppression = ({member}) => {
+    if (!member) {
+        return '';
+    }
+    return member.email_suppression;
+};
+
 export const getFirstpromoterId = ({site}) => {
     return (site && site.firstpromoter_account);
 };
@@ -750,8 +786,14 @@ export const getUpdatedOfferPrice = ({offer, price, useFormatted = false}) => {
     return updatedAmount;
 };
 
-export const isActiveOffer = ({offer}) => {
-    return offer?.status === 'active';
+export const isActiveOffer = ({site, offer}) => {
+    if (offer?.status !== 'active') {
+        return false;
+    }
+
+    // Check if the corresponding tier has been archived
+    const product = getProductFromId({site, productId: offer.tier.id});
+    return !!product;
 };
 
 function createMonthlyPrice({tier, priceId}) {

@@ -7,7 +7,6 @@ const MembersConfigProvider = require('./config');
 const MembersCSVImporter = require('@tryghost/members-importer');
 const MembersStats = require('./stats/members-stats');
 const memberJobs = require('./jobs');
-const createMembersSettingsInstance = require('./settings');
 const logging = require('@tryghost/logging');
 const urlUtils = require('../../../shared/url-utils');
 const labsService = require('../../../shared/labs');
@@ -16,6 +15,7 @@ const config = require('../../../shared/config');
 const models = require('../../models');
 const {GhostMailer} = require('../mail');
 const jobsService = require('../jobs');
+const tiersService = require('../tiers');
 const VerificationTrigger = require('@tryghost/verification-trigger');
 const DatabaseInfo = require('@tryghost/database-info');
 const settingsHelpers = require('../settings-helpers');
@@ -41,15 +41,20 @@ const membersStats = new MembersStats({
 });
 
 let membersApi;
-let membersSettings;
 let verificationTrigger;
 
 const membersImporter = new MembersCSVImporter({
     storagePath: config.getContentPath('data'),
     getTimezone: () => settingsCache.get('timezone'),
-    getMembersApi: () => module.exports.api,
+    getMembersRepository: async () => {
+        const api = await module.exports.api;
+        return api.members;
+    },
+    getDefaultTier: () => {
+        return tiersService.api.readDefaultTier();
+    },
     sendEmail: ghostMailer.send.bind(ghostMailer),
-    isSet: labsService.isSet.bind(labsService),
+    isSet: flag => labsService.isSet(flag),
     addJob: jobsService.addJob.bind(jobsService),
     knex: db.knex,
     urlFor: urlUtils.urlFor.bind(urlUtils),
@@ -59,12 +64,37 @@ const membersImporter = new MembersCSVImporter({
 });
 
 const processImport = async (options) => {
-    const result = await membersImporter.process(options);
+    return await membersImporter.process({...options, verificationTrigger});
+};
 
-    // Check whether all imports in last 30 days > threshold
-    await verificationTrigger.testImportThreshold();
+const updateVerificationTrigger = () => {
+    verificationTrigger = new VerificationTrigger({
+        apiTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.apiThreshold'),
+        adminTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.adminThreshold'),
+        importTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.importThreshold'),
+        isVerified: () => config.get('hostSettings:emailVerification:verified') === true,
+        isVerificationRequired: () => settingsCache.get('email_verification_required') === true,
+        sendVerificationEmail: async ({subject, message, amountTriggered}) => {
+            const escalationAddress = config.get('hostSettings:emailVerification:escalationAddress');
+            const fromAddress = config.get('user_email');
 
-    return result;
+            if (escalationAddress) {
+                await ghostMailer.send({
+                    subject,
+                    html: tpl(message, {
+                        amountTriggered: amountTriggered,
+                        siteUrl: urlUtils.getSiteUrl()
+                    }),
+                    forceTextContent: true,
+                    from: fromAddress,
+                    to: escalationAddress
+                });
+            }
+        },
+        membersStats,
+        Settings: models.Settings,
+        eventRepository: membersApi.events
+    });
 };
 
 module.exports = {
@@ -103,33 +133,7 @@ module.exports = {
             getMembersApi: () => module.exports.api
         });
 
-        verificationTrigger = new VerificationTrigger({
-            apiTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.apiThreshold'),
-            adminTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.adminThreshold'),
-            importTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.importThreshold'),
-            isVerified: () => config.get('hostSettings:emailVerification:verified') === true,
-            isVerificationRequired: () => settingsCache.get('email_verification_required') === true,
-            sendVerificationEmail: ({subject, message, amountTriggered}) => {
-                const escalationAddress = config.get('hostSettings:emailVerification:escalationAddress');
-                const fromAddress = config.get('user_email');
-
-                if (escalationAddress) {
-                    ghostMailer.send({
-                        subject,
-                        html: tpl(message, {
-                            amountTriggered: amountTriggered,
-                            siteUrl: urlUtils.getSiteUrl()
-                        }),
-                        forceTextContent: true,
-                        from: fromAddress,
-                        to: escalationAddress
-                    });
-                }
-            },
-            membersStats,
-            Settings: models.Settings,
-            eventRepository: membersApi.events
-        });
+        updateVerificationTrigger();
 
         (async () => {
             try {
@@ -149,7 +153,7 @@ module.exports = {
                     job: stripeService.migrations.execute.bind(stripeService.migrations)
                 });
 
-                await jobsService.awaitCompletion(membersMigrationJobName);
+                await jobsService.awaitOneOffCompletion(membersMigrationJobName);
             }
         }
 
@@ -164,13 +168,6 @@ module.exports = {
         return membersApi;
     },
 
-    get settings() {
-        if (!membersSettings) {
-            membersSettings = createMembersSettingsInstance(membersConfig);
-        }
-        return membersSettings;
-    },
-
     ssr: null,
 
     stripeConnect: require('./stripe-connect'),
@@ -178,7 +175,10 @@ module.exports = {
     processImport: processImport,
 
     stats: membersStats,
-    export: require('./exporter/query')
+    export: require('./exporter/query'),
+
+    // Only for tests
+    _updateVerificationTrigger: updateVerificationTrigger
 };
 
 module.exports.middleware = require('./middleware');

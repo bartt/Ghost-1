@@ -30,6 +30,7 @@ Router.map(function () {
 
     this.route('posts');
     this.route('posts.analytics', {path: '/posts/analytics/:post_id'});
+    this.route('posts.debug', {path: '/posts/analytics/:post_id/debug'});
 
     this.route('pages');
 
@@ -53,6 +54,7 @@ Router.map(function () {
     this.route('settings.membership', {path: '/settings/members'});
     this.route('settings.code-injection', {path: '/settings/code-injection'});
     this.route('settings.history', {path: '/settings/history'});
+    this.route('settings.analytics', {path: '/settings/analytics'});
 
     // redirect from old /settings/members-email to /settings/newsletters
     this.route('settings.members-email', {path: '/settings/members-email'});
@@ -66,6 +68,7 @@ Router.map(function () {
             this.route('view', {path: ':theme_name'});
             this.route('install');
         });
+        this.route('no-theme');
     });
     // redirect for old install route used by ghost.org/marketplace
     this.route('settings.theme-install', {path: '/settings/theme/install'});
@@ -100,7 +103,10 @@ Router.map(function () {
     this.route('settings.integrations.zapier', {path: '/settings/integrations/zapier'});
 
     this.route('settings.navigation', {path: '/settings/navigation'});
-    this.route('settings.labs', {path: '/settings/labs'});
+    this.route('settings.labs', {path: '/settings/labs'}, function () {
+        this.route('import');
+    });
+    // this.route('settings.labs.import', {path: '/settings/labs/import'});
 
     this.route('members', function () {
         this.route('import');

@@ -63,14 +63,21 @@
         const ids = Array.from(fetchingIds);
         fetchingIds.clear();
 
-        const rawRes = await fetch(api, {
-            method: 'POST',
+        if (!ids.length) {
+            return;
+        }
+
+        const rawRes = await fetch(`${api}?ids=${ids.join(',')}`, {
+            method: 'GET',
             headers: {
                 Accept: 'application/json',
                 'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ids})
+            }
         });
+
+        if (rawRes.status !== 200) {
+            return;
+        }
 
         const res = await rawRes.json();
 

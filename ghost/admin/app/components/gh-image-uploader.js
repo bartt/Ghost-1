@@ -1,5 +1,6 @@
 import Component from '@ember/component';
 import ghostPaths from 'ghost-admin/utils/ghost-paths';
+import {GENERIC_ERROR_MESSAGE} from 'ghost-admin/services/notifications';
 import {
     UnsupportedMediaTypeError,
     isRequestEntityTooLargeError,
@@ -8,6 +9,7 @@ import {
 } from 'ghost-admin/services/ajax';
 import {computed, get} from '@ember/object';
 import {htmlSafe} from '@ember/template';
+import {inject} from 'ghost-admin/decorators/inject';
 import {isArray} from '@ember/array';
 import {isBlank} from '@ember/utils';
 import {run} from '@ember/runloop';
@@ -23,7 +25,6 @@ export const ICON_PARAMS = {purpose: 'icon'};
 
 export default Component.extend({
     ajax: service(),
-    config: service(),
     notifications: service(),
     settings: service(),
 
@@ -63,6 +64,8 @@ export default Component.extend({
     uploadFinished: () => {},
     uploadSuccess: () => {},
     uploadFailed: () => {},
+
+    config: inject(),
 
     // TODO: this wouldn't be necessary if the server could accept direct
     // file uploads
@@ -251,8 +254,8 @@ export default Component.extend({
         } else if (!isBlank(error.payload?.errors?.[0]?.message)) {
             message = error.payload.errors[0].message;
         } else {
-            message = 'Something went wrong :(';
             console.error(error); // eslint-disable-line
+            message = GENERIC_ERROR_MESSAGE;
         }
 
         this.set('failureMessage', message);

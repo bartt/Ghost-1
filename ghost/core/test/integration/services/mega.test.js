@@ -1,17 +1,11 @@
 require('should');
-const {agentProvider, fixtureManager, mockManager} = require('../../utils/e2e-framework');
+const {agentProvider, fixtureManager, mockManager, sleep} = require('../../utils/e2e-framework');
 const moment = require('moment');
 const ObjectId = require('bson-objectid').default;
 const models = require('../../../core/server/models');
 const sinon = require('sinon');
 const assert = require('assert');
 let agent;
-
-async function sleep(ms) {
-    return new Promise((resolve) => {
-        setTimeout(resolve, ms);
-    });
-}
 
 async function createPublishedPostEmail() {
     const post = {
@@ -54,6 +48,14 @@ describe('MEGA', function () {
     let _mailgunClient;
     let frontendAgent;
 
+    beforeEach(function () {
+        mockManager.mockLabsDisabled('emailStability');
+    });
+
+    afterEach(function () {
+        mockManager.restore();
+    });
+
     describe('sendEmailJob', function () {
         before(async function () {
             agent = await agentProvider.getAdminAPIAgent();
@@ -61,10 +63,6 @@ describe('MEGA', function () {
             await agent.loginAsOwner();
             _sendEmailJob = require('../../../core/server/services/mega/mega')._sendEmailJob;
             _mailgunClient = require('../../../core/server/services/bulk-email')._mailgunClient;
-        });
-
-        afterEach(function () {
-            mockManager.restore();
         });
 
         it('Can send a scheduled post email', async function () {
@@ -79,10 +77,35 @@ describe('MEGA', function () {
             const emailModel = await createPublishedPostEmail();
 
             // Launch email job
-            await _sendEmailJob({emailModel, options: {}});
+            await _sendEmailJob({emailId: emailModel.id, options: {}});
 
             await emailModel.refresh();
             emailModel.get('status').should.eql('submitted');
+        });
+
+        it('Protects the email job from being run multiple times at the same time', async function () {
+            sinon.stub(_mailgunClient, 'getInstance').returns({});
+            sinon.stub(_mailgunClient, 'send').callsFake(async () => {
+                return {
+                    id: 'stubbed-email-id'
+                };
+            });
+
+            // Prepare a post and email model
+            const emailModel = await createPublishedPostEmail();
+
+            // Launch a lot of email jobs in the hope to mimic a possible race condition
+            const promises = [];
+            for (let i = 0; i < 100; i++) {
+                promises.push(_sendEmailJob({emailId: emailModel.id, options: {}}));
+            }
+            await Promise.all(promises);
+
+            await emailModel.refresh();
+            assert.equal(emailModel.get('status'), 'submitted');
+
+            const batchCount = await emailModel.related('emailBatches').count('id');
+            assert.equal(batchCount, 1, 'Should only have created one batch');
         });
 
         it('Can handle a failed post email', async function () {
@@ -95,7 +118,7 @@ describe('MEGA', function () {
             const emailModel = await createPublishedPostEmail();
 
             // Launch email job
-            await _sendEmailJob({emailModel, options: {}});
+            await _sendEmailJob({emailId: emailModel.id, options: {}});
 
             await emailModel.refresh();
             emailModel.get('status').should.eql('failed');
@@ -119,10 +142,6 @@ describe('MEGA', function () {
             _mailgunClient = require('../../../core/server/services/bulk-email')._mailgunClient;
         });
 
-        afterEach(function () {
-            mockManager.restore();
-        });
-
         it('Tracks all the links in an email', async function () {
             const linkRedirectService = require('../../../core/server/services/link-redirection');
             const linkRedirectRepository = linkRedirectService.linkRedirectRepository;
@@ -143,7 +162,7 @@ describe('MEGA', function () {
             const emailModel = await createPublishedPostEmail();
 
             // Launch email job
-            await _sendEmailJob({emailModel, options: {}});
+            await _sendEmailJob({emailId: emailModel.id, options: {}});
 
             await emailModel.refresh();
             emailModel.get('status').should.eql('submitted');
@@ -158,13 +177,13 @@ describe('MEGA', function () {
             // Do the actual replacements for the first member, so we don't have to worry about them anymore
             replacements.forEach((replacement) => {
                 emailData[replacement.format] = emailData[replacement.format].replace(
-                    replacement.match,
+                    replacement.regexp,
                     recipient[replacement.id]
                 );
 
                 // Also force Mailgun format
                 emailData[replacement.format] = emailData[replacement.format].replace(
-                    `%recipient.${replacement.id}%`,
+                    new RegExp(`%recipient.${replacement.id}%`, 'g'),
                     recipient[replacement.id]
                 );
             });
@@ -189,6 +208,9 @@ describe('MEGA', function () {
 
                 // Check if the link is a tracked link
                 assert(href.includes('?m=' + memberUuid), href + ' is not tracked');
+
+                // Check if this link is also present in the plaintext version (with the right replacements)
+                assert(emailData.plaintext.includes(href), href + ' is not present in the plaintext version');
 
                 if (!firstLink) {
                     firstLink = new URL(href);

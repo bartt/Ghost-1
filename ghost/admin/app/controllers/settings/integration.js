@@ -1,6 +1,7 @@
 import Controller from '@ember/controller';
 import DeleteIntegrationModal from '../../components/settings/integrations/delete-integration-modal';
 import DeleteWebhookModal from '../../components/settings/integrations/delete-webhook-modal';
+import RegenerateKeyModal from '../../components/settings/integrations/regenerate-key-modal';
 import config from 'ghost-admin/config/environment';
 import copyTextToClipboard from 'ghost-admin/utils/copy-text-to-clipboard';
 import {
@@ -9,21 +10,21 @@ import {
 } from 'ghost-admin/components/gh-image-uploader';
 import {action} from '@ember/object';
 import {htmlSafe} from '@ember/template';
+import {inject} from 'ghost-admin/decorators/inject';
 import {inject as service} from '@ember/service';
 import {task, timeout} from 'ember-concurrency';
 import {tracked} from '@glimmer/tracking';
 
 export default class IntegrationController extends Controller {
-    @service config;
     @service ghostPaths;
     @service modals;
+
+    @inject config;
 
     imageExtensions = IMAGE_EXTENSIONS;
     imageMimeTypes = IMAGE_MIME_TYPES;
 
-    @tracked showRegenerateKeyModal = false;
-    @tracked selectedApiKey = null;
-    @tracked isApiKeyRegenerated = false;
+    @tracked regeneratedApiKey = null;
 
     constructor() {
         super(...arguments);
@@ -42,13 +43,6 @@ export default class IntegrationController extends Controller {
         let url = this.ghostPaths.url.join(origin, subdir);
 
         return url.replace(/\/$/, '');
-    }
-
-    get regeneratedKeyType() {
-        if (this.isApiKeyRegenerated) {
-            return this.selectedApiKey.type;
-        }
-        return null;
     }
 
     get allWebhooks() {
@@ -116,23 +110,13 @@ export default class IntegrationController extends Controller {
     }
 
     @action
-    confirmRegenerateKeyModal(apiKey, event) {
+    async confirmRegenerateKey(apiKey, event) {
         event?.preventDefault();
-        this.showRegenerateKeyModal = true;
-        this.isApiKeyRegenerated = false;
-        this.selectedApiKey = apiKey;
-    }
-
-    @action
-    cancelRegenerateKeyModal(event) {
-        event?.preventDefault();
-        this.showRegenerateKeyModal = false;
-    }
-
-    @action
-    regenerateKey(event) {
-        event?.preventDefault();
-        this.isApiKeyRegenerated = true;
+        this.regeneratedApiKey = null;
+        this.regeneratedApiKey = await this.modals.open(RegenerateKeyModal, {
+            apiKey,
+            integration: this.integration
+        });
     }
 
     @action

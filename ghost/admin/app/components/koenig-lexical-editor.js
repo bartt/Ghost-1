@@ -1,8 +1,9 @@
 import * as Sentry from '@sentry/ember';
 import Component from '@glimmer/component';
 import React, {Suspense} from 'react';
+import ghostPaths from 'ghost-admin/utils/ghost-paths';
 import {action} from '@ember/object';
-import {inject as service} from '@ember/service';
+import {inject} from 'ghost-admin/decorators/inject';
 
 class ErrorHandler extends React.Component {
     state = {
@@ -37,8 +38,8 @@ const fetchKoenig = function () {
         // required to work around ember-auto-import complaining about an unknown dynamic import
         // during the build step
         const GhostAdmin = window.GhostAdmin || window.Ember.Namespace.NAMESPACES.find(ns => ns.name === 'ghost-admin');
-        const urlTemplate = GhostAdmin.__container__.lookup('service:config').editor?.url;
-        const urlVersion = GhostAdmin.__container__.lookup('service:config').editor?.version;
+        const urlTemplate = GhostAdmin.__container__.lookup('config:main').editor?.url;
+        const urlVersion = GhostAdmin.__container__.lookup('config:main').editor?.version;
 
         const url = new URL(urlTemplate.replace('{version}', urlVersion));
 
@@ -89,7 +90,7 @@ const KoenigEditor = (props) => {
 };
 
 export default class KoenigLexicalEditor extends Component {
-    @service config;
+    @inject config;
 
     @action
     onError(error) {
@@ -108,12 +109,65 @@ export default class KoenigLexicalEditor extends Component {
     }
 
     ReactComponent = () => {
+        const API_VERSION = 'v1';
+        const APPLICATION_ID = '8672af113b0a8573edae3aa3713886265d9bb741d707f6c01a486cde8c278980';
+
+        const defaultHeaders = {
+            Authorization: `Client-ID ${APPLICATION_ID}`,
+            'Accept-Version': API_VERSION,
+            'Content-Type': 'application/json',
+            'App-Pragma': 'no-cache',
+            'X-Unsplash-Cache': true
+        };
+
+        const [uploadProgress, setUploadProgress] = React.useState(0);
+
+        const uploadProgressHandler = (event) => {
+            const percentComplete = (event.loaded / event.total) * 100;
+            setUploadProgress(percentComplete);
+            if (percentComplete === 100) {
+                setUploadProgress(0);
+            }
+        };
+
+        async function imageUploader(files) {
+            function uploadToUrl(formData, url) {
+                return new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', url);
+                    xhr.upload.onprogress = (event) => {
+                        uploadProgressHandler(event);
+                    };
+                    xhr.onload = () => resolve(xhr.response);
+                    xhr.onerror = () => reject(xhr.statusText);
+                    xhr.send(formData);
+                });
+            }
+            const formData = new FormData();
+            formData.append('file', files[0]);
+            const url = `${ghostPaths().apiRoot}/images/upload/`;
+            const response = await uploadToUrl(formData, url);
+            const dataset = JSON.parse(response);
+            const imageUrl = dataset?.images?.[0].url;
+            return {
+                src: imageUrl
+            };
+        }
         return (
             <div className={['koenig-react-editor', this.args.className].filter(Boolean).join(' ')}>
                 <ErrorHandler>
                     <Suspense fallback={<p className="koenig-react-editor-loading">Loading editor...</p>}>
-                        <KoenigComposer initialEditorState={this.args.lexical} onError={this.onError}>
-                            <KoenigEditor onChange={this.args.onChange} />
+                        <KoenigComposer
+                            unsplashConfig={defaultHeaders}
+                            initialEditorState={this.args.lexical}
+                            onError={this.onError}
+                            imageUploadFunction={{imageUploader, uploadProgress}}
+                        >
+                            <KoenigEditor
+                                onChange={this.args.onChange}
+                                registerAPI={this.args.registerAPI}
+                                cursorDidExitAtTop={this.args.cursorDidExitAtTop}
+                            />
                         </KoenigComposer>
                     </Suspense>
                 </ErrorHandler>

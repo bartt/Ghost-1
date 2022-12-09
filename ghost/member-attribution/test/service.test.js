@@ -10,30 +10,133 @@ describe('MemberAttributionService', function () {
         });
     });
 
+    describe('addEmailSourceAttributionTracking', function () {
+        it('uses sluggified sitename for external urls', async function () {
+            const service = new MemberAttributionService({
+                getSiteTitle: () => 'Hello world'
+            });
+            const url = new URL('https://example.com/');
+            const updatedUrl = await service.addEmailSourceAttributionTracking(url);
+
+            should(updatedUrl.toString()).equal('https://example.com/?ref=hello-world');
+        });
+
+        it('uses sluggified newsletter name for internal urls', async function () {
+            const service = new MemberAttributionService({
+                getSiteTitle: () => 'Hello world'
+            });
+            const url = new URL('https://example.com/');
+            const newsletterName = 'used newsletter name';
+            const newsletter = {
+                get: (t) => {
+                    if (t === 'name') {
+                        return newsletterName;
+                    }
+                }
+            };
+
+            const updatedUrl = await service.addEmailSourceAttributionTracking(url, newsletter);
+
+            should(updatedUrl.toString()).equal('https://example.com/?ref=used-newsletter-name-newsletter');
+        });
+
+        it('does not repeat newsletter at the end of the newsletter name', async function () {
+            const service = new MemberAttributionService({
+                getSiteTitle: () => 'Hello world'
+            });
+            const url = new URL('https://example.com/');
+            const newsletterName = 'Weekly newsletter';
+            const newsletter = {
+                get: (t) => {
+                    if (t === 'name') {
+                        return newsletterName;
+                    }
+                }
+            };
+            const updatedUrl = await service.addEmailSourceAttributionTracking(url, newsletter);
+
+            should(updatedUrl.toString()).equal('https://example.com/?ref=weekly-newsletter');
+        });
+
+        it('does not add ref to blacklisted domains', async function () {
+            const service = new MemberAttributionService({
+                getSiteTitle: () => 'Hello world'
+            });
+            const url = new URL('https://facebook.com/');
+            const updatedUrl = await service.addEmailSourceAttributionTracking(url);
+
+            should(updatedUrl.toString()).equal('https://facebook.com/');
+        });
+
+        it('does not add ref if utm_source is present', async function () {
+            const service = new MemberAttributionService({
+                getSiteTitle: () => 'Hello world'
+            });
+            const url = new URL('https://example.com/?utm_source=hello');
+            const updatedUrl = await service.addEmailSourceAttributionTracking(url);
+            should(updatedUrl.toString()).equal('https://example.com/?utm_source=hello');
+        });
+
+        it('does not add ref if ref is present', async function () {
+            const service = new MemberAttributionService({
+                getSiteTitle: () => 'Hello world'
+            });
+            const url = new URL('https://example.com/?ref=hello');
+            const updatedUrl = await service.addEmailSourceAttributionTracking(url);
+            should(updatedUrl.toString()).equal('https://example.com/?ref=hello');
+        });
+
+        it('does not add ref if source is present', async function () {
+            const service = new MemberAttributionService({
+                getSiteTitle: () => 'Hello world'
+            });
+            const url = new URL('https://example.com/?source=hello');
+            const updatedUrl = await service.addEmailSourceAttributionTracking(url);
+            should(updatedUrl.toString()).equal('https://example.com/?source=hello');
+        });
+    });
+
     describe('getAttributionFromContext', function () {
         it('returns null if no context is provided', async function () {
-            const service = new MemberAttributionService({});
+            const service = new MemberAttributionService({
+                getTrackingEnabled: () => true
+            });
+            const attribution = await service.getAttributionFromContext();
+
+            should(attribution).be.null();
+        });
+
+        it('returns null if tracking is disabled is provided', async function () {
+            const service = new MemberAttributionService({
+                isTrackingEnabled: false
+            });
             const attribution = await service.getAttributionFromContext();
 
             should(attribution).be.null();
         });
 
         it('returns attribution for importer context', async function () {
-            const service = new MemberAttributionService({});
+            const service = new MemberAttributionService({
+                getTrackingEnabled: () => true
+            });
             const attribution = await service.getAttributionFromContext({importer: true});
 
             should(attribution).containEql({referrerSource: 'Imported', referrerMedium: 'Member Importer'});
         });
 
         it('returns attribution for admin context', async function () {
-            const service = new MemberAttributionService({});
+            const service = new MemberAttributionService({
+                getTrackingEnabled: () => true
+            });
             const attribution = await service.getAttributionFromContext({user: 'abc'});
 
             should(attribution).containEql({referrerSource: 'Created manually', referrerMedium: 'Ghost Admin'});
         });
 
         it('returns attribution for api without integration context', async function () {
-            const service = new MemberAttributionService({});
+            const service = new MemberAttributionService({
+                getTrackingEnabled: () => true
+            });
             const attribution = await service.getAttributionFromContext({
                 api_key: 'abc'
             });
@@ -51,7 +154,8 @@ describe('MemberAttributionService', function () {
                             };
                         }
                     }
-                }
+                },
+                getTrackingEnabled: () => true
             });
             const attribution = await service.getAttributionFromContext({
                 api_key: 'abc',
@@ -77,7 +181,8 @@ describe('MemberAttributionService', function () {
                             }
                         };
                     }
-                }
+                },
+                getTrackingEnabled: () => true
             });
             const model = {
                 id: 'event_id',
@@ -110,7 +215,8 @@ describe('MemberAttributionService', function () {
                             }
                         };
                     }
-                }
+                },
+                getTrackingEnabled: () => true
             });
             const model = {
                 id: 'event_id',
@@ -149,7 +255,8 @@ describe('MemberAttributionService', function () {
                             }
                         };
                     }
-                }
+                },
+                getTrackingEnabled: () => true
             });
             const model = {
                 id: 'event_id',

@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import {action} from '@ember/object';
+import {inject} from 'ghost-admin/decorators/inject';
 import {inject as service} from '@ember/service';
 import {tracked} from '@glimmer/tracking';
 
@@ -16,7 +17,8 @@ export default class extends Component {
     @service ghostPaths;
     @service ajax;
     @service store;
-    @service config;
+
+    @inject config;
 
     @tracked showTierModal = false;
     @tracked tierModel = null;
@@ -63,11 +65,18 @@ export default class extends Component {
     async onUnarchive() {
         this.type = 'active';
         this.args.updatePortalPreview();
+        this.reloadTiers();
     }
 
     @action
     async onArchive() {
         this.args.updatePortalPreview();
+        this.reloadTiers();
+    }
+
+    reloadTiers() {
+        // Reload the cached tiers in membersutils
+        this.membersUtils.reload();
     }
 
     @action

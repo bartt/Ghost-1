@@ -1,4 +1,4 @@
-const {agentProvider, mockManager, fixtureManager, matchers} = require('../../utils/e2e-framework');
+const {agentProvider, mockManager, fixtureManager, matchers, sleep} = require('../../utils/e2e-framework');
 const {anyEtag, anyObjectId, anyUuid, anyISODateTime, anyISODate, anyString, anyArray, anyLocationFor, anyContentLength, anyErrorId, anyObject} = matchers;
 const ObjectId = require('bson-objectid').default;
 
@@ -7,6 +7,8 @@ const nock = require('nock');
 const should = require('should');
 const sinon = require('sinon');
 const testUtils = require('../../utils');
+const configUtils = require('../../utils/configUtils');
+
 const Papa = require('papaparse');
 
 const models = require('../../../core/server/models');
@@ -14,6 +16,20 @@ const membersService = require('../../../core/server/services/members');
 const memberAttributionService = require('../../../core/server/services/member-attribution');
 const urlService = require('../../../core/server/services/url');
 const urlUtils = require('../../../core/shared/url-utils');
+const {_updateVerificationTrigger} = require('../../../core/server/services/members');
+const settingsCache = require('../../../core/shared/settings-cache');
+
+/**
+ * Assert that haystack and needles match, ignoring the order.
+ */
+function matchArrayWithoutOrder(haystack, needles) {
+    // Order shouldn't matter here
+    for (const a of needles) {
+        haystack.should.matchAny(a);
+    }
+
+    assert.equal(haystack.length, needles.length, `Expected ${needles.length} items, but got ${haystack.length}`);
+}
 
 async function assertMemberEvents({eventType, memberId, asserts}) {
     const events = await models[eventType].where('member_id', memberId).fetchAll();
@@ -390,7 +406,7 @@ describe('Members API - member attribution', function () {
     });
 
     // Activity feed
-    it('Returns sign up attributions in activity feed', async function () {
+    it('Returns sign up attributions of all types in activity feed', async function () {
         // Check activity feed
         await agent
             .get(`/members/events/?filter=type:signup_event`)
@@ -429,56 +445,6 @@ describe('Members API', function () {
 
     afterEach(function () {
         mockManager.restore();
-    });
-
-    // Activity feed
-    it('Returns comments in activity feed', async function () {
-        // Check activity feed
-        await agent
-            .get(`/members/events?filter=type:comment_event`)
-            .expectStatus(200)
-            .matchHeaderSnapshot({
-                etag: anyEtag
-            })
-            .matchBodySnapshot({
-                events: new Array(2).fill({
-                    type: anyString,
-                    data: anyObject
-                })
-            })
-            .expect(({body}) => {
-                should(body.events.find(e => e.type === 'comment_event')).not.be.undefined();
-            });
-    });
-
-    it('Returns click events in activity feed', async function () {
-        // Check activity feed
-        await agent
-            .get(`/members/events?filter=type:click_event`)
-            .expectStatus(200)
-            .matchHeaderSnapshot({
-                etag: anyEtag
-            })
-            .matchBodySnapshot({
-                events: new Array(8).fill({
-                    type: anyString,
-                    data: {
-                        created_at: anyISODate,
-                        member: {
-                            id: anyObjectId,
-                            uuid: anyUuid
-                        },
-                        post: {
-                            id: anyObjectId,
-                            uuid: anyUuid,
-                            url: anyString
-                        }
-                    }
-                })
-            })
-            .expect(({body}) => {
-                should(body.events.find(e => e.type === 'click_event')).not.be.undefined();
-            });
     });
 
     // List Members
@@ -736,6 +702,71 @@ describe('Members API', function () {
                 }
             ]
         });
+    });
+
+    it('Can add a member and trigger host email verification limits', async function () {
+        configUtils.set('hostSettings:emailVerification', {
+            apiThreshold: 0,
+            adminThreshold: 1,
+            importThreshold: 0,
+            verified: false,
+            escalationAddress: 'test@example.com'
+        });
+        _updateVerificationTrigger();
+
+        assert.ok(!settingsCache.get('email_verification_required'), 'Email verification should NOT be required');
+
+        const member = {
+            name: 'pass verification',
+            email: 'memberPassVerifivation@test.com'
+        };
+
+        const {body: passBody} = await agent
+            .post(`/members/`)
+            .body({members: [member]})
+            .expectStatus(201)
+            .matchBodySnapshot({
+                members: new Array(1).fill(memberMatcherShallowIncludes)
+            })
+            .matchHeaderSnapshot({
+                etag: anyEtag,
+                location: anyLocationFor('members')
+            });
+        const memberPassVerification = passBody.members[0];
+
+        await sleep(100);
+        assert.ok(!settingsCache.get('email_verification_required'), 'Email verification should NOT be required');
+
+        const memberFailLimit = {
+            name: 'fail verification',
+            email: 'memberFailVerifivation@test.com'
+        };
+
+        const {body: failBody} = await agent
+            .post(`/members/`)
+            .body({members: [memberFailLimit]})
+            .expectStatus(201)
+            .matchBodySnapshot({
+                members: new Array(1).fill(memberMatcherShallowIncludes)
+            })
+            .matchHeaderSnapshot({
+                etag: anyEtag,
+                location: anyLocationFor('members')
+            });
+        const memberFailVerification = failBody.members[0];
+
+        await sleep(100);
+        assert.ok(settingsCache.get('email_verification_required'), 'Email verification should be required');
+        mockManager.assert.sentEmail({
+            subject: 'Email needs verification'
+        });
+
+        // state cleanup
+        await agent.delete(`/members/${memberPassVerification.id}`);
+        await agent.delete(`/members/${memberFailVerification.id}`);
+
+        configUtils.restore();
+        _updateVerificationTrigger();
     });
 
     it('Can add and send a signup confirmation email', async function () {
@@ -1353,7 +1384,7 @@ describe('Members API', function () {
                     updated_at: anyISODateTime,
                     labels: anyArray,
                     subscriptions: anyArray,
-                    tiers: anyArray,
+                    tiers: new Array(1).fill(tierMatcher),
                     newsletters: new Array(1).fill(newsletterSnapshot)
                 })
             })
@@ -1519,7 +1550,7 @@ describe('Members API', function () {
             .expectStatus(200);
 
         const beforeMember = body2.members[0];
-        assert.equal(beforeMember.tiers.length, 2, 'The member should have two products now');
+        assert.equal(beforeMember.tiers.length, 2, 'The member should have two tiers now');
 
         // Now try to remove only the complimentary one
         const compedPayload = {
@@ -1778,7 +1809,9 @@ describe('Members API', function () {
             });
 
         const events = eventsBody.events;
-        events.should.match([
+
+        // The order will be different in each test because two newsletter_events have the same created_at timestamp. And events are ordered by created_at desc, id desc (id will be different each time).
+        matchArrayWithoutOrder(events, [
             {
                 type: 'newsletter_event',
                 data: {
@@ -1802,6 +1835,9 @@ describe('Members API', function () {
                 }
             },
             {
+                type: 'signup_event'
+            },
+            {
                 type: 'newsletter_event',
                 data: {
                     subscribed: true,
@@ -1811,9 +1847,6 @@ describe('Members API', function () {
                         id: newsletters[0].id
                     }
                 }
-            },
-            {
-                type: 'signup_event'
             }
         ]);
 
@@ -2150,14 +2183,14 @@ describe('Members API', function () {
                 'content-disposition': anyString
             });
 
-        res.text.should.match(/id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,products/);
+        res.text.should.match(/id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers/);
 
         const csv = Papa.parse(res.text, {header: true});
         should.exist(csv.data.find(row => row.name === 'Mr Egg'));
         should.exist(csv.data.find(row => row.name === 'Winston Zeddemore'));
         should.exist(csv.data.find(row => row.name === 'Ray Stantz'));
         should.exist(csv.data.find(row => row.email === 'member2@test.com'));
-        should.exist(csv.data.find(row => row.products.length > 0));
+        should.exist(csv.data.find(row => row.tiers.length > 0));
         should.exist(csv.data.find(row => row.labels.length > 0));
     });
 
@@ -2171,14 +2204,14 @@ describe('Members API', function () {
                 'content-disposition': anyString
             });
 
-        res.text.should.match(/id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,products/);
+        res.text.should.match(/id,email,name,note,subscribed_to_emails,complimentary_plan,stripe_customer_id,created_at,deleted_at,labels,tiers/);
 
         const csv = Papa.parse(res.text, {header: true});
         should.exist(csv.data.find(row => row.name === 'Mr Egg'));
         should.not.exist(csv.data.find(row => row.name === 'Egon Spengler'));
         should.not.exist(csv.data.find(row => row.name === 'Ray Stantz'));
         should.not.exist(csv.data.find(row => row.email === 'member2@test.com'));
-        // note that this member doesn't have products
+        // note that this member doesn't have tiers
         should.exist(csv.data.find(row => row.labels.length > 0));
     });
 
@@ -2653,6 +2686,38 @@ describe('Members API Bulk operations', function () {
             });
     });
 
+    it('Can bulk unsubscribe members from specific newsletter', async function () {
+        const member = fixtureManager.get('members', 4);
+        const newsletterCount = 2;
+
+        const model = await models.Member.findOne({id: member.id}, {withRelated: 'newsletters'});
+        should(model.relations.newsletters.models.length).equal(newsletterCount, 'This test requires a member with 2 or more newsletters');
+
+        await agent
+            .put(`/members/bulk/?all=true`)
+            .body({bulk: {
+                action: 'unsubscribe',
+                newsletter: model.relations.newsletters.models[0].id,
+                meta: {}
+            }})
+            .expectStatus(200)
+            .matchBodySnapshot({
+                bulk: {
+                    meta: {
+                        stats: {
+                            successful: 4,
+                            unsuccessful: 0
+                        },
+                        unsuccessfulData: [],
+                        errors: []
+                    }
+                }
+            });
+        const updatedModel = await models.Member.findOne({id: member.id}, {withRelated: 'newsletters'});
+        // ensure they were unsubscribed from the single 'chosen' newsletter
+        should(updatedModel.relations.newsletters.models.length).equal(newsletterCount - 1);
+    });
+
     it('Can bulk unsubscribe members with deprecated subscribed filter', async function () {
         await agent
             .put(`/members/bulk/?filter=subscribed:false`)
@@ -2863,5 +2928,21 @@ describe('Members API Bulk operations', function () {
 
         const updatedModel2 = await models.Member.findOne({id: member2.id}, {withRelated: 'labels'});
         should(updatedModel2.relations.labels.models.map(m => m.id)).match([firstId, secondId]);
+    });
+
+    it('Can bulk delete members', async function () {
+        await agent
+            .delete('/members?all=true')
+            .expectStatus(200)
+            .matchBodySnapshot({
+                meta: {
+                    stats: {
+                        successful: 8,
+                        unsuccessful: 0
+                    },
+                    unsuccessfulIds: [],
+                    errors: []
+                }
+            });
     });
 });

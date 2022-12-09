@@ -28,30 +28,6 @@ function setupGhostApi({siteUrl = window.location.origin, apiUrl, apiKey}) {
     }
     const api = {};
 
-    api.analytics = {
-        async pushEvent(event) {
-            const url = endpointFor({type: 'members', resource: 'events'});
-            const identity = await api.member.identity();
-            event.identity = identity;
-            const body = {
-                events: [event]
-            };
-            return makeRequest({
-                url,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            }).then(function (res) {
-                if (!res.ok) {
-                    return null;
-                }
-                return res.text();
-            });
-        }
-    };
-
     api.site = {
         read() {
             const url = endpointFor({type: 'members', resource: 'site'});
@@ -223,6 +199,20 @@ function setupGhostApi({siteUrl = window.location.origin, apiUrl, apiKey}) {
             });
         },
 
+        deleteSuppression() {
+            const url = endpointFor({type: 'members', resource: 'member/suppression'});
+
+            return makeRequest({
+                url,
+                method: 'DELETE'
+            }).then(function (res) {
+                if (!res.ok) {
+                    throw new Error('Your email has failed to resubscribe, please try again');
+                }
+                return true;
+            });
+        },
+
         async sendMagicLink({email, emailType, labels, name, oldEmail, newsletters}) {
             const url = endpointFor({type: 'members', resource: 'send-magic-link'});
             const body = {
@@ -391,17 +381,18 @@ function setupGhostApi({siteUrl = window.location.origin, apiUrl, apiKey}) {
                     throw new Error(errMssg);
                 }
                 return res.json();
-            }).then(function (result) {
-                const stripe = window.Stripe(result.publicKey);
-                return stripe.redirectToCheckout({
-                    sessionId: result.sessionId
-                });
-            }).then(function (result) {
-                if (result.error) {
-                    throw new Error(result.error.message);
+            }).then(function (responseBody) {
+                if (responseBody.url) {
+                    return window.location.assign(responseBody.url);
                 }
-            }).catch(function (err) {
-                throw err;
+                const stripe = window.Stripe(responseBody.publicKey);
+                return stripe.redirectToCheckout({
+                    sessionId: responseBody.sessionId
+                }).then(function (redirectResult) {
+                    if (redirectResult.error) {
+                        throw new Error(redirectResult.error.message);
+                    }
+                });
             });
         },
 

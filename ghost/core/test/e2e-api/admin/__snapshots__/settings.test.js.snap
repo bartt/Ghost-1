@@ -5,6 +5,10 @@ Object {
   "meta": Object {},
   "settings": Array [
     Object {
+      "key": "members_track_sources",
+      "value": true,
+    },
+    Object {
       "key": "title",
       "value": "Ghost",
     },
@@ -18,7 +22,7 @@ Object {
     },
     Object {
       "key": "cover_image",
-      "value": "https://static.ghost.org/v4.0.0/images/publication-cover.jpg",
+      "value": "https://static.ghost.org/v5.0.0/images/publication-cover.jpg",
     },
     Object {
       "key": "icon",
@@ -348,6 +352,10 @@ Object {
   "meta": Object {},
   "settings": Array [
     Object {
+      "key": "members_track_sources",
+      "value": true,
+    },
+    Object {
       "key": "title",
       "value": "[]",
     },
@@ -361,7 +369,7 @@ Object {
     },
     Object {
       "key": "cover_image",
-      "value": "https://static.ghost.org/v4.0.0/images/publication-cover.jpg",
+      "value": "https://static.ghost.org/v5.0.0/images/publication-cover.jpg",
     },
     Object {
       "key": "icon",
@@ -627,7 +635,7 @@ exports[`Settings API Edit Can edit a setting 2: [headers] 1`] = `
 Object {
   "access-control-allow-origin": "http://127.0.0.1:2369",
   "cache-control": "no-cache, private, no-store, must-revalidate, max-stale=0, post-check=0, pre-check=0",
-  "content-length": "3450",
+  "content-length": "3464",
   "content-type": "application/json; charset=utf-8",
   "etag": StringMatching /\\(\\?:W\\\\/\\)\\?"\\(\\?:\\[ !#-\\\\x7E\\\\x80-\\\\xFF\\]\\*\\|\\\\r\\\\n\\[\\\\t \\]\\|\\\\\\\\\\.\\)\\*"/,
   "vary": "Accept-Version, Origin, Accept-Encoding",
@@ -640,6 +648,10 @@ exports[`Settings API Edit cannot edit uneditable settings 1: [body] 1`] = `
 Object {
   "meta": Object {},
   "settings": Array [
+    Object {
+      "key": "members_track_sources",
+      "value": true,
+    },
     Object {
       "key": "title",
       "value": "[]",
@@ -654,7 +666,7 @@ Object {
     },
     Object {
       "key": "cover_image",
-      "value": "https://static.ghost.org/v4.0.0/images/publication-cover.jpg",
+      "value": "https://static.ghost.org/v5.0.0/images/publication-cover.jpg",
     },
     Object {
       "key": "icon",
@@ -933,6 +945,10 @@ Object {
   "meta": Object {},
   "settings": Array [
     Object {
+      "key": "members_track_sources",
+      "value": true,
+    },
+    Object {
       "key": "title",
       "value": "[]",
     },
@@ -946,7 +962,7 @@ Object {
     },
     Object {
       "key": "cover_image",
-      "value": "https://static.ghost.org/v4.0.0/images/publication-cover.jpg",
+      "value": "https://static.ghost.org/v5.0.0/images/publication-cover.jpg",
     },
     Object {
       "key": "icon",
@@ -1230,6 +1246,10 @@ Object {
   },
   "settings": Array [
     Object {
+      "key": "members_track_sources",
+      "value": true,
+    },
+    Object {
       "key": "title",
       "value": "[]",
     },
@@ -1243,7 +1263,7 @@ Object {
     },
     Object {
       "key": "cover_image",
-      "value": "https://static.ghost.org/v4.0.0/images/publication-cover.jpg",
+      "value": "https://static.ghost.org/v5.0.0/images/publication-cover.jpg",
     },
     Object {
       "key": "icon",
@@ -1522,6 +1542,10 @@ Object {
   "meta": Object {},
   "settings": Array [
     Object {
+      "key": "members_track_sources",
+      "value": true,
+    },
+    Object {
       "key": "title",
       "value": "[]",
     },
@@ -1535,7 +1559,7 @@ Object {
     },
     Object {
       "key": "cover_image",
-      "value": "https://static.ghost.org/v4.0.0/images/publication-cover.jpg",
+      "value": "https://static.ghost.org/v5.0.0/images/publication-cover.jpg",
     },
     Object {
       "key": "icon",
@@ -1877,6 +1901,10 @@ Object {
   "meta": Object {},
   "settings": Array [
     Object {
+      "key": "members_track_sources",
+      "value": true,
+    },
+    Object {
       "key": "title",
       "value": "[]",
     },
@@ -1890,7 +1918,7 @@ Object {
     },
     Object {
       "key": "cover_image",
-      "value": "https://static.ghost.org/v4.0.0/images/publication-cover.jpg",
+      "value": "https://static.ghost.org/v5.0.0/images/publication-cover.jpg",
     },
     Object {
       "key": "icon",

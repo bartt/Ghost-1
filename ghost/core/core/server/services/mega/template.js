@@ -1,4 +1,17 @@
+// ---------------------------------------------
+// ---------------------------------------------
+//
+// WARNING!!
+//
+// THIS FILE IS DEPRECATED. PLEASE ALSO MAKE IDENTICAL CHANGES IN THE EMAIL-SERVICE PACKAGE -> email-templates/template.hbs
+//
+// WARNING!!
+//
+// ---------------------------------------------
+// ---------------------------------------------
+
 const {escapeHtml: escape} = require('@tryghost/string');
+const feedbackButtons = require('./feedback-buttons');
 
 /* eslint indent: warn, no-irregular-whitespace: warn */
 const iff = (cond, yes, no) => (cond ? yes : no);
@@ -36,6 +49,7 @@ module.exports = ({post, site, newsletter, templateSettings}) => {
 <head>
 <meta name="viewport" content="width=device-width" />
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->
 <title>${cleanPost.title}</title>
 <style>
 /* -------------------------------------
@@ -1160,6 +1174,8 @@ ${ templateSettings.showBadge ? `
 }
 ` : ''}
 
+${iff(templateSettings.feedbackEnabled, feedbackButtons.getButtonsHeadStyles(templateSettings.accentColor), '')}
+
 </style>
 </head>
 
@@ -1264,6 +1280,8 @@ ${ templateSettings.showBadge ? `
                         </tr>
 
                         <!-- END MAIN CONTENT AREA -->
+
+                        ${iff(templateSettings.feedbackEnabled, feedbackButtons.getTemplate(templateSettings.accentColor), '')}
 
                         <tr>
                             <td class="wrapper" align="center">

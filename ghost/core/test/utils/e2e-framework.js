@@ -15,6 +15,7 @@
 const _ = require('lodash');
 const {sequence} = require('@tryghost/promise');
 const {any, stringMatching} = require('@tryghost/express-test').snapshot;
+const {AsymmetricMatcher} = require('expect');
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
@@ -158,7 +159,7 @@ const resetData = async () => {
  * Creates a ContentAPITestAgent which is a drop-in substitution for supertest.
  * It is automatically hooked up to the Content API so you can make requests to e.g.
  * agent.get('/posts/') without having to worry about URL paths
- * @returns {Promise<ContentAPITestAgent>} agent
+ * @returns {Promise<InstanceType<ContentAPITestAgent>>} agent
  */
 const getContentAPIAgent = async () => {
     try {
@@ -182,7 +183,7 @@ const getContentAPIAgent = async () => {
  *
  * @param {Object} [options={}]
  * @param {Boolean} [options.members] Include members in the boot process
- * @returns {Promise<AdminAPITestAgent>} agent
+ * @returns {Promise<InstanceType<AdminAPITestAgent>>} agent
  */
 const getAdminAPIAgent = async (options = {}) => {
     const bootOptions = {};
@@ -210,7 +211,7 @@ const getAdminAPIAgent = async (options = {}) => {
  * It is automatically hooked up to the Members API so you can make requests to e.g.
  * agent.get('/webhooks/stripe/') without having to worry about URL paths
  *
- * @returns {Promise<MembersAPITestAgent>} agent
+ * @returns {Promise<InstanceType<MembersAPITestAgent>>} agent
  */
 const getMembersAPIAgent = async () => {
     const bootOptions = {
@@ -235,7 +236,7 @@ const getMembersAPIAgent = async () => {
  * It is automatically hooked up to the Ghost API so you can make requests to e.g.
  * agent.get('/well-known/jwks.json') without having to worry about URL paths
  *
- * @returns {Promise<GhostAPITestAgent>} agent
+ * @returns {Promise<InstanceType<GhostAPITestAgent>>} agent
  */
 const getGhostAPIAgent = async () => {
     const bootOptions = {
@@ -258,7 +259,7 @@ const getGhostAPIAgent = async () => {
 
 /**
  *
- * @returns {Promise<{adminAgent: AdminAPITestAgent, membersAgent: MembersAPITestAgent}>} agents
+ * @returns {Promise<{adminAgent: InstanceType<AdminAPITestAgent>, membersAgent: InstanceType<MembersAPITestAgent>}>} agents
  */
 const getAgentsForMembers = async () => {
     let membersAgent;
@@ -292,20 +293,25 @@ const getAgentsForMembers = async () => {
 };
 
 /**
- * TODO: for now this agent returns a supertest agent instead of a proper test agent.
- * We need to add support for this.
+ * @NOTE: for now method returns a supertest agent for Frontend instead of test agent with snapshot support.
+ *        frontendAgent should be returning an instance of TestAgent (related: https://github.com/TryGhost/Toolbox/issues/471)
+ *  @returns {Promise<{adminAgent: InstanceType<AdminAPITestAgent>, membersAgent: InstanceType<MembersAPITestAgent>, frontendAgent: InstanceType<supertest.SuperAgentTest>, contentAPIAgent: InstanceType<ContentAPITestAgent>, ghostServer: Express.Application}>} agents
  */
 const getAgentsWithFrontend = async () => {
+    let ghostServer;
     let membersAgent;
     let adminAgent;
     let frontendAgent;
+    let contentAPIAgent;
 
     const bootOptions = {
         frontend: true,
         server: true
     };
     try {
-        const app = (await startGhost(bootOptions)).rootApp;
+        ghostServer = await startGhost(bootOptions);
+        const app = ghostServer.rootApp;
+
         const originURL = configUtils.config.get('url');
 
         membersAgent = new MembersAPITestAgent(app, {
@@ -314,6 +320,10 @@ const getAgentsWithFrontend = async () => {
         });
         adminAgent = new AdminAPITestAgent(app, {
             apiURL: '/ghost/api/admin/',
+            originURL
+        });
+        contentAPIAgent = new ContentAPITestAgent(app, {
+            apiURL: '/ghost/api/content/',
             originURL
         });
         frontendAgent = supertest.agent(originURL);
@@ -325,7 +335,10 @@ const getAgentsWithFrontend = async () => {
     return {
         adminAgent,
         membersAgent,
-        frontendAgent
+        frontendAgent,
+        contentAPIAgent,
+        // @NOTE: ghost server should not be exposed ideally, it's a hack (see commit message)
+        ghostServer
     };
 };
 
@@ -335,6 +348,32 @@ const insertWebhook = ({event, url}) => {
         target_url: url
     });
 };
+
+class Nullable extends AsymmetricMatcher {
+    constructor(sample) {
+        super(sample);
+    }
+
+    asymmetricMatch(other) {
+        if (other === null) {
+            return true;
+        }
+
+        return this.sample.asymmetricMatch(other);
+    }
+
+    toString() {
+        return `Nullable<${this.sample.toString()}>`;
+    }
+
+    getExpectedType() {
+        return `null|${this.sample.getExpectedType()}`;
+    }
+
+    toAsymmetricMatcher() {
+        return `Nullable<${this.sample.toAsymmetricMatcher ? this.sample.toAsymmetricMatcher() : this.sample.toString()}>`;
+    }
+}
 
 module.exports = {
     // request agent
@@ -346,7 +385,8 @@ module.exports = {
         getGhostAPIAgent,
         getAgentsWithFrontend
     },
-
+    // @NOTE: startGhost only exposed for playwright tests
+    startGhost,
     // Mocks and Stubs
     mockManager,
 
@@ -367,6 +407,7 @@ module.exports = {
         anyArray: any(Array),
         anyObject: any(Object),
         anyNumber: any(Number),
+        nullable: expectedObject => new Nullable(expectedObject), // usage: nullable(anyString)
         anyStringNumber: stringMatching(/\d+/),
         anyISODateTime: stringMatching(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z/),
         anyISODate: stringMatching(/\d{4}-\d{2}-\d{2}/),
@@ -384,7 +425,7 @@ module.exports = {
         // @NOTE: hack here! it's due to https://github.com/TryGhost/Toolbox/issues/341
         //        this matcher should be removed once the issue is solved - routing is redesigned
         //        An ideal solution would be removal of this matcher altogether.
-        anyLocalURL: stringMatching(/http:\/\/127.0.0.1:2369\/\w+\//),
+        anyLocalURL: stringMatching(/http:\/\/127.0.0.1:2369\/[A-Za-z0-9_-]+\//),
         stringMatching
     },
 
@@ -392,5 +433,6 @@ module.exports = {
     configUtils: require('./configUtils'),
     dbUtils: require('./db-utils'),
     urlUtils: require('./urlUtils'),
+    sleep: require('./sleep'),
     resetRateLimits
 };

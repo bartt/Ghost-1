@@ -106,6 +106,9 @@ async function signup({data, state, api}) {
                 ({tierId, cadence} = getProductCadenceFromPrice({site: state?.site, priceId: plan}));
                 await api.member.checkoutPlan({plan, tierId, cadence, email, name, newsletters, offerId});
             }
+            return {
+                page: 'loading'
+            };
         }
         return {
             page: 'magiclink',
@@ -283,7 +286,7 @@ async function updateNewsletterPreference({data, state, api}) {
         const member = await api.member.update(updateData);
         const action = 'updateNewsletterPref:success';
         return {
-            action, 
+            action,
             member
         };
     } catch (e) {
@@ -293,6 +296,29 @@ async function updateNewsletterPreference({data, state, api}) {
                 type: 'updateNewsletter:failed',
                 autoHide: true, closeable: true, state, status: 'error',
                 message: 'Failed to update newsletter settings'
+            })
+        };
+    }
+}
+
+async function removeEmailFromSuppressionList({state, api}) {
+    try {
+        await api.member.deleteSuppression();
+        const action = 'removeEmailFromSuppressionList:success';
+        return {
+            action,
+            popupNotification: createPopupNotification({
+                type: 'removeEmailFromSuppressionList:success', autoHide: true, closeable: true, state, status: 'success',
+                message: 'You have been successfully resubscribed'
+            })
+        };
+    } catch (e) {
+        return {
+            action: 'removeEmailFromSuppressionList:failed',
+            popupNotification: createPopupNotification({
+                type: 'removeEmailFromSuppressionList:failed',
+                autoHide: true, closeable: true, state, status: 'error',
+                message: 'Your email has failed to resubscribe, please try again'
             })
         };
     }
@@ -374,14 +400,16 @@ async function refreshMemberData({state, api}) {
             if (member) {
                 return {
                     member,
-                    success: true
+                    success: true,
+                    action: 'refreshMemberData:success'
                 };
             }
             return null;
         } catch (err) {
             return {
                 success: false,
-                error: err
+                error: err,
+                action: 'refreshMemberData:failed'
             };
         }
     }
@@ -466,7 +494,8 @@ const Actions = {
     editBilling,
     checkoutPlan,
     updateNewsletterPreference,
-    showPopupNotification
+    showPopupNotification,
+    removeEmailFromSuppressionList
 };
 
 /** Handle actions in the App, returns updated state */

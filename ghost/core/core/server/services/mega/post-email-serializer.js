@@ -7,20 +7,24 @@ const api = require('../../api').endpoints;
 const apiFramework = require('@tryghost/api-framework');
 const {URL} = require('url');
 const mobiledocLib = require('../../lib/mobiledoc');
+const lexicalLib = require('../../lib/lexical');
 const htmlToPlaintext = require('@tryghost/html-to-plaintext');
 const membersService = require('../members');
-const {isUnsplashImage, isLocalContentImage} = require('@tryghost/kg-default-cards/lib/utils');
+const {isUnsplashImage} = require('@tryghost/kg-default-cards/lib/utils');
 const {textColorForBackgroundColor, darkenToContrastThreshold} = require('@tryghost/color-utils');
 const logging = require('@tryghost/logging');
 const urlService = require('../../services/url');
 const linkReplacer = require('@tryghost/link-replacer');
 const linkTracking = require('../link-tracking');
 const memberAttribution = require('../member-attribution');
+const feedbackButtons = require('./feedback-buttons');
+const labs = require('../../../shared/labs');
+const storageUtils = require('../../adapters/storage/utils');
 
 const ALLOWED_REPLACEMENTS = ['first_name', 'uuid'];
 
 const PostEmailSerializer = {
-    
+
     // Format a full html document ready for email by inlining CSS, adjusting links,
     // and performing any client-specific fixes
     formatHtmlForEmail(html) {
@@ -44,7 +48,10 @@ const PostEmailSerializer = {
 
         // Fix any unsupported chars in Outlook
         juicedHtml = juicedHtml.replace(/&apos;/g, '&#39;');
-
+        juicedHtml = juicedHtml.replace(/→/g, '&rarr;');
+        juicedHtml = juicedHtml.replace(/–/g, '&ndash;');
+        juicedHtml = juicedHtml.replace(/“/g, '&ldquo;');
+        juicedHtml = juicedHtml.replace(/”/g, '&rdquo;');
         return juicedHtml;
     },
 
@@ -107,10 +114,23 @@ const PostEmailSerializer = {
         return signupUrl.href;
     },
 
+    /**
+     * replaceFeedbackLinks
+     *
+     * Replace the button template links with real links
+     *
+     * @param {string} html
+     * @param {string} postId (will be url encoded)
+     * @param {string} memberUuid member uuid to use in the URL (will be url encoded)
+     */
+    replaceFeedbackLinks(html, postId, memberUuid) {
+        return feedbackButtons.generateLinks(postId, memberUuid, html);
+    },
+
     // NOTE: serialization is needed to make sure we do post transformations such as image URL transformation from relative to absolute
     async serializePostModel(model) {
-        // fetch mobiledoc rather than html and plaintext so we can render email-specific contents
-        const frame = {options: {context: {user: true}, formats: 'mobiledoc'}};
+        // fetch mobiledoc/lexical rather than html and plaintext so we can render email-specific contents
+        const frame = {options: {context: {user: true}, formats: 'mobiledoc,lexical'}};
         const docName = 'posts';
 
         await apiFramework
@@ -163,12 +183,21 @@ const PostEmailSerializer = {
         const EMAIL_REPLACEMENT_REGEX = /%%(\{.*?\})%%/g;
         const REPLACEMENT_STRING_REGEX = /\{(?<recipientProperty>\w*?)(?:,? *(?:"|&quot;)(?<fallback>.*?)(?:"|&quot;))?\}/;
 
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
         const replacements = [];
 
         ['html', 'plaintext'].forEach((format) => {
             let result;
             while ((result = EMAIL_REPLACEMENT_REGEX.exec(email[format])) !== null) {
                 const [replacementMatch, replacementStr] = result;
+
+                // Did we already found this match and added it to the replacements array?
+                if (replacements.find(r => r.match === replacementMatch && r.format === format)) {
+                    continue;
+                }
                 const match = replacementStr.match(REPLACEMENT_STRING_REGEX);
 
                 if (match) {
@@ -181,6 +210,7 @@ const PostEmailSerializer = {
                             format,
                             id,
                             match: replacementMatch,
+                            regexp: new RegExp(escapeRegExp(replacementMatch), 'g'),
                             recipientProperty: `member_${recipientProperty}`,
                             fallback
                         });
@@ -206,6 +236,7 @@ const PostEmailSerializer = {
             titleAlignment: newsletter.get('title_alignment'),
             bodyFontCategory: newsletter.get('body_font_category'),
             showBadge: newsletter.get('show_badge'),
+            feedbackEnabled: newsletter.get('feedback_enabled') && labs.isSet('audienceFeedback'),
             footerContent: newsletter.get('footer_content'),
             showHeaderName: newsletter.get('show_header_name'),
             accentColor,
@@ -231,7 +262,7 @@ const PostEmailSerializer = {
                         templateSettings.headerImageWidth = 600;
                     }
 
-                    if (isLocalContentImage(templateSettings.headerImage, urlUtils.getSiteUrl())) {
+                    if (storageUtils.isLocalImage(templateSettings.headerImage)) {
                         // we can safely request a 1200px image - Ghost will serve the original if it's smaller
                         templateSettings.headerImage = templateSettings.headerImage.replace(/\/content\/images\//, '/content/images/size/w1200/');
                     }
@@ -271,11 +302,17 @@ const PostEmailSerializer = {
             post.excerpt = post.excerpt.replace(/\s\[http(.*?)\]/g, '');
         }
 
-        post.html = mobiledocLib.mobiledocHtmlRenderer.render(
-            JSON.parse(post.mobiledoc), {target: 'email', postUrl: post.url}
-        );
+        if (post.lexical) {
+            post.html = lexicalLib.lexicalHtmlRenderer.render(
+                post.lexical, {target: 'email', postUrl: post.url}
+            );
+        } else {
+            post.html = mobiledocLib.mobiledocHtmlRenderer.render(
+                JSON.parse(post.mobiledoc), {target: 'email', postUrl: post.url}
+            );
+        }
 
-        // perform any email specific adjustments to the mobiledoc->HTML render output
+        // perform any email specific adjustments to the HTML render output.
         // body wrapper is required so we can get proper top-level selections
         const cheerio = require('cheerio');
         const _cheerio = cheerio.load(`<body>${post.html}</body>`);
@@ -312,7 +349,7 @@ const PostEmailSerializer = {
                         post.feature_image_width = 600;
                     }
 
-                    if (isLocalContentImage(post.feature_image, urlUtils.getSiteUrl())) {
+                    if (storageUtils.isLocalImage(post.feature_image)) {
                         // we can safely request a 1200px image - Ghost will serve the original if it's smaller
                         post.feature_image = post.feature_image.replace(/\/content\/images\//, '/content/images/size/w1200/');
                     }
@@ -335,7 +372,7 @@ const PostEmailSerializer = {
             plaintext: post.plaintext
         };
 
-        /** 
+        /**
          *  If a part of the email is members-only and the post is paid-only, add a paywall:
          *  - Just before sending the email, we'll hide the paywall or paid content depending on the member segment it is sent to.
          *  - We already need to do URL-replacement on the HTML here
@@ -359,21 +396,34 @@ const PostEmailSerializer = {
         if (!options.isBrowserPreview && !options.isTestEmail && settingsCache.get('email_track_clicks')) {
             result.html = await linkReplacer.replace(result.html, async (url) => {
                 // Add newsletter source attribution
-                url = memberAttribution.service.addEmailSourceAttributionTracking(url, newsletter);
                 const isSite = urlUtils.isSiteUrl(url);
 
                 if (isSite) {
+                    // Add newsletter name as ref to the URL
+                    url = memberAttribution.service.addEmailSourceAttributionTracking(url, newsletter);
+
                     // Only add post attribution to our own site (because external sites could/should not process this information)
                     url = memberAttribution.service.addPostAttributionTracking(url, post);
+                } else {
+                    // Add email source attribution without the newsletter name
+                    url = memberAttribution.service.addEmailSourceAttributionTracking(url);
                 }
 
                 // Add link click tracking
                 url = await linkTracking.service.addTrackingToUrl(url, post, '--uuid--');
-                
+
                 // We need to convert to a string at this point, because we need invalid string characters in the URL
                 const str = url.toString().replace(/--uuid--/g, '%%{uuid}%%');
                 return str;
             });
+        }
+
+        // Add buttons
+        if (labs.isSet('audienceFeedback')) {
+            // create unique urls for every recipient (for example, for feedback buttons)
+            // Note, we need to use a different member uuid in the links because `%%{uuid}%%` would get escaped by the URL object when set as a search param
+            const urlSafeToken = '--' + new Date().getTime() + 'url-safe-uuid--';
+            result.html = this.replaceFeedbackLinks(result.html, post.id, urlSafeToken).replace(new RegExp(urlSafeToken, 'g'), '%%{uuid}%%');
         }
 
         // Clean up any unknown replacements strings to get our final content
@@ -407,7 +457,7 @@ const PostEmailSerializer = {
         <h2
             style="margin-top: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; line-height: 1.11em; font-weight: 700; text-rendering: optimizeLegibility; margin: 1.5em 0 0.5em 0; font-size: 26px;">
             Subscribe to <span style="white-space: nowrap; font-size: 26px !important;">continue reading.</span></h2>
-        <p style="margin: 0 auto 1.5em auto; line-height: 1.6em; max-width: 440px;">Become a paid member of ${siteTitle} to get access to all 
+        <p style="margin: 0 auto 1.5em auto; line-height: 1.6em; max-width: 440px;">Become a paid member of ${siteTitle} to get access to all
         <span style="white-space: nowrap;">subscriber-only content.</span></p>
         <div class="btn btn-accent" style="box-sizing: border-box; width: 100%; display: table;">
             <table border="0" cellspacing="0" cellpadding="0" align="center"
@@ -490,7 +540,7 @@ const PostEmailSerializer = {
         });
 
         result.html = this.formatHtmlForEmail($.html());
-        result.plaintext = htmlToPlaintext.email(result.html); 
+        result.plaintext = htmlToPlaintext.email(result.html);
         delete result.post;
 
         return result;

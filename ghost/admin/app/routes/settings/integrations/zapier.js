@@ -1,19 +1,11 @@
 import AdminRoute from 'ghost-admin/routes/admin';
+import {inject} from 'ghost-admin/decorators/inject';
 import {inject as service} from '@ember/service';
 
 export default class ZapierRoute extends AdminRoute {
     @service router;
-    @service config;
 
-    constructor() {
-        super(...arguments);
-        this.router.on('routeWillChange', () => {
-            if (this.controller) {
-                this.controller.set('selectedApiKey', null);
-                this.controller.set('isApiKeyRegenerated', false);
-            }
-        });
-    }
+    @inject config;
 
     beforeModel() {
         super.beforeModel(...arguments);
@@ -30,6 +22,10 @@ export default class ZapierRoute extends AdminRoute {
         return this
             .controllerFor('settings.integrations')
             .integrationModelHook('slug', 'zapier', this, transition);
+    }
+
+    resetController(controller) {
+        controller.regeneratedApiKey = null;
     }
 
     buildRouteInfoMetadata() {

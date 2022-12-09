@@ -165,7 +165,6 @@ describe('Member Data attributes:', () => {
             const {event, errorEl, siteUrl, clickHandler, site, member, element} = getMockData();
 
             const paidTier = site.products.find(p => p.type === 'paid');
-            const plan = paidTier.monthlyPrice.id;
 
             await planClickHandler({event, errorEl, siteUrl, clickHandler, site, member, el: element});
             expect(window.fetch).toHaveBeenNthCalledWith(1,
@@ -174,7 +173,8 @@ describe('Member Data attributes:', () => {
                 }
             );
             const expectedBody = {
-                priceId: plan,
+                cadence: 'month',
+                tierId: paidTier.id,
                 identity: 'session-identity',
                 successUrl: 'https://portal.localhost/success',
                 cancelUrl: 'https://portal.localhost/cancel',
@@ -205,14 +205,14 @@ describe('Member Data attributes:', () => {
             let {event, errorEl, siteUrl, clickHandler, site, member, element} = getMockData();
             member = FixtureMember.free;
             const paidTier = site.products.find(p => p.type === 'paid');
-            const plan = paidTier.monthlyPrice.id;
 
             await planClickHandler({event, errorEl, siteUrl, clickHandler, site, member, el: element});
             expect(window.fetch).toHaveBeenNthCalledWith(1, 'https://portal.localhost/members/api/session', {
                 credentials: 'same-origin'
             });
             const expectedBody = {
-                priceId: plan,
+                cadence: 'month',
+                tierId: paidTier.id,
                 identity: 'session-identity',
                 successUrl: 'https://portal.localhost/success',
                 cancelUrl: 'https://portal.localhost/cancel',
@@ -383,6 +383,29 @@ describe('Portal Data attributes:', () => {
             expect(popupFrame).toBeInTheDocument();
             const loginTitle = within(popupFrame.contentDocument).queryByText(/already a member/i);
             expect(loginTitle).toBeInTheDocument();
+        });
+    });
+
+    describe('data-portal=signup/:tierid/monthly', () => {
+        test('opens Portal signup page', async () => {
+            const siteData = FixturesSite.singleTier.basic;
+            const paidTier = siteData.products.find(p => p.type === 'paid');
+
+            document.body.innerHTML = `
+                <div data-portal="signup/${paidTier.id}/monthly"> </div>
+            `;
+            let {
+                popupFrame, triggerButtonFrame, ...utils
+            } = await setup({
+                site: FixturesSite.singleTier.basic,
+                showPopup: false
+            });
+            expect(popupFrame).not.toBeInTheDocument();
+            expect(triggerButtonFrame).toBeInTheDocument();
+            const portalElement = document.querySelector('[data-portal]');
+            fireEvent.click(portalElement);
+            popupFrame = await utils.findByTitle(/portal-popup/i);
+            expect(popupFrame).toBeInTheDocument();
         });
     });
 

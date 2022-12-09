@@ -7,7 +7,7 @@ import {GlobalStyles} from './Global.styles';
 import {ActionButtonStyles} from './common/ActionButton';
 import {BackButtonStyles} from './common/BackButton';
 import {SwitchStyles} from './common/Switch';
-import {AccountHomePageStyles} from './pages/AccountHomePage';
+import AccountHomePageStyles from '!!raw-loader!./pages/AccountHomePage/AccountHomePage.css';
 import {AccountPlanPageStyles} from './pages/AccountPlanPage';
 import {InputFieldStyles} from './common/InputField';
 import {SignupPageStyles} from './pages/SignupPage';
@@ -18,6 +18,9 @@ import {MagicLinkStyles} from './pages/MagicLinkPage';
 import {PopupNotificationStyles} from './common/PopupNotification';
 import {OfferPageStyles} from './pages/OfferPage';
 import {FeedbackPageStyles} from './pages/FeedbackPage';
+import EmailSuppressedPage from '!!raw-loader!./pages/EmailSuppressedPage.css';
+import EmailSuppressionFAQ from '!!raw-loader!./pages/EmailSuppressionFAQ.css';
+import EmailReceivingFAQ from '!!raw-loader!./pages/EmailReceivingFAQ.css';
 
 // Global styles
 const FrameStyles = `
@@ -320,6 +323,12 @@ const FrameStyles = `
     z-index: 9999;
 }
 
+.gh-portal-popup-container.large-size {
+    width: 720px;
+    justify-content: flex-start;
+    padding: 0;
+}
+
 .gh-portal-popup-container.full-size {
     width: 100vw;
     min-height: 100vh;
@@ -497,6 +506,12 @@ const FrameStyles = `
     margin-bottom: 20px;
 }
 
+.gh-portal-section.flex {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
 .gh-portal-detail-header {
     position: relative;
     display: flex;
@@ -513,6 +528,22 @@ const FrameStyles = `
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.gh-portal-footer-secondary {
+    display: flex;
+    font-size: 14.5px;
+    letter-spacing: 0.3px;
+}
+
+.gh-portal-footer-secondary button {
+    font-size: 14.5px;
+}
+
+.gh-portal-footer-secondary-light {
+    color: var(--grey7);
 }
 
 .gh-portal-list-header {
@@ -769,8 +800,12 @@ const FrameStyles = `
 
 const MobileStyles = `
 @media (max-width: 1440px) {
-    .gh-portal-popup-container:not(.full-size):not(.preview) {
+    .gh-portal-popup-container:not(.full-size):not(.large-size):not(.preview) {
         width: 460px;
+    }
+
+    .gh-portal-popup-container.large-size {
+        width: 600px;
     }
 
     .gh-portal-input {
@@ -855,19 +890,23 @@ const MobileStyles = `
         justify-content: flex-start;
     }
 
+    .gh-portal-popup-container.large-size {
+        padding: 0 !important;
+    }
+
     .gh-portal-popup-wrapper.account-home,
     .gh-portal-popup-container.account-home {
         background: var(--grey13);
     }
 
-    .gh-portal-popup-wrapper.full-size .gh-portal-closeicon, 
+    .gh-portal-popup-wrapper.full-size .gh-portal-closeicon,
     .gh-portal-popup-container.full-size .gh-portal-closeicon {
         width: 16px;
         height: 16px;
     }
 
     /* Small width preview in Admin */
-    .gh-portal-popup-wrapper.preview:not(.full-size) footer.gh-portal-signup-footer, 
+    .gh-portal-popup-wrapper.preview:not(.full-size) footer.gh-portal-signup-footer,
     .gh-portal-popup-wrapper.preview:not(.full-size) footer.gh-portal-signin-footer {
         padding-bottom: 32px;
     }
@@ -891,7 +930,7 @@ const MobileStyles = `
         max-height: 660px;
         margin-bottom: 0;
     }
-    
+
     .preview .gh-portal-invite-only-notification + .gh-portal-signup-message {
         margin-bottom: 16px;
     }
@@ -1173,6 +1212,9 @@ export function getFrameStyles({site}) {
         PopupNotificationStyles +
         MobileStyles +
         MultipleProductsGlobalStyles +
-        FeedbackPageStyles;
+        FeedbackPageStyles +
+        EmailSuppressedPage +
+        EmailSuppressionFAQ +
+        EmailReceivingFAQ;
     return FrameStyle;
 }

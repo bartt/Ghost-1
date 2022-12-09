@@ -5,6 +5,7 @@ import moment from 'moment-timezone';
 import {AjaxError, isAjaxError, isForbiddenError} from 'ember-ajax/errors';
 import {captureMessage} from '@sentry/ember';
 import {get} from '@ember/object';
+import {inject} from 'ghost-admin/decorators/inject';
 import {isArray as isEmberArray} from '@ember/array';
 import {isNone} from '@ember/utils';
 import {inject as service} from '@ember/service';
@@ -33,6 +34,22 @@ export function isVersionMismatchError(errorOrStatus, payload) {
         return errorOrStatus instanceof VersionMismatchError;
     } else {
         return get(payload || {}, 'errors.firstObject.type') === 'VersionMismatchError';
+    }
+}
+
+/* DataImport error */
+
+export class DataImportError extends AjaxError {
+    constructor(payload) {
+        super(payload, 'he server encountered an error whilst importing data.');
+    }
+}
+
+export function isDataImportError(errorOrStatus, payload) {
+    if (isAjaxError(errorOrStatus)) {
+        return errorOrStatus instanceof DataImportError;
+    } else {
+        return get(payload || {}, 'errors.firstObject.type') === 'DataImportError';
     }
 }
 
@@ -132,6 +149,8 @@ export function isHostLimitError(errorOrStatus, payload) {
     }
 }
 
+/* Email error */
+
 export class EmailError extends AjaxError {
     constructor(payload) {
         super(payload, 'Please verify your email settings');
@@ -163,8 +182,9 @@ export function isAcceptedResponse(errorOrStatus) {
 
 @classic
 class ajaxService extends AjaxService {
-    @service config;
     @service session;
+
+    @inject config;
 
     // flag to tell our ESA authenticator not to try an invalidate DELETE request
     // because it's been triggered by this service's 401 handling which means the
@@ -339,6 +359,10 @@ class ajaxService extends AjaxService {
 
     isUnsupportedMediaTypeError(status) {
         return isUnsupportedMediaTypeError(status);
+    }
+
+    isDataImportError(status) {
+        return isDataImportError(status);
     }
 
     isMaintenanceError(status, headers, payload) {

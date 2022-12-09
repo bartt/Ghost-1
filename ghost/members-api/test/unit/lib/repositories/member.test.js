@@ -53,6 +53,86 @@ describe('MemberRepository', function () {
         });
     });
 
+    describe('setComplimentarySubscription', function () {
+        let Member;
+        let productRepository;
+
+        beforeEach(function () {
+            Member = {
+                findOne: sinon.stub().resolves({
+                    id: 'member_id_123',
+                    related: () => {
+                        return {
+                            fetch: () => {
+                                return {
+                                    models: []
+                                };
+                            }
+                        };
+                    }
+                })
+            };
+        });
+
+        it('throws an error when there is no default product', async function () {
+            productRepository = {
+                getDefaultProduct: sinon.stub().resolves(null)
+            };
+
+            const repo = new MemberRepository({
+                Member,
+                stripeAPIService: {
+                    configured: true
+                },
+                productRepository
+            });
+
+            try {
+                await repo.setComplimentarySubscription({
+                    id: 'member_id_123'
+                }, {
+                    transacting: true
+                });
+
+                assert.fail('setComplimentarySubscription should have thrown');
+            } catch (err) {
+                assert.equal(err.message, 'Could not find Product "default"');
+            }
+        });
+
+        it('uses the right options for fetching default product', async function () {
+            productRepository = {
+                getDefaultProduct: sinon.stub().resolves({
+                    toJSON: () => {
+                        return null;
+                    }
+                })
+            };
+
+            const repo = new MemberRepository({
+                Member,
+                stripeAPIService: {
+                    configured: true
+                },
+                productRepository
+            });
+
+            try {
+                await repo.setComplimentarySubscription({
+                    id: 'member_id_123'
+                }, {
+                    transacting: true,
+                    withRelated: ['labels']
+                });
+
+                assert.fail('setComplimentarySubscription should have thrown');
+            } catch (err) {
+                productRepository.getDefaultProduct.calledWith({withRelated: ['stripePrices'], transacting: true}).should.be.true();
+                assert.equal(err.message, 'Could not find Product "default"');
+            }
+        });
+    });
+
     describe('linkSubscription', function (){
         let Member;
         let notifySpy;
@@ -61,6 +141,7 @@ describe('MemberRepository', function () {
         let MemberProductEvent;
         let stripeAPIService;
         let productRepository;
+        let offerRepository;
         let labsService;
         let subscriptionData;
 
@@ -141,6 +222,12 @@ describe('MemberRepository', function () {
             labsService = {
                 isSet: sinon.stub().returns(true)
             };
+
+            offerRepository = {
+                getById: sinon.stub().resolves({
+                    id: 'offer_123'
+                })
+            };
         });
 
         it('dispatches paid subscription event', async function (){
@@ -168,6 +255,42 @@ describe('MemberRepository', function () {
             });
 
             notifySpy.calledOnce.should.be.true();
+        });
+
+        it('attaches offer information to subscription event', async function (){
+            const repo = new MemberRepository({
+                stripeAPIService,
+                StripeCustomerSubscription,
+                MemberPaidSubscriptionEvent,
+                MemberProductEvent,
+                productRepository,
+                offerRepository,
+                labsService,
+                Member
+            });
+
+            sinon.stub(repo, 'getSubscriptionByStripeID').resolves(null);
+
+            DomainEvents.subscribe(SubscriptionCreatedEvent, notifySpy);
+
+            await repo.linkSubscription({
+                id: 'member_id_123',
+                subscription: subscriptionData,
+                offerId: 'offer_123'
+            }, {
+                transacting: {
+                    executionPromise: Promise.resolve()
+                },
+                context: {}
+            });
+
+            notifySpy.calledOnce.should.be.true();
+            notifySpy.calledWith(sinon.match((event) => {
+                if (event.data.offerId === 'offer_123') {
+                    return true;
+                }
+                return false;
+            })).should.be.true();
         });
 
         afterEach(function () {

@@ -54,7 +54,7 @@
                         <div class="period">Yearly</div>
                     </div>
                 </div>
-                {{#if (and (feature 'freeTrial') this.isFreeTrialEnabled)}}
+                {{#if this.isFreeTrialEnabled}}
                 <div class="gh-tier-free-trial-label">
                     <span class="gh-tier-free-trial-days">{{this.tierTrialDays}} day</span> free trial
                 </div>
@@ -82,7 +82,7 @@
                     @classNames="gh-tier-actions-menu dropdown-menu dropdown-triangle-top-right"
                 >
                     <li>
-                        <button class="mr2" type="button" {{on "click" (fn this.openEditTier @tier)}}>
+                        <button class="mr2" type="button" data-test-button="edit-tier" {{on "click" (fn this.openEditTier @tier)}}>
                             <span>Edit</span>
                         </button>
                     </li>

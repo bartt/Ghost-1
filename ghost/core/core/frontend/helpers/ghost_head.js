@@ -2,7 +2,7 @@
 // Usage: `{{ghost_head}}`
 //
 // Outputs scripts and other assets at the top of a Ghost theme
-const {metaData, settingsCache, config, blogIcon, urlUtils, labs, getFrontendKey} = require('../services/proxy');
+const {metaData, settingsCache, config, blogIcon, urlUtils, getFrontendKey} = require('../services/proxy');
 const {escapeExpression, SafeString} = require('../services/handlebars');
 
 // BAD REQUIRE
@@ -207,12 +207,6 @@ module.exports = async function ghost_head(options) { // eslint-disable-line cam
         head.push('<meta name="generator" content="Ghost ' +
             escapeExpression(safeVersion) + '" />');
 
-        // Ghost analytics tag
-        if (labs.isSet('membersActivity')) {
-            const postId = (dataRoot && dataRoot.post) ? dataRoot.post.id : '';
-            head.push(writeMetaTag('ghost-analytics-id', postId, 'name'));
-        }
-
         head.push('<link rel="alternate" type="application/rss+xml" title="' +
             escapeExpression(meta.site.title) + '" href="' +
             escapeExpression(meta.rssUrl) + '" />');
@@ -234,7 +228,7 @@ module.exports = async function ghost_head(options) { // eslint-disable-line cam
                 head.push(`<script defer src="${getAssetUrl('public/comment-counts.min.js')}" data-ghost-comments-counts-api="${urlUtils.getSiteUrl(true)}members/api/comments/counts/"></script>`);
             }
 
-            if (settingsCache.get('members_enabled')) {
+            if (settingsCache.get('members_enabled') && settingsCache.get('members_track_sources')) {
                 head.push(`<script defer src="${getAssetUrl('public/member-attribution.min.js')}"></script>`);
             }
 

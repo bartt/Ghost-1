@@ -5,6 +5,7 @@ import {action} from '@ember/object';
 import {currencies, getCurrencyOptions, getSymbol} from 'ghost-admin/utils/currency';
 import {A as emberA} from '@ember/array';
 import {htmlSafe} from '@ember/template';
+import {inject} from 'ghost-admin/decorators/inject';
 import {inject as service} from '@ember/service';
 import {task} from 'ember-concurrency';
 import {tracked} from '@glimmer/tracking';
@@ -22,7 +23,10 @@ const CURRENCIES = currencies.map((currency) => {
 export default class ModalTierPrice extends ModalBase {
     @service feature;
     @service settings;
-    @service config;
+    @service membersUtils;
+
+    @inject config;
+
     @tracked model;
     @tracked tier;
     @tracked periodVal;
@@ -61,7 +65,7 @@ export default class ModalTierPrice extends ModalBase {
     }
 
     get isFreeTrialEnabled() {
-        return this.feature.get('freeTrial') && this.freeTrialEnabled && this.tier.get('trialDays') > 0;
+        return this.freeTrialEnabled && this.tier.get('trialDays') > 0;
     }
 
     init() {
@@ -185,6 +189,9 @@ export default class ModalTierPrice extends ModalBase {
             this.hasSaved = true;
             yield this.confirm();
             this.send('closeModal');
+
+            // Reload in the background (no await here)
+            this.membersUtils.reload();
         } catch (error) {
             if (error === undefined) {
                 // Validation error

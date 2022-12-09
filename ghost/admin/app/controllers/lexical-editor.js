@@ -3,16 +3,21 @@ import Controller, {inject as controller} from '@ember/controller';
 import DeletePostModal from '../components/modals/delete-post';
 import DeleteSnippetModal from '../components/editor/modals/delete-snippet';
 import PostModel from 'ghost-admin/models/post';
+import PublishLimitModal from '../components/modals/limits/publish-limit';
+import ReAuthenticateModal from '../components/editor/modals/re-authenticate';
+import UpdateSnippetModal from '../components/editor/modals/update-snippet';
 import boundOneWay from 'ghost-admin/utils/bound-one-way';
 import classic from 'ember-classic-decorator';
 import config from 'ghost-admin/config/environment';
 import isNumber from 'ghost-admin/utils/isNumber';
 import moment from 'moment-timezone';
+import {GENERIC_ERROR_MESSAGE} from '../services/notifications';
 import {action, computed} from '@ember/object';
 import {alias, mapBy} from '@ember/object/computed';
 import {capitalize} from '@ember/string';
 import {dropTask, enqueueTask, restartableTask, task, taskGroup, timeout} from 'ember-concurrency';
 import {htmlSafe} from '@ember/template';
+import {inject} from 'ghost-admin/decorators/inject';
 import {isBlank} from '@ember/utils';
 import {isArray as isEmberArray} from '@ember/array';
 import {isHostLimitError, isServerUnreachableError, isVersionMismatchError} from 'ghost-admin/services/ajax';
@@ -94,7 +99,6 @@ const messageMap = {
 export default class LexicalEditorController extends Controller {
     @controller application;
 
-    @service config;
     @service feature;
     @service membersCountCache;
     @service modals;
@@ -105,13 +109,17 @@ export default class LexicalEditorController extends Controller {
     @service settings;
     @service ui;
 
+    @inject config;
+
     /* public properties -----------------------------------------------------*/
 
     shouldFocusTitle = false;
-    showReAuthenticateModal = false;
-    showUpgradeModal = false;
     showSettingsMenu = false;
-    hostLimitError = null;
+
+    /**
+     * Flag used to determine if we should return to the analytics page or to the posts/pages overview
+     */
+    fromAnalytics = false;
 
     // koenig related properties
     wordcount = null;
@@ -239,7 +247,7 @@ export default class LexicalEditorController extends Controller {
         let transition = this.leaveEditorTransition;
 
         if (!transition) {
-            this.notifications.showAlert('Sorry, there was an error in the application. Please let the Ghost team know what happened.', {type: 'error'});
+            this.notifications.showAlert(GENERIC_ERROR_MESSAGE, {type: 'error'});
             return;
         }
 
@@ -259,27 +267,11 @@ export default class LexicalEditorController extends Controller {
     }
 
     @action
-    toggleReAuthenticateModal() {
-        if (this.showReAuthenticateModal) {
-            // closing, re-attempt save if needed
-            if (this._reauthSave) {
-                this.saveTask.perform(this._reauthSaveOptions);
-            }
-
-            this._reauthSave = false;
-            this._reauthSaveOptions = null;
-        }
-        this.toggleProperty('showReAuthenticateModal');
-    }
-
-    @action
-    openUpgradeModal() {
-        this.set('showUpgradeModal', true);
-    }
-
-    @action
-    closeUpgradeModal() {
-        this.set('showUpgradeModal', false);
+    openUpgradeModal(hostLimitError = {}) {
+        this.modals.open(PublishLimitModal, {
+            message: hostLimitError.message,
+            details: hostLimitError.details
+        });
     }
 
     @action
@@ -372,40 +364,10 @@ export default class LexicalEditorController extends Controller {
     }
 
     @action
-    toggleUpdateSnippetModal(snippetRecord, updatedProperties = {}) {
-        if (snippetRecord) {
-            this.set('snippetToUpdate', {snippetRecord, updatedProperties});
-        } else {
-            this.set('snippetToUpdate', null);
-        }
-    }
-
-    @action
-    updateSnippet() {
-        if (!this.snippetToUpdate) {
-            return Promise.reject();
-        }
-
-        const {snippetRecord, updatedProperties: {mobiledoc}} = this.snippetToUpdate;
-        snippetRecord.set('mobiledoc', mobiledoc);
-
-        return snippetRecord.save().then(() => {
-            this.set('snippetToUpdate', null);
-            this.notifications.closeAlerts('snippet.save');
-            this.notifications.showNotification(
-                `Snippet "${snippetRecord.name}" updated`,
-                {type: 'success'}
-            );
-            return snippetRecord;
-        }).catch((error) => {
-            if (!snippetRecord.errors.isEmpty) {
-                this.notifications.showAlert(
-                    `Snippet save failed: ${snippetRecord.errors.messages.join('. ')}`,
-                    {type: 'error', key: 'snippet.save'}
-                );
-            }
-            snippetRecord.rollbackAttributes();
-            throw error;
+    async confirmUpdateSnippet(snippet, updatedProperties = {}) {
+        await this.modals.open(UpdateSnippetModal, {
+            snippet,
+            updatedProperties
         });
     }
 
@@ -473,6 +435,9 @@ export default class LexicalEditorController extends Controller {
 
             post.set('statusScratch', null);
 
+            // Clear any error notification (if any)
+            this.notifications.clearAll();
+
             if (!options.silent) {
                 this._showSaveNotification(prevStatus, post.get('status'), isNew ? true : false);
             }
@@ -487,10 +452,13 @@ export default class LexicalEditorController extends Controller {
 
             return post;
         } catch (error) {
-            if (this.showReAuthenticateModal) {
-                this._reauthSave = true;
-                this._reauthSaveOptions = options;
-                return;
+            if (!this.session.isAuthenticated) {
+                yield this.modals.open(ReAuthenticateModal);
+
+                if (this.session.isAuthenticated) {
+                    this.saveTask.perform(options);
+                    return;
+                }
             }
 
             this.set('post.status', prevStatus);
@@ -503,8 +471,7 @@ export default class LexicalEditorController extends Controller {
             // trigger upgrade modal if forbidden(403) error
             if (isHostLimitError(error)) {
                 this.post.rollbackAttributes();
-                this.set('hostLimitError', error.payload.errors[0]);
-                this.set('showUpgradeModal', true);
+                this.openUpgradeModal(error.payload.errors[0]);
                 return;
             }
 

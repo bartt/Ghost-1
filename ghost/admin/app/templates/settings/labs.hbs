@@ -23,44 +23,12 @@
                     <div class="gh-expandable-header">
                         <div>
                             <h4 class="gh-expandable-title">Import content</h4>
-                            <p class="gh-expandable-description">Import posts from another Ghost installation</p>
+                            <p class="gh-expandable-description">Import posts from a JSON or zip file</p>
                         </div>
-                        <form id="settings-import" enctype="multipart/form-data">
-                            <GhFileUpload
-                                @id="importfile"
-                                @classNames="flex"
-                                @uploadButtonText={{this.uploadButtonText}}
-                                @onUpload={{action "onUpload"}}
-                                @acceptEncoding={{this.importMimeType}}
-                                data-test-file-input="import"
-                            />
-                        </form>
+                        <LinkTo @route="settings.labs.import" class="gh-btn" data-test-link="import-content">
+                            <span>Open Importer</span>
+                        </LinkTo>
                     </div>
-                    {{#if this.importErrors}}
-                        <div class="gh-import-errors {{if this.importSuccessful "gh-import-errors-alert"}}" data-test-import-errors>
-                            <div class="gh-import-errors-title">
-                                {{#if this.importSuccessful}}
-                                    Import successful with warnings
-                                {{else}}
-                                    Import failed
-                                {{/if}}
-                            </div>
-
-                            {{#each this.importErrors as |error|}}
-                                <div class="gh-import-error" data-test-import-error>
-                                    <p class="gh-import-error-message" data-test-import-error-message>
-                                        {{#if error.help}}{{error.help}}: {{/if}}{{error.message}}
-                                    </p>
-
-                                    {{#if error.context}}
-                                        <div class="gh-import-error-entry" data-test-import-error-context>
-                                            <pre>{{error.context}}</pre>
-                                        </div>
-                                    {{/if}}
-                                </div>
-                            {{/each}}
-                        </div>
-                    {{/if}}
                 </div>
 
                 <div class="gh-expandable-block">
@@ -222,32 +190,6 @@
                 <div class="gh-expandable-block">
                     <div class="gh-expandable-header">
                         <div>
-                            <h4 class="gh-expandable-title">Member Attribution</h4>
-                            <p class="gh-expandable-description">
-                               Track which posts & pages are driving Member Subscriptions & Paid Conversions
-                            </p>
-                        </div>
-                        <div class="for-switch">
-                           <GhFeatureFlag @flag="memberAttribution" />
-                        </div>
-                    </div>
-                </div>
-                <div class="gh-expandable-block">
-                    <div class="gh-expandable-header">
-                        <div>
-                            <h4 class="gh-expandable-title">Source Attribution</h4>
-                            <p class="gh-expandable-description">
-                               Track which external sources are driving Member Subscriptions & Paid Conversions (Needs Member Attribution flag)
-                            </p>
-                        </div>
-                        <div class="for-switch">
-                           <GhFeatureFlag @flag="sourceAttribution" />
-                        </div>
-                    </div>
-                </div>
-                <div class="gh-expandable-block">
-                    <div class="gh-expandable-header">
-                        <div>
                             <h4 class="gh-expandable-title">Lexical editor</h4>
                             <p class="gh-expandable-description">
                                Makes lexical editor the default when creating new posts/pages.
@@ -261,39 +203,26 @@
                 <div class="gh-expandable-block">
                     <div class="gh-expandable-header">
                         <div>
-                            <h4 class="gh-expandable-title">Explore app</h4>
+                            <h4 class="gh-expandable-title">Suppression List</h4>
                             <p class="gh-expandable-description">
-                               Enable the Explore iframe app.
+                                Allows checking whether a member's email is blocked and removing emails from the suppression list.
                             </p>
                         </div>
                         <div class="for-switch">
-                           <GhFeatureFlag @flag="exploreApp" />
+                            <GhFeatureFlag @flag="suppressionList" />
                         </div>
                     </div>
                 </div>
                 <div class="gh-expandable-block">
                     <div class="gh-expandable-header">
                         <div>
-                            <h4 class="gh-expandable-title">Audience Feedback</h4>
+                            <h4 class="gh-expandable-title">Email stability</h4>
                             <p class="gh-expandable-description">
-                               Allow members to provide feedback in newsletters.
+                                Use a new email sending flow that improves how email errors are handled.
                             </p>
                         </div>
                         <div class="for-switch">
-                           <GhFeatureFlag @flag="audienceFeedback" />
-                        </div>
-                    </div>
-                </div>
-                <div class="gh-expandable-block">
-                    <div class="gh-expandable-header">
-                        <div>
-                            <h4 class="gh-expandable-title">Fix newsletter links</h4>
-                            <p class="gh-expandable-description">
-                               Allow publishers to edit newsletter links after sending.
-                            </p>
-                        </div>
-                        <div class="for-switch">
-                           <GhFeatureFlag @flag="fixNewsletterLinks" />
+                            <GhFeatureFlag @flag="emailStability" />
                         </div>
                     </div>
                 </div>

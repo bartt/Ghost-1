@@ -6,7 +6,7 @@
             <div class="gh-main-section-content grey">
                 <div>
                     <div class="gh-cp-member-email-name">
-                        <GhFormGroup @errors={{this.member.errors}} @hasValidated={{this.member.hasValidated}} @property="name" @classNames="max-width">
+                        <GhFormGroup class="max-width" @errors={{this.member.errors}} @hasValidated={{this.member.hasValidated}} @property="name">
                             <label for="member-name">Name</label>
                             <GhTextInput
                                 @id="member-name"
@@ -20,7 +20,7 @@
                             <GhErrorMessage @errors={{this.member.errors}} @property="name" />
                         </GhFormGroup>
 
-                        <GhFormGroup @errors={{this.member.errors}} @hasValidated={{this.member.hasValidated}} @property="email" @classNames="max-width">
+                        <GhFormGroup class="max-width" @errors={{this.member.errors}} @hasValidated={{this.member.hasValidated}} @property="email">
                             <label for="member-email">Email</label>
                             <GhTextInput
                                 @value={{this.scratchMember.email}}
@@ -37,7 +37,7 @@
                         </GhFormGroup>
                     </div>
 
-                    <GhFormGroup @classNames="gh-member-labels">
+                    <GhFormGroup class="gh-member-labels">
                         <label for="label-input">Labels</label>
                         <GhMemberLabelInput
                             @onChange={{this.setLabels}}
@@ -49,7 +49,7 @@
                         />
                     </GhFormGroup>
 
-                    <GhFormGroup @errors={{this.member.errors}} @hasValidated={{this.member.hasValidated}} @property="note" @classNames="mb0 gh-member-note">
+                    <GhFormGroup @errors={{this.member.errors}} @hasValidated={{this.member.hasValidated}} @property="note" class="mb0 gh-member-note">
                         <label for="member-note">Note <span class="midgrey-d1 fw4">(not visible to member)</span></label>
                         <GhTextarea
                             @id="member-note"
@@ -64,35 +64,33 @@
                         <p> Maximum: <b>500</b> characters. You’ve used
                             {{gh-count-down-characters this.scratchMember.note 500}}</p>
                     </GhFormGroup>
-                    {{#if this.hasSingleNewsletter}}
-                        {{#if (not-eq this.settings.editorDefaultEmailRecipients "disabled")}}
-                            <GhFormGroup @classNames="gh-members-subscribed-checkbox mb0">
-                                <div class="flex justify-between items-center">
-                                    <div>
-                                        <h4 class="gh-setting-title m">Subscribed to newsletter</h4>
-                                        <p class="gh-setting-desc">If disabled, member will <em>not</em> receive newsletter emails</p>
-                                    </div>
-                                    <div class="for-switch">
-                                        <label class="switch" for="subscribed-checkbox">
-                                            <Input
-                                                @checked={{this.member.subscribed}}
-                                                @type="checkbox"
-                                                id="subscribed-checkbox"
-                                                name="subscribed"
-                                                {{on "click" this.updateNewsletterPreference}}
-                                                data-test-checkbox="member-subscribed"
-                                            />
-                                            <span class="input-toggle-component"></span>
-                                        </label>
-                                    </div>
+                    {{#if this.canShowSingleNewsletter}}
+                        <GhFormGroup class="gh-members-subscribed-checkbox mb0">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h4 class="gh-setting-title m">Subscribed to newsletter</h4>
+                                    <p class="gh-setting-desc">If disabled, member will <em>not</em> receive newsletter emails</p>
                                 </div>
-                            </GhFormGroup>
-                        {{/if}}
+                                <div class="for-switch">
+                                    <label class="switch" for="subscribed-checkbox">
+                                        <Input
+                                            @checked={{this.member.subscribed}}
+                                            @type="checkbox"
+                                            id="subscribed-checkbox"
+                                            name="subscribed"
+                                            {{on "click" this.updateNewsletterPreference}}
+                                            data-test-checkbox="member-subscribed"
+                                        />
+                                        <span class="input-toggle-component"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </GhFormGroup>
                     {{/if}}
                 </div>
             </div>
 
-            {{#if this.hasMultipleNewsletters}}
+            {{#if this.canShowMultipleNewsletters}}
                 <Member::NewsletterPreference
                     @member={{this.member}}
                     @newsletters={{this.newslettersList}}

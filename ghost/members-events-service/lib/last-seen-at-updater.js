@@ -1,6 +1,8 @@
 const {MemberPageViewEvent, MemberCommentEvent, MemberLinkClickEvent} = require('@tryghost/member-events');
 const moment = require('moment-timezone');
 const {IncorrectUsageError} = require('@tryghost/errors');
+const {EmailOpenedEvent} = require('@tryghost/email-events');
+const logging = require('@tryghost/logging');
 
 /**
  * Listen for `MemberViewEvent` to update the `member.last_seen_at` timestamp
@@ -32,15 +34,39 @@ class LastSeenAtUpdater {
      */
     subscribe(domainEvents) {
         domainEvents.subscribe(MemberPageViewEvent, async (event) => {
-            await this.updateLastSeenAt(event.data.memberId, event.data.memberLastSeenAt, event.timestamp);
+            try {
+                await this.updateLastSeenAt(event.data.memberId, event.data.memberLastSeenAt, event.timestamp);
+            } catch (err) {
+                logging.error(`Error in LastSeenAtUpdater.MemberPageViewEvent listener for member ${event.data.memberId}`);
+                logging.error(err);
+            }
         });
 
         domainEvents.subscribe(MemberLinkClickEvent, async (event) => {
-            await this.updateLastSeenAt(event.data.memberId, event.data.memberLastSeenAt, event.timestamp);
+            try {
+                await this.updateLastSeenAt(event.data.memberId, event.data.memberLastSeenAt, event.timestamp);
+            } catch (err) {
+                logging.error(`Error in LastSeenAtUpdater.MemberLinkClickEvent listener for member ${event.data.memberId}`);
+                logging.error(err);
+            }
         });
 
         domainEvents.subscribe(MemberCommentEvent, async (event) => {
-            await this.updateLastCommentedAt(event.data.memberId, event.timestamp);
+            try {
+                await this.updateLastCommentedAt(event.data.memberId, event.timestamp);
+            } catch (err) {
+                logging.error(`Error in LastSeenAtUpdater.MemberCommentEvent listener for member ${event.data.memberId}`);
+                logging.error(err);
+            }
+        });
+
+        domainEvents.subscribe(EmailOpenedEvent, async (event) => {
+            try {
+                await this.updateLastSeenAtWithoutKnownLastSeen(event.memberId, event.timestamp);
+            } catch (err) {
+                logging.error(`Error in LastSeenAtUpdater.EmailOpenedEvent listener for member ${event.memberId}, emailRecipientId ${event.emailRecipientId}`);
+                logging.error(err);
+            }
         });
     }
 
@@ -50,13 +76,31 @@ class LastSeenAtUpdater {
      * - memberLastSeenAt is 2022-02-27 23:00:00, timestamp is current time, then `last_seen_at` is set to the current time
      * - memberLastSeenAt is 2022-02-28 01:00:00, timestamp is current time, then `last_seen_at` isn't changed
      * @param {string} memberId The id of the member to be udpated
-     * @param {string} memberLastSeenAt The previous last_seen_at property value for the current member
+     * @param {Date} timestamp The event timestamp
+     */
+    async updateLastSeenAtWithoutKnownLastSeen(memberId, timestamp) {
+        // Fetch manually
+        const membersApi = this._getMembersApi();
+        const member = await membersApi.members.get({id: memberId}, {require: true});
+        if (member) {
+            const memberLastSeenAt = member.get('last_seen_at');
+            await this.updateLastSeenAt(memberId, memberLastSeenAt, timestamp);
+        }
+    }
+
+    /**
+     * Updates the member.last_seen_at field if it wasn't updated in the current day yet (in the publication timezone)
+     * Example: current time is 2022-02-28 18:00:00
+     * - memberLastSeenAt is 2022-02-27 23:00:00, timestamp is current time, then `last_seen_at` is set to the current time
+     * - memberLastSeenAt is 2022-02-28 01:00:00, timestamp is current time, then `last_seen_at` isn't changed
+     * @param {string} memberId The id of the member to be udpated
+     * @param {string|null} memberLastSeenAt The previous last_seen_at property value for the current member
      * @param {Date} timestamp The event timestamp
      */
     async updateLastSeenAt(memberId, memberLastSeenAt, timestamp) {
         const timezone = this._settingsCacheService.get('timezone');
         if (memberLastSeenAt === null || moment(moment.utc(timestamp).tz(timezone).startOf('day')).isAfter(memberLastSeenAt)) {
-            const membersApi = await this._getMembersApi();
+            const membersApi = this._getMembersApi();
             await membersApi.members.update({
                 last_seen_at: moment.utc(timestamp).format('YYYY-MM-DD HH:mm:ss')
             }, {
@@ -74,7 +118,7 @@ class LastSeenAtUpdater {
      * @param {Date} timestamp The event timestamp
      */
     async updateLastCommentedAt(memberId, timestamp) {
-        const membersApi = await this._getMembersApi();
+        const membersApi = this._getMembersApi();
         const member = await membersApi.members.get({id: memberId}, {require: true});
         const timezone = this._settingsCacheService.get('timezone');
 

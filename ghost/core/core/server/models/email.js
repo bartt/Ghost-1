@@ -11,9 +11,11 @@ const Email = ghostBookshelf.Model.extend({
             recipient_filter: 'status:-free',
             track_opens: false,
             track_clicks: false,
+            feedback_enabled: false,
             delivered_count: 0,
             opened_count: 0,
-            failed_count: 0
+            failed_count: 0,
+            source_type: 'html'
         };
     },
 
@@ -81,11 +83,7 @@ const Email = ghostBookshelf.Model.extend({
 
         model.emitChange('deleted', options);
     }
-}, {
-    post() {
-        return this.belongsTo('Post');
-    }
-});
+}, {});
 
 const Emails = ghostBookshelf.Collection.extend({
     model: Email

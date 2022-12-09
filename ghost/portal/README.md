@@ -11,7 +11,7 @@ Ghost automatically injects Portal script on all sites running Ghost 4 or higher
 Alternatively, Portal can be enabled on non-ghost pages directly by inserting the below script on the page.
 
 ```html
-<script defer src="https://unpkg.com/@tryghost/portal@latest/umd/portal.min.js" data-ghost="https://mymemberssite.com"></script>
+<script defer src="https://unpkg.com/@the-code-mill/portal@latest/umd/portal.min.js" data-ghost="https://mymemberssite.com"></script>
 ```
 
 The `data-ghost` attribute expects the URL for your Ghost site, which is the only input Portal needs to work with your site's membership data via Ghost APIs.
@@ -65,7 +65,7 @@ Run `yarn ship` to publish new version of script.
 `yarn ship` is an alias for `npm publish`
 
 - Builds the script with latest code using `yarn build` (prePublish)
-- Publishes package on npm as `@tryghost/portal` and creates an unpkg link for script at https://unpkg.com/@tryghost/portal@VERSION
+- Publishes package on npm as `@the-code-mill/portal` and creates an unpkg link for script at https://unpkg.com/@the-code-mill/portal@VERSION
 
 (Core team only)
 

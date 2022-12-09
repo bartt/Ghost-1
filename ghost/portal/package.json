@@ -1,12 +1,12 @@
 {
-  "name": "@tryghost/portal",
+  "name": "@the-code-mill/portal",
   "version": "2.21.0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git://github.com/TryGhost/Ghost.git"
+    "url": "git://github.com/bartt/Ghost-1.git"
   },
-  "author": "Ghost Foundation",
+  "author": "Bart Teeuwisse",
   "unpkg": "umd/portal.min.js",
   "files": [
     "umd/",

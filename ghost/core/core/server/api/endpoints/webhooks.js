@@ -15,14 +15,16 @@ const webhooksService = getWebhooksServiceInstance({
     WebhookModel: models.Webhook
 });
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'webhooks',
 
     add: {
         statusCode: 201,
         headers: {
             // NOTE: remove if there is ever a 'read' method
-            location: false
+            location: false,
+            cacheInvalidate: false
         },
         options: [],
         data: [],
@@ -33,30 +35,31 @@ module.exports = {
     },
 
     edit: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: {
-            before: (frame) => {
-                if (frame.options.context && frame.options.context.integration && frame.options.context.integration.id) {
-                    return models.Webhook.findOne({id: frame.options.id})
-                        .then((webhook) => {
-                            if (!webhook) {
-                                throw new errors.NotFoundError({
-                                    message: tpl(messages.resourceNotFound, {
-                                        resource: 'Webhook'
-                                    })
-                                });
-                            }
-
-                            if (webhook.get('integration_id') !== frame.options.context.integration.id) {
-                                throw new errors.NoPermissionError({
-                                    message: tpl(messages.noPermissionToEdit.message, {
-                                        method: 'edit'
-                                    }),
-                                    context: tpl(messages.noPermissionToEdit.context, {
-                                        method: 'edit'
-                                    })
-                                });
-                            }
+            before: async (frame) => {
+                if (frame.options.context?.integration?.id) {
+                    const webhook = await models.Webhook.findOne({id: frame.options.id});
+                    if (!webhook) {
+                        throw new errors.NotFoundError({
+                            message: tpl(messages.resourceNotFound, {
+                                resource: 'Webhook'
+                            })
                         });
+                    }
+
+                    if (webhook.get('integration_id') !== frame.options.context.integration.id) {
+                        throw new errors.NoPermissionError({
+                            message: tpl(messages.noPermissionToEdit.message, {
+                                method: 'edit'
+                            }),
+                            context: tpl(messages.noPermissionToEdit.context, {
+                                method: 'edit'
+                            })
+                        });
+                    }
                 }
             }
         },
@@ -84,7 +87,9 @@ module.exports = {
 
     destroy: {
         statusCode: 204,
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'id'
         ],
@@ -96,29 +101,27 @@ module.exports = {
             }
         },
         permissions: {
-            before: (frame) => {
-                if (frame.options.context && frame.options.context.integration && frame.options.context.integration.id) {
-                    return models.Webhook.findOne({id: frame.options.id})
-                        .then((webhook) => {
-                            if (!webhook) {
-                                throw new errors.NotFoundError({
-                                    message: tpl(messages.resourceNotFound, {
-                                        resource: 'Webhook'
-                                    })
-                                });
-                            }
-
-                            if (webhook.get('integration_id') !== frame.options.context.integration.id) {
-                                throw new errors.NoPermissionError({
-                                    message: tpl(messages.noPermissionToEdit.message, {
-                                        method: 'destroy'
-                                    }),
-                                    context: tpl(messages.noPermissionToEdit.context, {
-                                        method: 'destroy'
-                                    })
-                                });
-                            }
+            before: async (frame) => {
+                if (frame.options.context?.integration?.id) {
+                    const webhook = await models.Webhook.findOne({id: frame.options.id});
+                    if (!webhook) {
+                        throw new errors.NotFoundError({
+                            message: tpl(messages.resourceNotFound, {
+                                resource: 'Webhook'
+                            })
                         });
+                    }
+
+                    if (webhook.get('integration_id') !== frame.options.context.integration.id) {
+                        throw new errors.NoPermissionError({
+                            message: tpl(messages.noPermissionToEdit.message, {
+                                method: 'destroy'
+                            }),
+                            context: tpl(messages.noPermissionToEdit.context, {
+                                method: 'destroy'
+                            })
+                        });
+                    }
                 }
             }
         },
@@ -127,3 +130,5 @@ module.exports = {
         }
     }
 };
+
+module.exports = controller;

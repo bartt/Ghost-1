@@ -4,14 +4,31 @@ const models = require('../../models');
 
 // Used to emit theme.uploaded which is used in core/server/analytics-events
 const events = require('../../lib/common/events');
+const {settingsCache} = require('../../services/settings-helpers');
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'themes',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         query() {
             return themeService.api.getJSON();
+        }
+    },
+
+    readActive: {
+        headers: {
+            cacheInvalidate: false
+        },
+        permissions: true,
+        async query() {
+            let themeName = settingsCache.get('active_theme');
+            const themeErrors = await themeService.api.getThemeErrors(themeName);
+            return themeService.api.getJSON(themeName, themeErrors);
         }
     },
 
@@ -42,20 +59,16 @@ module.exports = {
                 value: themeName
             }];
 
-            return themeService.api.activate(themeName)
-                .then((checkedTheme) => {
-                    // @NOTE: we use the model, not the API here, as we don't want to trigger permissions
-                    return models.Settings.edit(newSettings, frame.options)
-                        .then(() => checkedTheme);
-                })
-                .then((checkedTheme) => {
-                    return themeService.api.getJSON(themeName, checkedTheme);
-                });
+            const themeErrors = await themeService.api.activate(themeName);
+            await models.Settings.edit(newSettings, frame.options);
+            return themeService.api.getJSON(themeName, themeErrors);
         }
     },
 
     install: {
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'source',
             'ref'
@@ -79,7 +92,7 @@ module.exports = {
                 const {theme, themeOverridden} = await themeService.api.installFromGithub(frame.options.ref);
 
                 if (themeOverridden) {
-                    this.headers.cacheInvalidate = true;
+                    frame.setHeader('X-Cache-Invalidate', '/*');
                 }
 
                 events.emit('theme.uploaded', {name: theme.name});
@@ -90,7 +103,9 @@ module.exports = {
     },
 
     upload: {
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: {
             method: 'add'
         },
@@ -108,19 +123,19 @@ module.exports = {
                 name: frame.file.originalname
             };
 
-            return themeService.api.setFromZip(zip)
-                .then(({theme, themeOverridden}) => {
-                    if (themeOverridden) {
-                        // CASE: clear cache
-                        this.headers.cacheInvalidate = true;
-                    }
-                    events.emit('theme.uploaded', {name: theme.name});
-                    return theme;
-                });
+            const {theme, themeOverridden} = await themeService.api.setFromZip(zip);
+            if (themeOverridden) {
+                frame.setHeader('X-Cache-Invalidate', '/*');
+            }
+            events.emit('theme.uploaded', {name: theme.name});
+            return theme;
         }
     },
 
     download: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'name'
         ],
@@ -164,3 +179,5 @@ module.exports = {
         }
     }
 };
+
+module.exports = controller;

@@ -12,14 +12,16 @@ export default class SessionService extends ESASessionService {
     @service configManager;
     @service('store') dataStore;
     @service feature;
+    @service koenig;
     @service notifications;
     @service router;
     @service frontend;
     @service settings;
     @service ui;
     @service upgradeStatus;
-    @service whatsNew;
     @service membersUtils;
+    @service stateBridge;
+    @service themeManagement;
 
     @inject config;
 
@@ -45,6 +47,9 @@ export default class SessionService extends ESASessionService {
             this.membersUtils.fetch()
         ]);
 
+        // Theme management requires features to be loaded
+        this.themeManagement.fetch().catch(console.error); // eslint-disable-line no-console
+
         await this.frontend.loginIfNeeded();
 
         // update Sentry with the full Ghost version which we only get after authentication
@@ -55,7 +60,9 @@ export default class SessionService extends ESASessionService {
                         resolve({
                             ...event,
                             release: `ghost@${this.config.version}`,
-                            'user.role': this.user.role.name
+                            user: {
+                                role: this.user.role.name
+                            }
                         });
                     });
                 });
@@ -63,7 +70,9 @@ export default class SessionService extends ESASessionService {
         }
 
         this.loadServerNotifications();
-        this.whatsNew.fetchLatest.perform();
+
+        // pre-emptively load editor code in the background to avoid loading state when opening editor
+        this.koenig.fetch();
     }
 
     async handleAuthentication() {
@@ -72,8 +81,17 @@ export default class SessionService extends ESASessionService {
         }
 
         return this.handleAuthenticationTask.perform(() => {
+            this.stateBridge.triggerEmberAuthChange();
+
             if (this.skipAuthSuccessHandler) {
                 this.skipAuthSuccessHandler = false;
+                return;
+            }
+
+            const redirectUrl = window.sessionStorage.getItem('ghost-signin-redirect');
+            window.sessionStorage.removeItem('ghost-signin-redirect');
+            if (redirectUrl && !redirectUrl.startsWith('/signin') && !redirectUrl.startsWith('/signup') && !redirectUrl.startsWith('/setup')) {
+                this.router.transitionTo(redirectUrl);
                 return;
             }
 

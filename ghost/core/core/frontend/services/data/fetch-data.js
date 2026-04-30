@@ -3,7 +3,6 @@
  * Dynamically build and execute queries on the API
  */
 const _ = require('lodash');
-const Promise = require('bluebird');
 
 // The default settings for a default post query
 const queryDefaults = {
@@ -40,7 +39,7 @@ defaultPostQuery.options = defaultQueryOptions.options;
  * Converts the query config to a promise for the result
  *
  * @param {Object} query
- * @param {String} slugParam
+ * @param {string} slugParam
  * @returns {Promise}
  */
 function processQuery(query, slugParam, locals) {
@@ -64,15 +63,15 @@ function processQuery(query, slugParam, locals) {
  * Fetch data from API helper for controllers.
  *
  * Calls out to get posts per page, builds the final posts query & builds any additional queries
- * Wraps the queries using Promise.props to ensure it gets named responses
+ * Uses Promise.all to handle the queries and ensure concurrent execution.
  * Does a first round of formatting on the response, and returns
  */
-function fetchData(pathOptions, routerOptions, locals) {
+async function fetchData(pathOptions, routerOptions, locals) {
     pathOptions = pathOptions || {};
     routerOptions = routerOptions || {};
 
     let postQuery = _.cloneDeep(defaultPostQuery);
-    let props = {};
+    let promises = [];
 
     if (routerOptions.filter) {
         postQuery.options.filter = routerOptions.filter;
@@ -92,32 +91,36 @@ function fetchData(pathOptions, routerOptions, locals) {
 
     // CASE: always fetch post entries
     // The filter can in theory contain a "%s" e.g. filter="primary_tag:%s"
-    props.posts = processQuery(postQuery, pathOptions.slug, locals);
+    promises.push(processQuery(postQuery, pathOptions.slug, locals));
 
     // CASE: fetch more data defined by the router e.g. tags, authors - see TaxonomyRouter
     _.each(routerOptions.data, function (query, name) {
         const dataQueryOptions = _.merge(query, defaultDataQueryOptions[name]);
-        props[name] = processQuery(dataQueryOptions, pathOptions.slug, locals);
+        promises.push(processQuery(dataQueryOptions, pathOptions.slug, locals));
     });
 
-    return Promise.props(props)
-        .then(function formatResponse(results) {
-            const response = _.cloneDeep(results.posts);
+    const results = await Promise.all(promises);
+    const response = _.cloneDeep(results[0]);
 
-            if (routerOptions.data) {
-                response.data = {};
+    if (routerOptions.data) {
+        response.data = {};
 
-                _.each(routerOptions.data, function (config, name) {
-                    response.data[name] = results[name][config.resource];
+        let resultIndex = 1;
 
-                    if (config.type === 'browse') {
-                        response.data[name].meta = results[name].meta;
-                    }
-                });
+        _.each(routerOptions.data, function (config, name) {
+            if (results[resultIndex]) {
+                response.data[name] = results[resultIndex][config.resource];
+
+                if (config.type === 'browse') {
+                    response.data[name].meta = results[resultIndex].meta;
+                }
+
+                resultIndex = resultIndex + 1;
             }
-
-            return response;
         });
+    }
+
+    return response;
 }
 
 module.exports = fetchData;

@@ -2,7 +2,10 @@
 const BACKUP_TABLES = [
     'actions',
     'api_keys',
+    'automated_email_recipients',
     'brute',
+    'donation_payment_events',
+    'email_design_settings',
     'emails',
     'integrations',
     'invites',
@@ -37,6 +40,7 @@ const BACKUP_TABLES = [
     'members_created_events',
     'members_subscription_created_events',
     'members_newsletters',
+    'mentions',
     'comments',
     'comment_likes',
     'comment_reports',
@@ -45,7 +49,18 @@ const BACKUP_TABLES = [
     'members_click_events',
     'members_feedback',
     'suppressions',
-    'email_spam_complaint_events'
+    'email_spam_complaint_events',
+    'milestones',
+    'collections',
+    'collections_posts',
+    'recommendations',
+    'recommendation_click_events',
+    'recommendation_subscribe_events',
+    'outbox',
+    'gifts',
+    'welcome_email_automations',
+    'welcome_email_automation_runs',
+    'welcome_email_automated_emails'
 ];
 
 // NOTE: exposing only tables which are going to be included in a "default" export file
@@ -81,9 +96,11 @@ const SETTING_KEYS_BLOCKLIST = [
     'stripe_connect_account_id',
     'stripe_secret_key',
     'stripe_publishable_key',
+    'stripe_billing_portal_configuration_id',
     'members_stripe_webhook_id',
     'members_stripe_webhook_secret',
-    'email_verification_required'
+    'email_verification_required',
+    'indexnow_api_key'
 ];
 
 module.exports = {

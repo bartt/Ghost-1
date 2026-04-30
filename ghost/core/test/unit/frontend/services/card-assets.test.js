@@ -1,11 +1,10 @@
-const should = require('should');
-const sinon = require('sinon');
+const assert = require('node:assert/strict');
 
 const path = require('path');
 const fs = require('fs').promises;
 const os = require('os');
 
-const CardAssetService = require('../../../../core/frontend/services/card-assets/service');
+const CardAssetService = require('../../../../core/frontend/services/assets-minification/card-assets');
 
 const themeDefaults = require('../../../../core/frontend/services/theme-engine/config/defaults.json');
 
@@ -26,7 +25,7 @@ describe('Card Asset Service', function () {
     });
 
     after(async function () {
-        await fs.rmdir(testDir, {recursive: true});
+        await fs.rm(testDir, {recursive: true});
     });
 
     it('can load nothing', async function () {
@@ -37,7 +36,7 @@ describe('Card Asset Service', function () {
 
         await cardAssets.load();
 
-        cardAssets.files.should.eql([]);
+        assert.deepEqual(cardAssets.files, []);
     });
 
     it('can load a single css file', async function () {
@@ -50,7 +49,7 @@ describe('Card Asset Service', function () {
 
         await cardAssets.load(true);
 
-        cardAssets.files.should.eql(['cards.min.css']);
+        assert.deepEqual(cardAssets.files, ['cards.min.css']);
     });
 
     it('can correctly load nothing when config is false', async function () {
@@ -63,48 +62,14 @@ describe('Card Asset Service', function () {
 
         await cardAssets.load(false);
 
-        cardAssets.files.should.eql([]);
-    });
-
-    it('can clearFiles', async function () {
-        const cardAssets = new CardAssetService({
-            src: srcDir,
-            dest: destDir
-        });
-
-        await fs.writeFile(path.join(destDir, 'cards.min.css'), 'test-css');
-        await fs.writeFile(path.join(destDir, 'cards.min.js'), 'test-js');
-
-        await cardAssets.clearFiles();
-
-        try {
-            await fs.readFile(path.join(destDir, 'cards.min.css'), 'utf-8');
-            should.fail(cardAssets, 'CSS file should not exist');
-        } catch (error) {
-            if (error instanceof should.AssertionError) {
-                throw error;
-            }
-
-            error.code.should.eql('ENOENT');
-        }
-
-        try {
-            await fs.readFile(path.join(destDir, 'cards.min.js'), 'utf-8');
-            should.fail(cardAssets, 'JS file should not exist');
-        } catch (error) {
-            if (error instanceof should.AssertionError) {
-                throw error;
-            }
-
-            error.code.should.eql('ENOENT');
-        }
+        assert.deepEqual(cardAssets.files, []);
     });
 
     describe('Generate the correct glob strings', function () {
         it('CARD ASSET SERVICE DEFAULT CASE: do nothing', function () {
             const cardAssets = new CardAssetService();
 
-            cardAssets.generateGlobs().should.eql({});
+            assert.deepEqual(cardAssets.generateGlobs(), {});
         });
 
         it('GHOST DEFAULT CASE: exclude bookmark and gallery', function () {
@@ -112,7 +77,7 @@ describe('Card Asset Service', function () {
                 config: themeDefaults.card_assets
             });
 
-            cardAssets.generateGlobs().should.eql({
+            assert.deepEqual(cardAssets.generateGlobs(), {
                 'cards.min.css': 'css/*.css',
                 'cards.min.js': 'js/*.js'
             });
@@ -123,7 +88,7 @@ describe('Card Asset Service', function () {
                 config: true
             });
 
-            cardAssets.generateGlobs().should.eql({
+            assert.deepEqual(cardAssets.generateGlobs(), {
                 'cards.min.css': 'css/*.css',
                 'cards.min.js': 'js/*.js'
             });
@@ -134,7 +99,7 @@ describe('Card Asset Service', function () {
                 config: false
             });
 
-            cardAssets.generateGlobs().should.eql({});
+            assert.deepEqual(cardAssets.generateGlobs(), {});
         });
 
         it('CASE: card_assets is an object with an exclude property, generate inverse match strings', function () {
@@ -144,7 +109,7 @@ describe('Card Asset Service', function () {
                 }
             });
 
-            cardAssets.generateGlobs().should.eql({
+            assert.deepEqual(cardAssets.generateGlobs(), {
                 'cards.min.css': 'css/!(bookmarks).css',
                 'cards.min.js': 'js/!(bookmarks).js'
             });
@@ -157,9 +122,9 @@ describe('Card Asset Service', function () {
                 }
             });
 
-            cardAssets.generateGlobs().should.eql({
-                'cards.min.css': 'css/(gallery).css',
-                'cards.min.js': 'js/(gallery).js'
+            assert.deepEqual(cardAssets.generateGlobs(), {
+                'cards.min.css': 'css/@(gallery).css',
+                'cards.min.js': 'js/@(gallery).js'
             });
         });
 
@@ -171,9 +136,9 @@ describe('Card Asset Service', function () {
                 }
             });
 
-            cardAssets.generateGlobs().should.eql({
-                'cards.min.css': 'css/(gallery).css',
-                'cards.min.js': 'js/(gallery).js'
+            assert.deepEqual(cardAssets.generateGlobs(), {
+                'cards.min.css': 'css/@(gallery).css',
+                'cards.min.js': 'js/@(gallery).js'
             });
         });
     });

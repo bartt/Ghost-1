@@ -3,10 +3,14 @@ const settingsService = require('../../services/settings/settings-service');
 const settingsBREADService = settingsService.getSettingsBREADServiceInstance();
 const internalContext = {context: {internal: true}};
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'notifications',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         query(frame) {
             return notifications.browse({
@@ -25,6 +29,9 @@ module.exports = {
                 return 200;
             }
         },
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         async query(frame) {
             const {allNotifications, notificationsToAdd} = notifications.add({
@@ -32,19 +39,21 @@ module.exports = {
             });
 
             if (notificationsToAdd.length){
-                return await settingsBREADService.edit([{
+                await settingsBREADService.edit([{
                     key: 'notifications',
                     // @NOTE: We always need to store all notifications!
                     value: allNotifications.concat(notificationsToAdd)
-                }], internalContext).then(() => {
-                    return notificationsToAdd;
-                });
+                }], internalContext);
+                return notificationsToAdd;
             }
         }
     },
 
     destroy: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         options: ['notification_id'],
         validation: {
             options: {
@@ -76,6 +85,9 @@ module.exports = {
      */
     destroyAll: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: {
             method: 'destroy'
         },
@@ -89,3 +101,5 @@ module.exports = {
         }
     }
 };
+
+module.exports = controller;

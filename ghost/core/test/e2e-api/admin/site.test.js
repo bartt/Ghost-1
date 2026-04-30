@@ -1,5 +1,5 @@
 const {agentProvider, matchers} = require('../../utils/e2e-framework');
-const {anyEtag, stringMatching, anyContentLength} = matchers;
+const {anyEtag, stringMatching, anyContentLength, anyContentVersion, anyUuid} = matchers;
 
 describe('Site API', function () {
     let agent;
@@ -13,12 +13,14 @@ describe('Site API', function () {
             .get('site/')
             .matchBodySnapshot({
                 site: {
-                    version: stringMatching(/\d+\.\d+/)
+                    version: stringMatching(/\d+\.\d+/),
+                    site_uuid: anyUuid
                 }
             })
             .matchHeaderSnapshot({
                 etag: anyEtag,
-                'content-length': anyContentLength
+                'content-length': anyContentLength,
+                'content-version': anyContentVersion
             });
     });
 });

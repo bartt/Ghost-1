@@ -1,16 +1,22 @@
 const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
 const models = require('../../models');
+const {rejectContentApiRestrictedFieldsTransformer} = require('./utils/api-filter-utils');
+
 const ALLOWED_INCLUDES = ['tags', 'authors', 'tiers'];
 
 const messages = {
     pageNotFound: 'Page not found.'
 };
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'pages',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'filter',
@@ -34,11 +40,18 @@ module.exports = {
         },
         permissions: true,
         query(frame) {
-            return models.Post.findPage(frame.options);
+            const options = {
+                ...frame.options,
+                mongoTransformer: rejectContentApiRestrictedFieldsTransformer
+            };
+            return models.Post.findPage(options);
         }
     },
 
     read: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'fields',
@@ -62,17 +75,21 @@ module.exports = {
             }
         },
         permissions: true,
-        query(frame) {
-            return models.Post.findOne(frame.data, frame.options)
-                .then((model) => {
-                    if (!model) {
-                        throw new errors.NotFoundError({
-                            message: tpl(messages.pageNotFound)
-                        });
-                    }
-
-                    return model;
+        async query(frame) {
+            const options = {
+                ...frame.options,
+                mongoTransformer: rejectContentApiRestrictedFieldsTransformer
+            };
+            const model = await models.Post.findOne(frame.data, options);
+            if (!model) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.pageNotFound)
                 });
+            }
+
+            return model;
         }
     }
 };
+
+module.exports = controller;

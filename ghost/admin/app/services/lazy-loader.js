@@ -2,11 +2,11 @@ import RSVP from 'rsvp';
 import Service, {inject as service} from '@ember/service';
 import classic from 'ember-classic-decorator';
 import config from 'ghost-admin/config/environment';
+import {prefixAssetUrl} from 'ghost-admin/utils/asset-base';
 
 @classic
 export default class LazyLoaderService extends Service {
     @service ajax;
-    @service ghostPaths;
 
     // This is needed so we can disable it in unit tests
     testing = undefined;
@@ -32,12 +32,10 @@ export default class LazyLoaderService extends Service {
         }
 
         let scriptPromise = new RSVP.Promise((resolve, reject) => {
-            let {adminRoot} = this.ghostPaths;
-
             let script = document.createElement('script');
             script.type = 'text/javascript';
             script.async = true;
-            script.src = `${adminRoot}${url}`;
+            script.src = prefixAssetUrl(url);
 
             let el = document.getElementsByTagName('script')[0];
             el.parentNode.insertBefore(script, el);
@@ -65,7 +63,7 @@ export default class LazyLoaderService extends Service {
             let link = document.createElement('link');
             link.id = `${key}-styles`;
             link.rel = alternate ? 'alternate stylesheet' : 'stylesheet';
-            link.href = `${this.ghostPaths.adminRoot}${url}`;
+            link.href = prefixAssetUrl(url);
             link.onload = () => {
                 link.onload = null;
                 if (alternate) {
@@ -81,7 +79,18 @@ export default class LazyLoaderService extends Service {
                 link.title = key;
             }
 
-            document.querySelector('head').appendChild(link);
+            // Try to insert lazy loaded styles after the first set of links in
+            // the head to ensure any styles related to Ember are loaded before
+            // the React admin shell. 
+            let existingLink = document.querySelector('head link[rel="stylesheet"]:first-of-type');
+            if (existingLink) {
+                while (existingLink.nextElementSibling && existingLink.nextElementSibling.tagName === 'LINK') {
+                    existingLink = existingLink.nextElementSibling;
+                }
+                existingLink.insertAdjacentElement('afterend', link);
+            } else {
+                document.querySelector('head').appendChild(link);
+            }
         });
     }
 }

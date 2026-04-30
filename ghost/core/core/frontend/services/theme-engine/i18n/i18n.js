@@ -3,7 +3,6 @@ const logging = require('@tryghost/logging');
 const fs = require('fs-extra');
 const path = require('path');
 const MessageFormat = require('intl-messageformat');
-const jp = require('jsonpath');
 const isString = require('lodash/isString');
 const isObject = require('lodash/isObject');
 const isEqual = require('lodash/isEqual');
@@ -14,9 +13,9 @@ const get = require('lodash/get');
 class I18n {
     /**
      * @param {object} [options]
-     * @param {string} basePath - the base path to the translations directory
-     * @param {string} [locale] - a locale string
-     * @param {{dot|fulltext}} [stringMode] - which mode our translation keys use
+     * @param {string} options.basePath - the base path to the translations directory
+     * @param {string} [options.locale] - a locale string
+     * @param {string} [options.stringMode] - which mode our translation keys use
      */
     constructor(options = {}) {
         this._basePath = options.basePath || __dirname;
@@ -100,7 +99,7 @@ class I18n {
     /**
      * Attempt to load strings from a file
      *
-     * @param {sting} [locale]
+     * @param {string} [locale]
      * @returns {object} strings
      */
     _loadStrings(locale) {
@@ -110,7 +109,7 @@ class I18n {
             return this._readTranslationsFile(locale);
         } catch (err) {
             if (err.code === 'ENOENT') {
-                this._handleMissingFileError(locale, err);
+                this._handleMissingFileError(locale);
 
                 if (locale !== this.defaultLocale()) {
                     this._handleFallbackToDefault();
@@ -128,29 +127,25 @@ class I18n {
     }
 
     /**
-     * Do the lookup within the JSON file using jsonpath
+     * Do the lookup within the translation strings
      *
-     * @param {String} msgPath
+     * @param {string} msgPath
      */
     _getCandidateString(msgPath) {
-        // Our default string mode is "dot" for dot-notation, e.g. $.something.like.this used in the backend
-        // Both jsonpath's dot-notation and bracket-notation start with '$' E.g.: $.store.book.title or $['store']['book']['title']
-        // While bracket-notation allows any Unicode characters in keys (i.e. for themes / fulltext mode) E.g. $['Read more']
-        // dot-notation allows only word characters in keys for backend messages (that is \w or [A-Za-z0-9_] in RegExp)
-        let jsonPath = `$.${msgPath}`;
         let fallback = null;
 
         if (this._stringMode === 'fulltext') {
-            jsonPath = jp.stringify(['$', msgPath]);
-            // In fulltext mode we can use the passed string as a fallback
             fallback = msgPath;
+        } else if (/[^\w.]/.test(msgPath)) {
+            // In dot mode, keys must only contain word characters and dots.
+            // Reject anything else to match previous behavior.
+            this._handleInvalidKeyError(msgPath, new errors.InternalServerError({message: 'Invalid dot-notation path'}));
         }
 
-        try {
-            return jp.value(this._strings, jsonPath) || fallback;
-        } catch (err) {
-            this._handleInvalidKeyError(msgPath, err);
-        }
+        // Use array form [msgPath] for fulltext mode to prevent lodash splitting on dots.
+        // Use string form for dot mode so lodash splits 'a.b.c' into nested lookup.
+        const lookupPath = this._stringMode === 'fulltext' ? [msgPath] : msgPath;
+        return get(this._strings, lookupPath) || fallback;
     }
 
     /**
@@ -165,7 +160,7 @@ class I18n {
         let matchingString;
 
         // no path? no string
-        if (msgPath.length === 0 || !isString(msgPath)) {
+        if (!msgPath || msgPath.length === 0 || !isString(msgPath)) {
             this._handleEmptyKeyError();
             return '';
         }
@@ -207,13 +202,13 @@ class I18n {
      */
     _readTranslationsFile(locale) {
         const filePath = path.join(...this._translationFileDirs(), this._translationFileName(locale));
-        const content = fs.readFileSync(filePath);
+        const content = fs.readFileSync(filePath, 'utf8');
         return JSON.parse(content);
     }
 
     /**
      * Format the string using the correct locale and applying any bindings
-     * @param {String} string
+     * @param {string} string
      * @param {Object} bindings
      */
     _formatMessage(string, bindings) {
@@ -276,6 +271,7 @@ class I18n {
     _handleMissingFileError(locale) {
         logging.warn(`i18n was unable to find ${locale}.json.`);
     }
+
     _handleInvalidFileError(locale, err) {
         logging.error(new errors.IncorrectUsageError({
             err,

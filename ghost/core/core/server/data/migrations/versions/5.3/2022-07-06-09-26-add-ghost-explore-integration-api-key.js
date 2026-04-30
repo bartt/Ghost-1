@@ -2,7 +2,9 @@ const {InternalServerError} = require('@tryghost/errors');
 const logging = require('@tryghost/logging');
 const security = require('@tryghost/security');
 const {default: ObjectID} = require('bson-objectid');
-const {createTransactionalMigration, meta} = require('../../utils');
+const {createTransactionalMigration} = require('../../utils');
+
+const MIGRATION_USER = 1;
 
 module.exports = createTransactionalMigration(
     async function up(knex) {
@@ -14,7 +16,9 @@ module.exports = createTransactionalMigration(
         }).first();
 
         if (!integration) {
-            throw new InternalServerError('Could not find Ghost Explore Integration');
+            throw new InternalServerError({
+                message: 'Could not find Ghost Explore Integration'
+            });
         }
 
         const role = await knex('roles').where({
@@ -22,7 +26,9 @@ module.exports = createTransactionalMigration(
         }).first();
 
         if (!role) {
-            throw new InternalServerError('Could not find Ghost Explore Integration Role');
+            throw new InternalServerError({
+                message: 'Could not find Ghost Explore Integration Role'
+            });
         }
 
         const existingKey = await knex('api_keys').where({
@@ -42,7 +48,7 @@ module.exports = createTransactionalMigration(
             role_id: role.id,
             integration_id: integration.id,
             created_at: knex.raw('current_timestamp'),
-            created_by: meta.MIGRATION_USER
+            created_by: MIGRATION_USER
         });
     },
     async function down(knex) {

@@ -1,8 +1,6 @@
-const should = require('should');
 const sinon = require('sinon');
-const Promise = require('bluebird');
 const testUtils = require('../../../../../utils');
-const configUtils = require('../../../../../utils/configUtils');
+const configUtils = require('../../../../../utils/config-utils');
 const api = require('../../../../../../core/frontend/services/proxy').api;
 const controllers = require('../../../../../../core/frontend/services/routing/controllers');
 const renderer = require('../../../../../../core/frontend/services/rendering');
@@ -16,16 +14,9 @@ describe('Unit - services/routing/controllers/previews', function () {
     let post;
     let apiResponse;
 
-    function failTest(done) {
-        return function (err) {
-            should.exist(err);
-            done(err);
-        };
-    }
-
-    afterEach(function () {
+    afterEach(async function () {
         sinon.restore();
-        configUtils.restore();
+        await configUtils.restore();
     });
 
     let previewStub;
@@ -70,7 +61,8 @@ describe('Unit - services/routing/controllers/previews', function () {
         previewStub.withArgs({
             uuid: req.params.uuid,
             status: 'all',
-            include: 'authors,tags,tiers'
+            include: 'authors,tags,tiers',
+            member_status: undefined
         }).resolves(apiResponse);
 
         sinon.stub(api, 'previews').get(() => {
@@ -80,10 +72,10 @@ describe('Unit - services/routing/controllers/previews', function () {
         });
     });
 
-    it('should render post', function (done) {
-        controllers.previews(req, res, failTest(done)).then(function () {
-            renderStub.called.should.be.true();
-            done();
-        }).catch(done);
+    it('should render post', async function () {
+        const next = sinon.stub();
+        await controllers.previews(req, res, next);
+        sinon.assert.called(renderStub);
+        sinon.assert.notCalled(next);
     });
 });

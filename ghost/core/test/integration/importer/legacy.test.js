@@ -1,6 +1,9 @@
+const assert = require('node:assert/strict');
 const testUtils = require('../../utils');
 const importer = require('../../../core/server/data/importer');
-const dataImporter = importer.importers[1];
+const dataImporter = importer.importers.find((instance) => {
+    return instance.type === 'data';
+});
 
 const {exportedBodyLegacy} = require('../../utils/fixtures/export/body-generator');
 
@@ -17,10 +20,10 @@ describe('Importer Legacy', function () {
 
         return dataImporter.doImport(exportData, importOptions)
             .then(function () {
-                '0'.should.eql(1, 'Legacy import should fail');
+                assert.equal('0', 1, 'Legacy import should fail');
             })
             .catch(function (err) {
-                err.message.should.eql('Detected unsupported file structure.');
+                assert.equal(err.message, 'Detected unsupported file structure.');
             });
     });
 });

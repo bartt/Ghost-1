@@ -1,5 +1,4 @@
 const fs = require('fs-extra');
-const Promise = require('bluebird');
 const path = require('path');
 const debug = require('@tryghost/debug')('frontend:services:settings:ensure-settings');
 const tpl = require('@tryghost/tpl');
@@ -13,10 +12,10 @@ class DefaultSettingsManager {
     /**
      *
      * @param {Object} options
-     * @param {String} options.type - name of the setting file
-     * @param {String} options.extension - settings file extension
-     * @param {String} options.destinationFolderPath - path to store the default setting config
-     * @param {String} options.sourceFolderPath - path where the default config can be seeded from
+     * @param {string} options.type - name of the setting file
+     * @param {string} options.extension - settings file extension
+     * @param {string} options.destinationFolderPath - path to store the default setting config
+     * @param {string} options.sourceFolderPath - path where the default config can be seeded from
      */
     constructor({type, extension, destinationFolderPath, sourceFolderPath}) {
         this.type = type;

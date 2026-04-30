@@ -1,37 +1,30 @@
-const should = require('should');
-const url = require('url');
+const assert = require('node:assert/strict');
 const sinon = require('sinon');
 const models = require('../../../../core/server/models');
-const testUtils = require('../../../utils');
 const {knex} = require('../../../../core/server/data/db');
 
 describe('Unit: models/integration', function () {
-    before(function () {
-        models.init();
-    });
-
     afterEach(function () {
         sinon.restore();
     });
 
     describe('permittedOptions', function () {
         let basePermittedOptionsReturnVal;
-        let basePermittedOptionsStub;
 
         beforeEach(function () {
             basePermittedOptionsReturnVal = ['super', 'doopa'];
-            basePermittedOptionsStub = sinon.stub(models.Base.Model, 'permittedOptions')
+            sinon.stub(models.Base.Model, 'permittedOptions')
                 .returns(basePermittedOptionsReturnVal);
         });
 
         it('returns the base permittedOptions result', function () {
             const returnedOptions = models.Integration.permittedOptions();
-            should.deepEqual(returnedOptions, basePermittedOptionsReturnVal);
+            assert.deepEqual(returnedOptions, basePermittedOptionsReturnVal);
         });
 
         it('returns the base permittedOptions result plus "filter" when methodName is findOne', function () {
             const returnedOptions = models.Integration.permittedOptions('findOne');
-            should.deepEqual(returnedOptions, basePermittedOptionsReturnVal.concat('filter'));
+            assert.deepEqual(returnedOptions, basePermittedOptionsReturnVal.concat('filter'));
         });
     });
 
@@ -62,9 +55,9 @@ describe('Unit: models/integration', function () {
             }, {
                 filter: 'type:[custom,builtin,core]'
             }).then(() => {
-                queries.length.should.eql(1);
-                queries[0].sql.should.eql('select `integrations`.* from `integrations` where `integrations`.`type` in (?, ?, ?) and `integrations`.`id` = ? limit ?');
-                queries[0].bindings.should.eql(['custom', 'builtin', 'core', '123', 1]);
+                assert.equal(queries.length, 1);
+                assert.equal(queries[0].sql, 'select `integrations`.* from `integrations` where `integrations`.`type` in (?, ?, ?) and `integrations`.`id` = ? limit ?');
+                assert.deepEqual(queries[0].bindings, ['custom', 'builtin', 'core', '123', 1]);
             });
         });
     });
@@ -92,9 +85,9 @@ describe('Unit: models/integration', function () {
             });
 
             return models.Integration.getInternalFrontendKey().then(() => {
-                queries.length.should.eql(1);
-                queries[0].sql.should.eql('select `integrations`.* from `integrations` where `integrations`.`slug` = ? limit ?');
-                queries[0].bindings.should.eql(['ghost-internal-frontend', 1]);
+                assert.equal(queries.length, 1);
+                assert.equal(queries[0].sql, 'select `integrations`.* from `integrations` where `integrations`.`slug` = ? limit ?');
+                assert.deepEqual(queries[0].bindings, ['ghost-internal-frontend', 1]);
             });
         });
     });

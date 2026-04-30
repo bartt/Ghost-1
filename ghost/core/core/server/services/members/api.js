@@ -1,6 +1,7 @@
 const stripeService = require('../stripe');
 const settingsCache = require('../../../shared/settings-cache');
-const MembersApi = require('@tryghost/members-api');
+const settingsHelpers = require('../../services/settings-helpers');
+const MembersApi = require('./members-api/members-api');
 const logging = require('@tryghost/logging');
 const mail = require('../mail');
 const models = require('../../models');
@@ -8,8 +9,8 @@ const signinEmail = require('./emails/signin');
 const signupEmail = require('./emails/signup');
 const signupPaidEmail = require('./emails/signup-paid');
 const subscribeEmail = require('./emails/subscribe');
-const updateEmail = require('./emails/updateEmail');
-const SingleUseTokenProvider = require('./SingleUseTokenProvider');
+const updateEmail = require('./emails/update-email');
+const SingleUseTokenProvider = require('./single-use-token-provider');
 const urlUtils = require('../../../shared/url-utils');
 const labsService = require('../../../shared/labs');
 const offersService = require('../offers');
@@ -17,12 +18,37 @@ const tiersService = require('../tiers');
 const newslettersService = require('../newsletters');
 const memberAttributionService = require('../member-attribution');
 const emailSuppressionList = require('../email-suppression-list');
+const commentsService = require('../comments');
+const emailAddressService = require('../email-address');
+const giftService = require('../gifts');
+const {t} = require('../i18n');
+const sentry = require('../../../shared/sentry');
 
 const MAGIC_LINK_TOKEN_VALIDITY = 24 * 60 * 60 * 1000;
+const MAGIC_LINK_TOKEN_VALIDITY_AFTER_USAGE = 10 * 60 * 1000;
+const MAGIC_LINK_TOKEN_MAX_USAGE_COUNT = 7;
 
 const ghostMailer = new mail.GhostMailer();
 
 module.exports = createApiInstance;
+
+function trimLeadingWhitespace(strings, ...values) {
+    // Interweave the strings with the
+    // substitution vars first.
+    let output = '';
+    for (let i = 0; i < values.length; i++) {
+        output += strings[i] + values[i];
+    }
+    output += strings[values.length];
+
+    // Split on newlines.
+    const lines = output.split(/(?:\r\n|\n|\r)/);
+
+    // Rip out the leading whitespace on each line.
+    return lines.map((line) => {
+        return line.trimStart();
+    }).join('\n').trim();
+}
 
 function createApiInstance(config) {
     const membersApiInstance = MembersApi({
@@ -30,7 +56,13 @@ function createApiInstance(config) {
         auth: {
             getSigninURL: config.getSigninURL.bind(config),
             allowSelfSignup: config.getAllowSelfSignup.bind(config),
-            tokenProvider: new SingleUseTokenProvider(models.SingleUseToken, MAGIC_LINK_TOKEN_VALIDITY)
+            tokenProvider: new SingleUseTokenProvider({
+                SingleUseTokenModel: models.SingleUseToken,
+                validityPeriod: MAGIC_LINK_TOKEN_VALIDITY,
+                validityPeriodAfterUsage: MAGIC_LINK_TOKEN_VALIDITY_AFTER_USAGE,
+                maxUsageCount: MAGIC_LINK_TOKEN_MAX_USAGE_COUNT,
+                secret: settingsCache.get('members_otc_secret')
+            })
         },
         mail: {
             transporter: {
@@ -39,7 +71,7 @@ function createApiInstance(config) {
                         logging.warn(message.text);
                     }
                     let msg = Object.assign({
-                        from: config.getAuthEmailFromAddress(),
+                        from: config.getEmailSupportAddress(),
                         subject: 'Signin',
                         forceTextContent: true
                     }, message);
@@ -47,112 +79,121 @@ function createApiInstance(config) {
                     return ghostMailer.send(msg);
                 }
             },
-            getSubject(type) {
+            getSubject(type, otc) {
                 const siteTitle = settingsCache.get('title');
                 switch (type) {
                 case 'subscribe':
-                    return `📫 Confirm your subscription to ${siteTitle}`;
+                    return `📫 ${t(`Confirm your subscription to {siteTitle}`, {siteTitle, interpolation: {escapeValue: false}})}`;
                 case 'signup':
-                    return `🙌 Complete your sign up to ${siteTitle}!`;
+                    return `🙌 ${t(`Complete your sign up to {siteTitle}!`, {siteTitle, interpolation: {escapeValue: false}})}`;
                 case 'signup-paid':
-                    return `🙌 Thank you for signing up to ${siteTitle}!`;
+                    return `🙌 ${t(`Thank you for signing up to {siteTitle}!`, {siteTitle, interpolation: {escapeValue: false}})}`;
                 case 'updateEmail':
-                    return `📫 Confirm your email update for ${siteTitle}!`;
+                    return `📫 ${t(`Confirm your email update for {siteTitle}!`, {siteTitle, interpolation: {escapeValue: false}})}`;
                 case 'signin':
                 default:
-                    return `🔑 Secure sign in link for ${siteTitle}`;
+                    if (otc) {
+                        return `🔑 ${t('Sign in to {siteTitle} with code {otc}', {siteTitle, otc, interpolation: {escapeValue: false}})}`;
+                    } else {
+                        return `🔑 ${t(`Secure sign in link for {siteTitle}`, {siteTitle, interpolation: {escapeValue: false}})}`;
+                    }
                 }
             },
-            getText(url, type, email) {
+            getText(url, type, email, otc) {
                 const siteTitle = settingsCache.get('title');
                 switch (type) {
                 case 'subscribe':
-                    return `
-                        Hey there,
+                    return trimLeadingWhitespace`
+                        ${t(`Hey there,`)}
 
-                        You're one tap away from subscribing to ${siteTitle} — please confirm your email address with this link:
+                        ${t('You\'re one tap away from subscribing to {siteTitle} — please confirm your email address with this link:', {siteTitle, interpolation: {escapeValue: false}})}
 
                         ${url}
 
-                        For your security, the link will expire in 24 hours time.
+                        ${t('For your security, the link will expire in 24 hours time.')}
 
-                        All the best!
+                        ${t('All the best!')}
 
                         ---
 
-                        Sent to ${email}
-                        If you did not make this request, you can simply delete this message. You will not be subscribed.
+                        ${t('Sent to {email}', {email})}
+                        ${t('If you did not make this request, you can simply delete this message.')} ${t('You will not be subscribed.')}
                         `;
                 case 'signup':
-                    return `
-                        Hey there!
+                    return trimLeadingWhitespace`
+                        ${t(`Hey there,`)}
 
-                        Tap the link below to complete the signup process for ${siteTitle}, and be automatically signed in:
+                        ${t('Tap the link below to complete the signup process for {siteTitle}, and be automatically signed in:', {siteTitle, interpolation: {escapeValue: false}})}
 
                         ${url}
 
-                        For your security, the link will expire in 24 hours time.
+                        ${t('For your security, the link will expire in 24 hours time.')}
 
-                        See you soon!
+                        ${t('See you soon!')}
 
                         ---
 
-                        Sent to ${email}
-                        If you did not make this request, you can simply delete this message. You will not be signed up, and no account will be created for you.
+                        ${t('Sent to {email}', {email})}
+                        ${t('If you did not make this request, you can simply delete this message.')} ${t('You will not be signed up, and no account will be created for you.')}
                         `;
                 case 'signup-paid':
-                    return `
-                        Hey there!
+                    return trimLeadingWhitespace`
+                        ${t(`Hey there,`)}
 
-                        Thank you for subscribing to ${siteTitle}. Tap the link below to be automatically signed in:
+                        ${t('Thank you for subscribing to {siteTitle}. Tap the link below to be automatically signed in:', {siteTitle, interpolation: {escapeValue: false}})}
 
                         ${url}
 
-                        For your security, the link will expire in 24 hours time.
+                        ${t('For your security, the link will expire in 24 hours time.')}
 
-                        See you soon!
+                        ${t('See you soon!')}
 
                         ---
 
-                        Sent to ${email}
-                        Thank you for subscribing to ${siteTitle}!
+                        ${t('Sent to {email}', {email})}
+                        ${t('Thank you for subscribing to {siteTitle}!', {siteTitle, interpolation: {escapeValue: false}})}
                         `;
                 case 'updateEmail':
-                    return `
-                            Hey there,
+                    return trimLeadingWhitespace`
+                        ${t(`Hey there,`)}
 
-                            Please confirm your email address with this link:
-
-                            ${url}
-
-                            For your security, the link will expire in 24 hours time.
-
-                            ---
-
-                            Sent to ${email}
-                            If you did not make this request, you can simply delete this message. This email address will not be used.
-                            `;
-                case 'signin':
-                default:
-                    return `
-                        Hey there,
-
-                        Welcome back! Use this link to securely sign in to your ${siteTitle} account:
+                        ${t('Please confirm your email address with this link:')}
 
                         ${url}
 
-                        For your security, the link will expire in 24 hours time.
-
-                        See you soon!
+                        ${t('For your security, the link will expire in 24 hours time.')}
 
                         ---
 
-                        Sent to ${email}
-                        If you did not make this request, you can safely ignore this email.
+                        ${t('Sent to {email}', {email})}
+                        ${t('If you did not make this request, you can simply delete this message.')} ${t('This email address will not be used.')}
                         `;
+                case 'signin':
+                default:
+                    /* eslint-disable indent */
+                    return trimLeadingWhitespace`
+                        ${t(`Hey there,`)}
+
+                        ${otc
+                            ? `${t('Your verification code for {siteTitle}', {siteTitle, interpolation: {escapeValue: false}})}: ${otc}\n\n${t('Or use this link to securely sign in', {interpolation: {escapeValue: false}})}:`
+                            : `${t('Welcome back! Use this link to securely sign in to your {siteTitle} account:', {siteTitle, interpolation: {escapeValue: false}})}`
+                        }
+
+                        ${url}
+
+                        ${t('For your security, the link will expire in 24 hours time.')}
+
+                        ${t('See you soon!')}
+
+                        ---
+
+                        ${t('Sent to {email}', {email})}
+                        ${t('If you did not make this request, you can safely ignore this email.')}
+                    `;
+                    /* eslint-enable indent */
                 }
             },
-            getHTML(url, type, email) {
+            getHTML(url, type, email, otc) {
                 const siteTitle = settingsCache.get('title');
                 const siteUrl = urlUtils.urlFor('home', true);
                 const domain = urlUtils.urlFor('home', true).match(new RegExp('^https?://([^/:?#]+)(?:[/:?#]|$)', 'i'));
@@ -160,20 +201,21 @@ function createApiInstance(config) {
                 const accentColor = settingsCache.get('accent_color');
                 switch (type) {
                 case 'subscribe':
-                    return subscribeEmail({url, email, siteTitle, accentColor, siteDomain, siteUrl});
+                    return subscribeEmail({t, url, email, siteTitle, accentColor, siteDomain, siteUrl});
                 case 'signup':
-                    return signupEmail({url, email, siteTitle, accentColor, siteDomain, siteUrl});
+                    return signupEmail({t, url, email, siteTitle, accentColor, siteDomain, siteUrl});
                 case 'signup-paid':
-                    return signupPaidEmail({url, email, siteTitle, accentColor, siteDomain, siteUrl});
+                    return signupPaidEmail({t, url, email, siteTitle, accentColor, siteDomain, siteUrl});
                 case 'updateEmail':
-                    return updateEmail({url, email, siteTitle, accentColor, siteDomain, siteUrl});
+                    return updateEmail({t, url, email, siteTitle, accentColor, siteDomain, siteUrl});
                 case 'signin':
                 default:
-                    return signinEmail({url, email, siteTitle, accentColor, siteDomain, siteUrl});
+                    return signinEmail({t, url, otc, email, siteTitle, accentColor, siteDomain, siteUrl});
                 }
             }
         },
         models: {
+            DonationPaymentEvent: models.DonationPaymentEvent,
             EmailRecipient: models.EmailRecipient,
             StripeCustomer: models.MemberStripeCustomer,
             StripeCustomerSubscription: models.StripeCustomerSubscription,
@@ -198,7 +240,12 @@ function createApiInstance(config) {
             Settings: models.Settings,
             Comment: models.Comment,
             MemberFeedback: models.MemberFeedback,
-            EmailSpamComplaintEvent: models.EmailSpamComplaintEvent
+            EmailSpamComplaintEvent: models.EmailSpamComplaintEvent,
+            Outbox: models.Outbox,
+            WelcomeEmailAutomation: models.WelcomeEmailAutomation,
+            WelcomeEmailAutomationRun: models.WelcomeEmailAutomationRun,
+            AutomatedEmailRecipient: models.AutomatedEmailRecipient,
+            Gift: models.Gift
         },
         stripeAPIService: stripeService.api,
         tiersService: tiersService,
@@ -206,7 +253,14 @@ function createApiInstance(config) {
         labsService: labsService,
         newslettersService: newslettersService,
         memberAttributionService: memberAttributionService.service,
-        emailSuppressionList
+        emailSuppressionList,
+        settingsCache,
+        sentry,
+        settingsHelpers,
+        urlUtils,
+        commentsService,
+        emailAddressService: emailAddressService.service,
+        giftService
     });
 
     return membersApiInstance;

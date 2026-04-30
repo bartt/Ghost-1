@@ -27,15 +27,23 @@ class HostLimitError extends LimitError {
 export default class LimitsService extends Service {
     @service store;
     @service membersStats;
+    @service membersCountCache;
 
     @inject config;
 
     constructor() {
         super(...arguments);
 
-        let limits = this.config.hostSettings?.limits;
-
         this.limiter = new LimitService();
+        this.loadLimits();
+    }
+
+    async checkWouldGoOverLimit(limitName, metadata = {}) {
+        return this.limiter.checkWouldGoOverLimit(limitName, metadata);
+    }
+
+    loadLimits() {
+        let limits = this.config.hostSettings?.limits;
 
         if (!limits) {
             return;
@@ -59,8 +67,8 @@ export default class LimitsService extends Service {
         });
     }
 
-    async checkWouldGoOverLimit(limitName, metadata = {}) {
-        return this.limiter.checkWouldGoOverLimit(limitName, metadata);
+    reload() {
+        this.loadLimits();
     }
 
     decorateWithCountQueries(limits) {
@@ -93,9 +101,7 @@ export default class LimitsService extends Service {
     }
 
     async getMembersCount() {
-        const counts = await this.membersStats.fetchCounts();
-
-        return counts.total;
+        return this.membersCountCache.count({});
     }
 
     async getNewslettersCount() {

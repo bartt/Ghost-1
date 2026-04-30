@@ -1,7 +1,7 @@
-const cacheControl = require('@tryghost/mw-cache-control');
 const express = require('../../shared/express');
 const settings = require('../../shared/settings-cache');
 const config = require('../../shared/config');
+const {cacheControl} = require('./shared/middleware');
 
 module.exports = function setupWellKnownApp() {
     const wellKnownApp = express('well-known');
@@ -18,7 +18,7 @@ module.exports = function setupWellKnownApp() {
 
     const cache = cacheControl('public', {maxAge: config.get('caching:wellKnown:maxAge')});
 
-    wellKnownApp.get('/jwks.json', cache, async (req, res) => {
+    wellKnownApp.get('/jwks.json', cache, async function jwksMiddleware(req, res) {
         const jwks = await getSafePublicJWKS();
 
         // there's only one key in the store atm

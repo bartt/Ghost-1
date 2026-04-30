@@ -1,12 +1,16 @@
 const commentsService = require('../../services/comments');
-const ALLOWED_INCLUDES = ['member', 'replies', 'replies.member', 'replies.count.likes', 'replies.liked', 'count.replies', 'count.likes', 'liked', 'post', 'parent'];
-const UNSAFE_ATTRS = ['status'];
+const ALLOWED_INCLUDES = ['member', 'replies', 'replies.member', 'replies.count.likes', 'replies.liked', 'count.replies', 'count.direct_replies', 'count.likes', 'liked', 'post', 'parent'];
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'comments',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
+            'post_id',
             'include',
             'page',
             'limit',
@@ -20,13 +24,16 @@ module.exports = {
                 include: ALLOWED_INCLUDES
             }
         },
-        permissions: true,
+        permissions: false,
         query(frame) {
             return commentsService.controller.browse(frame);
         }
     },
 
     replies: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'page',
@@ -42,13 +49,16 @@ module.exports = {
                 include: ALLOWED_INCLUDES
             }
         },
-        permissions: 'browse',
+        permissions: false,
         query(frame) {
             return commentsService.controller.replies(frame);
         }
     },
 
     read: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include'
         ],
@@ -61,14 +71,16 @@ module.exports = {
                 include: ALLOWED_INCLUDES
             }
         },
-        permissions: true,
+        permissions: false,
         query(frame) {
             return commentsService.controller.read(frame);
         }
     },
 
     edit: {
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'id',
             'include'
@@ -83,7 +95,7 @@ module.exports = {
                 }
             }
         },
-        permissions: true,
+        permissions: false,
         query(frame) {
             return commentsService.controller.edit(frame);
         }
@@ -91,9 +103,11 @@ module.exports = {
 
     add: {
         statusCode: 201,
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include'
-
         ],
         validation: {
             options: {
@@ -105,9 +119,7 @@ module.exports = {
                 }
             }
         },
-        permissions: {
-            unsafeAttrs: UNSAFE_ATTRS
-        },
+        permissions: false,
         query(frame) {
             return commentsService.controller.add(frame);
         }
@@ -115,6 +127,9 @@ module.exports = {
 
     destroy: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'id'
@@ -124,13 +139,16 @@ module.exports = {
                 include: ALLOWED_INCLUDES
             }
         },
-        permissions: true,
-        query(frame) {
-            return commentsService.controller.destroy(frame);
+        permissions: false,
+        query() {
+            return commentsService.controller.destroy();
         }
     },
 
     counts: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: false,
         options: [
             'ids'
@@ -142,12 +160,15 @@ module.exports = {
 
     like: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'id'
         ],
         validation: {
         },
-        permissions: true,
+        permissions: false,
         async query(frame) {
             return await commentsService.controller.like(frame);
         }
@@ -155,11 +176,14 @@ module.exports = {
 
     unlike: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'id'
         ],
         validation: {},
-        permissions: true,
+        permissions: false,
         async query(frame) {
             return await commentsService.controller.unlike(frame);
         }
@@ -167,13 +191,18 @@ module.exports = {
 
     report: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'id'
         ],
         validation: {},
-        permissions: true,
+        permissions: false,
         async query(frame) {
             await commentsService.controller.report(frame);
         }
     }
 };
+
+module.exports = controller;

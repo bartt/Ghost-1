@@ -15,6 +15,15 @@
             "newPath": "/content/images/photos/cat.jpg"
         }
     ],
+    "files": [
+        {
+            "name": "best-memes.pdf",
+            "path": "/tmp/test/path/images/best-memes.pdf",
+            "originalPath": "files/best-memes.pdf",
+            "targetDir": "/test/content/files",
+            "newPath": "/content/files/best-memes.pdf"
+        }
+    ],
     "data": {
         "meta": {
             "exported_on": 1388318311015,
@@ -38,9 +47,7 @@
                     "meta_description": null,
                     "author_id": 1,
                     "created_at": 1388318310782,
-                    "created_by": 1,
                     "updated_at": 1388318310782,
-                    "updated_by": 1,
                     "published_at": 1388318310783,
                     "published_by": 1
                 }
@@ -57,9 +64,7 @@
                     "meta_title": null,
                     "meta_description": null,
                     "created_at": 1388318310790,
-                    "created_by": 1,
-                    "updated_at": 1388318310790,
-                    "updated_by": 1
+                    "updated_at": 1388318310790
                 }
             ],
             "users": [

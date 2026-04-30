@@ -1,9 +1,8 @@
 const debug = require('@tryghost/debug')('utils:image-size');
 const sizeOf = require('image-size');
-const probeSizeOf = require('probe-image-size');
+
 const url = require('url');
 const path = require('path');
-const Promise = require('bluebird');
 const _ = require('lodash');
 const errors = require('@tryghost/errors');
 const tpl = require('@tryghost/tpl');
@@ -18,22 +17,27 @@ const FETCH_ONLY_FORMATS = [
 ];
 
 class ImageSize {
-    constructor({config, storage, storageUtils, validator, urlUtils, request}) {
+    constructor({config, storage, storageUtils, validator, urlUtils, request, probe}) {
         this.config = config;
         this.storage = storage;
         this.storageUtils = storageUtils;
         this.validator = validator;
         this.urlUtils = urlUtils;
         this.request = request;
+        this.probe = probe;
 
         this.REQUEST_OPTIONS = {
             // we need the user-agent, otherwise some https request may fail (e.g. cloudfare)
             headers: {
                 'User-Agent': 'Mozilla/5.0 Safari/537.36'
             },
-            timeout: this.config.get('times:getImageSizeTimeoutInMS') || 10000,
-            retry: 0, // for `got`, used with image-size
-            encoding: null
+            timeout: {
+                request: this.config.get('times:getImageSizeTimeoutInMS') || 10000
+            },
+            retry: {
+                limit: 0 // for `got`, used with image-size
+            },
+            responseType: 'buffer'
         };
 
         this.NEEDLE_OPTIONS = {
@@ -59,9 +63,9 @@ class ImageSize {
                     dimensions.height = _.maxBy(dimensions.images, img => img.height).height;
                 }
 
-                return resolve(dimensions);
+                resolve(dimensions);
             } catch (err) {
-                return reject(err);
+                reject(err);
             }
         });
     }
@@ -79,7 +83,18 @@ class ImageSize {
             }));
         }
 
-        return probeSizeOf(imageUrl, this.NEEDLE_OPTIONS);
+        // wrap probe-image-size in a promise in case it is unresponsive/the timeout itself doesn't work
+        return (Promise.race([
+            this.probe(imageUrl, this.NEEDLE_OPTIONS),
+            new Promise((res, rej) => {
+                setTimeout(() => {
+                    rej(new errors.InternalServerError({
+                        message: 'Probe unresponsive.',
+                        code: 'IMAGE_SIZE_URL'
+                    }));
+                }, this.NEEDLE_OPTIONS.response_timeout);
+            })
+        ]));
     }
 
     // download full image then use image-size to get it's dimensions
@@ -113,9 +128,9 @@ class ImageSize {
             const extension = (extensionMatch[1] || '').toLowerCase();
 
             if (FETCH_ONLY_FORMATS.includes(extension)) {
-                return resolve(this._fetchImageSizeFromUrl(imageUrl));
+                resolve(this._fetchImageSizeFromUrl(imageUrl));
             } else {
-                return resolve(this._probeImageSizeFromUrl(imageUrl));
+                resolve(this._probeImageSizeFromUrl(imageUrl));
             }
         });
     }
@@ -270,18 +285,36 @@ class ImageSize {
             });
     }
 
-    async getOriginalImageSizeFromStoragePath(imagePath) {
+    /**
+     * Returns the path of the original image for a given image path (we always store the original image in a separate file, suffixed with _o, while we store a resized version of the image on the original name)
+     * TODO: Preferrably we want to move this to a separate image utils package. Currently not really a good place to put it in image lib.
+     */
+    async getOriginalImagePath(imagePath) {
         const {dir, name, ext} = path.parse(imagePath);
+        const storageInstance = this.storage.getStorage('images');
+
+        const preferredUnoptimizedImagePath = path.join(dir, `${name}_o${ext}`);
+        const preferredUnoptimizedImagePathExists = await storageInstance.exists(preferredUnoptimizedImagePath);
+        if (preferredUnoptimizedImagePathExists) {
+            return preferredUnoptimizedImagePath;
+        }
+
+        // Legacy format did some magic with the numbers that could cause bugs. We still need to support it for old files.
+        // refs https://github.com/TryGhost/Team/issues/481
         const [imageNameMatched, imageName, imageNumber] = name.match(/^(.+?)(-\d+)?$/) || [null];
 
         if (!imageNameMatched) {
-            return this.getImageSizeFromStoragePath(imagePath);
+            return imagePath;
         }
 
-        const originalImagePath = path.join(dir, `${imageName}_o${imageNumber || ''}${ext}`);
-        const originalImageExists = await this.storage.getStorage('images').exists(originalImagePath);
+        const legacyOriginalImagePath = path.join(dir, `${imageName}_o${imageNumber || ''}${ext}`);
+        const legacyOriginalImageExists = await storageInstance.exists(legacyOriginalImagePath);
 
-        return this.getImageSizeFromStoragePath(originalImageExists ? originalImagePath : imagePath);
+        return legacyOriginalImageExists ? legacyOriginalImagePath : imagePath;
+    }
+
+    async getOriginalImageSizeFromStoragePath(imagePath) {
+        return this.getImageSizeFromStoragePath(await this.getOriginalImagePath(imagePath));
     }
 
     _getPathFromUrl(imageUrl) {
@@ -326,12 +359,12 @@ class ImageSize {
                     }).height;
                 }
 
-                return resolve({
+                resolve({
                     width: dimensions.width,
                     height: dimensions.height
                 });
             } catch (err) {
-                return reject(new errors.ValidationError({
+                reject(new errors.ValidationError({
                     message: tpl(messages.invalidDimensions, {
                         file: imagePath,
                         error: err.message

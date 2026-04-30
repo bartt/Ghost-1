@@ -1,10 +1,14 @@
-const should = require('should');
+const assert = require('node:assert/strict');
 const sinon = require('sinon');
 const storage = require('../../../../../core/server/adapters/storage');
 const activeTheme = require('../../../../../core/frontend/services/theme-engine/active');
 const handleImageSizes = require('../../../../../core/frontend/web/middleware/handle-image-sizes.js');
+const errors = require('@tryghost/errors');
 const imageTransform = require('@tryghost/image-transform');
-const config = require('../../../../../core/shared/config');
+
+const fakeResBase = {
+    setHeader() {}
+};
 
 // @TODO make these tests lovely and non specific to implementation
 describe('handleImageSizes middleware', function () {
@@ -20,12 +24,12 @@ describe('handleImageSizes middleware', function () {
         fakeReq.url.match = function () {
             throw new Error('Should have exited immediately');
         };
-        handleImageSizes(fakeReq, {}, function next() {
+        handleImageSizes(fakeReq, fakeResBase, function next() {
             done();
         });
     });
 
-    it('calls next immediately if the url does not match /size/something/', function (done) {
+    it('calls next immediately if the url does not match /size/whatever/', function (done) {
         const fakeReq = {
             url: '/url/whatever/'
         };
@@ -33,7 +37,7 @@ describe('handleImageSizes middleware', function () {
         fakeReq.url.match = function () {
             throw new Error('Should have exited immediately');
         };
-        handleImageSizes(fakeReq, {}, function next() {
+        handleImageSizes(fakeReq, fakeResBase, function next() {
             done();
         });
     });
@@ -46,7 +50,7 @@ describe('handleImageSizes middleware', function () {
         fakeReq.url.match = function () {
             throw new Error('Should have exited immediately');
         };
-        handleImageSizes(fakeReq, {}, function next() {
+        handleImageSizes(fakeReq, fakeResBase, function next() {
             done();
         });
     });
@@ -59,12 +63,12 @@ describe('handleImageSizes middleware', function () {
         fakeReq.url.match = function () {
             throw new Error('Should have exited immediately');
         };
-        handleImageSizes(fakeReq, {}, function next() {
+        handleImageSizes(fakeReq, fakeResBase, function next() {
             done();
         });
     });
 
-    it('calls next immediately if the url does not match /size/something/', function (done) {
+    it('calls next immediately if the url does not match /size//', function (done) {
         const fakeReq = {
             url: '/size//'
         };
@@ -72,7 +76,7 @@ describe('handleImageSizes middleware', function () {
         fakeReq.url.match = function () {
             throw new Error('Should have exited immediately');
         };
-        handleImageSizes(fakeReq, {}, function next() {
+        handleImageSizes(fakeReq, fakeResBase, function next() {
             done();
         });
     });
@@ -94,7 +98,7 @@ describe('handleImageSizes middleware', function () {
                     return buffer;
                 },
 
-                async saveRaw(buf, url) {
+                async saveRaw(_buf, url) {
                     return url;
                 }
             };
@@ -135,12 +139,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/image.jpg');
+                        assert.equal(url, '/blog/content/images/image.jpg');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
             handleImageSizes(fakeReq, fakeRes, function next(err) {
                 if (err) {
@@ -158,12 +163,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/image.jpg');
+                        assert.equal(url, '/blog/content/images/image.jpg');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
             handleImageSizes(fakeReq, fakeRes, function next(err) {
                 if (err) {
@@ -181,12 +187,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/image.jpg');
+                        assert.equal(url, '/blog/content/images/image.jpg');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
             handleImageSizes(fakeReq, fakeRes, function next(err) {
                 if (err) {
@@ -205,7 +212,7 @@ describe('handleImageSizes middleware', function () {
                     return false;
                 }
             };
-            dummyStorage.read = async function (path) {
+            dummyStorage.read = async function () {
                 return Buffer.from([]);
             };
 
@@ -216,12 +223,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/blank.png');
+                        assert.equal(url, '/blog/content/images/blank.png');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -242,12 +250,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/blank.png');
+                        assert.equal(url, '/blog/content/images/blank.png');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -268,12 +277,54 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/blank.png');
+                        assert.equal(url, '/blog/content/images/blank.png');
                     } catch (e) {
                         return done(e);
                     }
                     done();
+                },
+                setHeader() {}
+            };
+
+            handleImageSizes(fakeReq, fakeRes, function next(err) {
+                if (err) {
+                    return done(err);
                 }
+                done(new Error('Should not have called next'));
+            });
+        });
+
+        it('redirects if timeout is exceeded', function (done) {
+            sinon.stub(imageTransform, 'canTransformFiles').returns(true);
+
+            dummyStorage.exists = async function () {
+                return false;
+            };
+
+            dummyStorage.read = async function () {
+                return buffer;
+            };
+
+            const error = new Error('Resize timeout');
+            error.code = 'IMAGE_PROCESSING';
+
+            resizeFromBufferStub.throws(error);
+
+            const fakeReq = {
+                url: '/size/w1000/blank.png',
+                originalUrl: '/blog/content/images/size/w1000/blank.png'
+            };
+
+            const fakeRes = {
+                redirect(url) {
+                    try {
+                        assert.equal(url, '/blog/content/images/blank.png');
+                    } catch (e) {
+                        return done(e);
+                    }
+                    done();
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -296,9 +347,10 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/w1000/blank.png'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -322,9 +374,10 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/h100/blank.png'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -332,7 +385,7 @@ describe('handleImageSizes middleware', function () {
                     return done(err);
                 }
                 try {
-                    spy.calledOnceWithExactly({path: '/blank_o.png'}).should.be.true();
+                    sinon.assert.calledOnceWithExactly(spy, {path: '/blank_o.png'});
                 } catch (e) {
                     return done(e);
                 }
@@ -353,10 +406,11 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/w1000/format/webp/blank.png'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
                 },
-                type: function () {}
+                type: function () {},
+                setHeader() {}
             };
             const typeStub = sinon.spy(fakeRes, 'type');
 
@@ -365,8 +419,8 @@ describe('handleImageSizes middleware', function () {
                     return done(err);
                 }
                 try {
-                    spy.calledOnceWithExactly({path: '/blank_o.png'}).should.be.true();
-                    typeStub.calledOnceWithExactly('webp').should.be.true();
+                    sinon.assert.calledOnceWithExactly(spy, {path: '/blank_o.png'});
+                    sinon.assert.calledOnceWithExactly(typeStub, 'webp');
                 } catch (e) {
                     return done(e);
                 }
@@ -375,7 +429,7 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('skips SVG if not formatted', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
 
@@ -386,12 +440,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/blank.svg');
+                        assert.equal(url, '/blog/content/images/blank.svg');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -403,7 +458,7 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('skips formatting to ico', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
 
@@ -414,12 +469,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/blank.png');
+                        assert.equal(url, '/blog/content/images/blank.png');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -431,7 +487,7 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('skips formatting from ico', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
 
@@ -442,12 +498,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/blank.ico');
+                        assert.equal(url, '/blog/content/images/blank.ico');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -459,7 +516,7 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('skips formatting to svg', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
 
@@ -470,12 +527,13 @@ describe('handleImageSizes middleware', function () {
             const fakeRes = {
                 redirect(url) {
                     try {
-                        url.should.equal('/blog/content/images/blank.png');
+                        assert.equal(url, '/blog/content/images/blank.png');
                     } catch (e) {
                         return done(e);
                     }
                     done();
-                }
+                },
+                setHeader() {}
             };
 
             handleImageSizes(fakeReq, fakeRes, function next(err) {
@@ -487,7 +545,7 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('doesn\'t skip SVGs if formatted to PNG', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
 
@@ -496,9 +554,10 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/w1000/format/png/blank.svg'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
                 },
+                setHeader() {},
                 type: function () {}
             };
             const typeStub = sinon.spy(fakeRes, 'type');
@@ -508,8 +567,13 @@ describe('handleImageSizes middleware', function () {
                     return done(err);
                 }
                 try {
-                    resizeFromBufferStub.calledOnceWithExactly(buffer, {withoutEnlargement: false, width: 1000, format: 'png'}).should.be.true();
-                    typeStub.calledOnceWithExactly('png').should.be.true();
+                    sinon.assert.calledOnceWithExactly(resizeFromBufferStub, buffer, {
+                        withoutEnlargement: false,
+                        width: 1000,
+                        format: 'png',
+                        timeout: handleImageSizes.RESIZE_TIMEOUT_SECONDS
+                    });
+                    sinon.assert.calledOnceWithExactly(typeStub, 'png');
                 } catch (e) {
                     return done(e);
                 }
@@ -518,10 +582,10 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('can format PNG to WEBP', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
-            dummyStorage.read = async function (path) {
+            dummyStorage.read = async function () {
                 return buffer;
             };
 
@@ -530,9 +594,10 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/w1000/format/webp/blank.png'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
                 },
+                setHeader() {},
                 type: function () {}
             };
             const typeStub = sinon.spy(fakeRes, 'type');
@@ -542,8 +607,13 @@ describe('handleImageSizes middleware', function () {
                     return done(err);
                 }
                 try {
-                    resizeFromBufferStub.calledOnceWithExactly(buffer, {withoutEnlargement: true, width: 1000, format: 'webp'}).should.be.true();
-                    typeStub.calledOnceWithExactly('webp').should.be.true();
+                    sinon.assert.calledOnceWithExactly(resizeFromBufferStub, buffer, {
+                        withoutEnlargement: true,
+                        width: 1000,
+                        format: 'webp',
+                        timeout: handleImageSizes.RESIZE_TIMEOUT_SECONDS
+                    });
+                    sinon.assert.calledOnceWithExactly(typeStub, 'webp');
                 } catch (e) {
                     return done(e);
                 }
@@ -552,10 +622,10 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('can format PNG to AVIF', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
-            dummyStorage.read = async function (path) {
+            dummyStorage.read = async function () {
                 return buffer;
             };
 
@@ -564,9 +634,10 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/w1000/format/avif/blank.png'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
                 },
+                setHeader() {},
                 type: function () {}
             };
             const typeStub = sinon.spy(fakeRes, 'type');
@@ -576,8 +647,13 @@ describe('handleImageSizes middleware', function () {
                     return done(err);
                 }
                 try {
-                    resizeFromBufferStub.calledOnceWithExactly(buffer, {withoutEnlargement: true, width: 1000, format: 'avif'}).should.be.true();
-                    typeStub.calledOnceWithExactly('image/avif').should.be.true();
+                    sinon.assert.calledOnceWithExactly(resizeFromBufferStub, buffer, {
+                        withoutEnlargement: true,
+                        width: 1000,
+                        format: 'avif',
+                        timeout: handleImageSizes.RESIZE_TIMEOUT_SECONDS
+                    });
+                    sinon.assert.calledOnceWithExactly(typeStub, 'image/avif');
                 } catch (e) {
                     return done(e);
                 }
@@ -586,10 +662,10 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('can format GIF to WEBP', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
-            dummyStorage.read = async function (path) {
+            dummyStorage.read = async function () {
                 return buffer;
             };
 
@@ -598,9 +674,10 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/w1000/format/webp/blank.gif'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
                 },
+                setHeader() {},
                 type: function () {}
             };
             const typeStub = sinon.spy(fakeRes, 'type');
@@ -610,8 +687,13 @@ describe('handleImageSizes middleware', function () {
                     return done(err);
                 }
                 try {
-                    resizeFromBufferStub.calledOnceWithExactly(buffer, {withoutEnlargement: true, width: 1000, format: 'webp'}).should.be.true();
-                    typeStub.calledOnceWithExactly('webp').should.be.true();
+                    sinon.assert.calledOnceWithExactly(resizeFromBufferStub, buffer, {
+                        withoutEnlargement: true,
+                        width: 1000,
+                        format: 'webp',
+                        timeout: handleImageSizes.RESIZE_TIMEOUT_SECONDS
+                    });
+                    sinon.assert.calledOnceWithExactly(typeStub, 'webp');
                 } catch (e) {
                     return done(e);
                 }
@@ -620,10 +702,10 @@ describe('handleImageSizes middleware', function () {
         });
 
         it('can format WEBP to GIF', function (done) {
-            dummyStorage.exists = async function (path) {
+            dummyStorage.exists = async function () {
                 return false;
             };
-            dummyStorage.read = async function (path) {
+            dummyStorage.read = async function () {
                 return buffer;
             };
 
@@ -632,9 +714,10 @@ describe('handleImageSizes middleware', function () {
                 originalUrl: '/size/w1000/format/gif/blank.webp'
             };
             const fakeRes = {
-                redirect(url) {
+                redirect() {
                     done(new Error('Should not have called redirect'));
                 },
+                setHeader() {},
                 type: function () {}
             };
             const typeStub = sinon.spy(fakeRes, 'type');
@@ -644,10 +727,46 @@ describe('handleImageSizes middleware', function () {
                     return done(err);
                 }
                 try {
-                    resizeFromBufferStub.calledOnceWithExactly(buffer, {withoutEnlargement: true, width: 1000, format: 'gif'}).should.be.true();
-                    typeStub.calledOnceWithExactly('gif').should.be.true();
+                    sinon.assert.calledOnceWithExactly(resizeFromBufferStub, buffer, {
+                        withoutEnlargement: true,
+                        width: 1000,
+                        format: 'gif',
+                        timeout: handleImageSizes.RESIZE_TIMEOUT_SECONDS
+                    });
+                    sinon.assert.calledOnceWithExactly(typeStub, 'gif');
                 } catch (e) {
                     return done(e);
+                }
+                done();
+            });
+        });
+
+        it('goes to next middleware with no error if source and resized image 404', function (done) {
+            dummyStorage.exists = async function () {
+                return false;
+            };
+            dummyStorage.read = async function () {
+                throw new errors.NotFoundError({
+                    message: 'File not found'
+                });
+            };
+
+            const fakeReq = {
+                url: '/size/w1000/2020/02/test.png',
+                originalUrl: '/2020/02/test.png'
+            };
+
+            const fakeRes = {
+                redirect() {
+                    done(new Error('Should not have called redirect'));
+                },
+                setHeader() {},
+                type: function () {}
+            };
+
+            handleImageSizes(fakeReq, fakeRes, function next(err) {
+                if (err) {
+                    return done(err);
                 }
                 done();
             });

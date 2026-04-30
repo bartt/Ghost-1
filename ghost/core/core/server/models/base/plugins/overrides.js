@@ -1,3 +1,4 @@
+const {PIVOT_PREFIX} = require('bookshelf/lib/constants');
 const _ = require('lodash');
 
 /**
@@ -80,15 +81,20 @@ module.exports = function (Bookshelf) {
              * removes null relations coming from `hasOne` - https://bookshelfjs.org/api.html#Model-instance-hasOne
              * Based on https://github.com/bookshelf/bookshelf/issues/72#issuecomment-25164617
              */
-            _.each(this.relations, (value, key) => {
-                if (_.isEmpty(value)) {
+            for (const key in this.relations) {
+                if (_.isEmpty(this.relations[key])) {
                     delete this.relations[key];
                 }
-            });
+            }
             // CASE: get JSON of previous attrs
             if (options.previous) {
                 const clonedModel = _.cloneDeep(this);
-                clonedModel.attributes = this._previousAttributes;
+                // Manually remove pivot fields from cloned model as they are not
+                // removed from _previousAttributes via `omitPivot` option
+                clonedModel.attributes = _.omitBy(
+                    this._previousAttributes,
+                    (value, key) => key.startsWith(PIVOT_PREFIX)
+                );
 
                 if (this.relationships) {
                     this.relationships.forEach((relation) => {

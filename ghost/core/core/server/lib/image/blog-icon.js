@@ -1,5 +1,4 @@
 const sizeOf = require('image-size');
-const Promise = require('bluebird');
 const _ = require('lodash');
 const path = require('path');
 const errors = require('@tryghost/errors');
@@ -40,12 +39,12 @@ class BlogIcon {
                     }).height;
                 }
 
-                return resolve({
+                resolve({
                     width: dimensions.width,
                     height: dimensions.height
                 });
             } catch (err) {
-                return reject(new errors.ValidationError({
+                reject(new errors.ValidationError({
                     message: tpl(messages.error, {
                         file: storagePath,
                         error: err.message
@@ -99,13 +98,17 @@ class BlogIcon {
     }
 
     /**
-     * Return URL for Blog icon: [subdirectory or not]favicon.[ico, jpeg, or png]
-     * Always returns {string} getIconUrl
-     * @returns {string} [subdirectory or not]favicon.[ico, jpeg, or png]
+     * Return URL for blog icon, if available: [subdirectory or not]favicon.[ico, jpeg, or png]
+     * Otherwise, fallbacks to the default Ghost favicon.ico file, if requested
+     * Otherwise, returns null
+     * @param {Object} [options]
+     * @param {boolean} [options.absolute] - if true, return absolute URL. Default: false
+     * @param {boolean} [options.fallbackToDefault] - if true, fallbacks to Ghost's default favicon.ico when no blog icon is found. Default: true
+     * @returns {string|null} [subdirectory or not]favicon.[ico, jpeg, or png] or null
      * @description Checks if we have a custom uploaded icon and the extension of it. If no custom uploaded icon
      * exists, we're returning the default `favicon.ico`
      */
-    getIconUrl(absolute) {
+    getIconUrl({absolute = false, fallbackToDefault = true} = {}) {
         const blogIcon = this.settingsCache.get('icon');
 
         if (blogIcon) {
@@ -125,9 +128,13 @@ class BlogIcon {
 
             const sizedIcon = blogIcon.replace(/\/content\/images\//, '/content/images/size/w256h256/');
             return this.urlUtils.urlFor({relativeUrl: sizedIcon}, absolute ? true : undefined);
-        } else {
+        }
+
+        if (fallbackToDefault) {
             return this.urlUtils.urlFor({relativeUrl: '/favicon.ico'}, absolute ? true : undefined);
         }
+
+        return null;
     }
 
     /**

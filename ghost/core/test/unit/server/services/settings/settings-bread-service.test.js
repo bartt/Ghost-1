@@ -1,14 +1,16 @@
 const sinon = require('sinon');
-const assert = require('assert');
+const assert = require('node:assert/strict');
 const mail = require('../../../../../core/server/services/mail');
 const SettingsBreadService = require('../../../../../core/server/services/settings/settings-bread-service');
 const urlUtils = require('../../../../../core/shared/url-utils.js');
 const {mockManager} = require('../../../../utils/e2e-framework');
-const should = require('should');
-
+const emailAddress = require('../../../../../core/server/services/email-address');
 describe('UNIT > Settings BREAD Service:', function () {
+    let emailMockReceiver;
+
     beforeEach(function () {
-        mockManager.mockMail();
+        emailAddress.init();
+        emailMockReceiver = mockManager.mockMail();
     });
 
     afterEach(function () {
@@ -181,7 +183,22 @@ describe('UNIT > Settings BREAD Service:', function () {
                         return 'test';
                     }
                 },
-                labsService: {}
+                labsService: {
+                    isSet() {
+                        return false;
+                    }
+                },
+                emailAddressService: {
+                    service: {
+                        validate() {
+                            return {
+                                allowed: true,
+                                verificationEmailRequired: true
+                            };
+                        },
+                        defaultFromAddress: 'noreply@example.com'
+                    }
+                }
             });
 
             const settings = await defaultSettingsManager.edit([
@@ -194,10 +211,9 @@ describe('UNIT > Settings BREAD Service:', function () {
             assert.equal(settings.length, 0);
             assert.deepEqual(settings.meta.sent_email_verification, ['members_support_address']);
 
-            mockManager.assert.sentEmail({
-                subject: 'Verify email address',
-                to: 'support@example.com'
-            });  
+            emailMockReceiver.matchHTMLSnapshot();
+            emailMockReceiver.matchPlaintextSnapshot();
+            emailMockReceiver.matchMetadataSnapshot();
         });
     });
 
@@ -255,7 +271,7 @@ describe('UNIT > Settings BREAD Service:', function () {
                 labsService: {}
             });
 
-            await should(defaultSettingsManager.verifyKeyUpdate('test')).rejectedWith(/Not allowed to update this setting key via tokens/);
+            await assert.rejects(defaultSettingsManager.verifyKeyUpdate('test'), /Not allowed to update this setting key via tokens/);
         });
     });
 });

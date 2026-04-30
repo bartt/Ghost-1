@@ -1,4 +1,4 @@
-const assert = require('assert');
+const assert = require('node:assert/strict');
 const generateExcerpt = require('../../../../core/frontend/meta/generate-excerpt');
 
 describe('generateExcerpt', function () {

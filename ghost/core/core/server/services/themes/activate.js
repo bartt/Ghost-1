@@ -14,14 +14,14 @@ const messages = {
     themeCannotBeActivated: '{themeName} cannot be activated because it was not found in the theme directory.'
 };
 
-module.exports.loadAndActivate = async (themeName) => {
+module.exports.loadAndActivate = async (themeName, options = {}) => {
     debug('loadAndActivate', themeName);
     try {
         // Just read the active theme for now
         const loadedTheme = await themeLoader.loadOneTheme(themeName);
         // Validate
         // @NOTE: this is now the only usage of check, rather than checkSafe...
-        const checkedTheme = await validate.check(loadedTheme);
+        const checkedTheme = await validate.check(themeName, loadedTheme, {skipChecks: options.skipChecks});
 
         if (!validate.canActivate(checkedTheme)) {
             logging.error(validate.getThemeValidationError('activeThemeHasFatalErrors', themeName, checkedTheme));
@@ -57,6 +57,6 @@ module.exports.activate = async (themeName) => {
     const checkedTheme = await validate.checkSafe(themeName, loadedTheme);
     // Activate
     await activator.activateFromAPI(themeName, loadedTheme, checkedTheme);
-    // Return the checked theme
-    return checkedTheme;
+    // Return the theme errors
+    return validate.getErrorsFromCheckedTheme(checkedTheme);
 };

@@ -12,9 +12,13 @@ const integrationsService = getIntegrationsServiceInstance({
     ApiKeyModel: models.ApiKey
 });
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'integrations',
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         options: [
             'include',
@@ -32,6 +36,9 @@ module.exports = {
         }
     },
     read: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         data: [
             'id'
@@ -51,18 +58,22 @@ module.exports = {
                 }
             }
         },
-        query({data, options}) {
-            return models.Integration.findOne(data, Object.assign(options, {require: true}))
-                .catch((e) => {
-                    if (e instanceof models.Integration.NotFoundError) {
-                        throw new errors.NotFoundError({
-                            message: tpl(messages.resourceNotFound, {resource: 'Integration'})
-                        });
-                    }
-                });
+        async query({data, options}) {
+            try {
+                return models.Integration.findOne(data, Object.assign(options, {require: true}));
+            } catch (e) {
+                if (e instanceof models.Integration.NotFoundError) {
+                    throw new errors.NotFoundError({
+                        message: tpl(messages.resourceNotFound, {resource: 'Integration'})
+                    });
+                }
+            }
         }
     },
     edit: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         data: [
             'name',
@@ -91,6 +102,9 @@ module.exports = {
     },
     add: {
         statusCode: 201,
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         data: [
             'name',
@@ -125,6 +139,9 @@ module.exports = {
     },
     destroy: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         options: [
             'id'
@@ -136,15 +153,18 @@ module.exports = {
                 }
             }
         },
-        query({options}) {
-            return models.Integration.destroy(Object.assign(options, {require: true}))
-                .catch((e) => {
-                    if (e instanceof models.Integration.NotFoundError) {
-                        return Promise.reject(new errors.NotFoundError({
-                            message: tpl(messages.resourceNotFound, {resource: 'Integration'})
-                        }));
-                    }
-                });
+        async query({options}) {
+            try {
+                return models.Integration.destroy(Object.assign(options, {require: true}));
+            } catch (e) {
+                if (e instanceof models.Integration.NotFoundError) {
+                    throw new errors.NotFoundError({
+                        message: tpl(messages.resourceNotFound, {resource: 'Integration'})
+                    });
+                }
+            }
         }
     }
 };
+
+module.exports = controller;

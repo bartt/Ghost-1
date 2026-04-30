@@ -1,15 +1,17 @@
 const _ = require('lodash');
 const tpl = require('@tryghost/tpl');
-const {NotFoundError, NoPermissionError, BadRequestError, IncorrectUsageError} = require('@tryghost/errors');
+const {NotFoundError, NoPermissionError, BadRequestError, IncorrectUsageError, ValidationError} = require('@tryghost/errors');
 const {obfuscatedSetting, isSecretSetting, hideValueIfSecret} = require('./settings-utils');
 const logging = require('@tryghost/logging');
-const MagicLink = require('@tryghost/magic-link');
 const verifyEmailTemplate = require('./emails/verify-email');
+const MagicLink = require('../lib/magic-link/magic-link');
+const sentry = require('../../../shared/sentry');
 
 const EMAIL_KEYS = ['members_support_address'];
 const messages = {
     problemFindingSetting: 'Problem finding setting: {key}',
-    accessCoreSettingFromExtReq: 'Attempted to access core setting from external request'
+    accessCoreSettingFromExtReq: 'Attempted to access core setting from external request',
+    invalidEmail: 'Invalid email address'
 };
 
 class SettingsBREADService {
@@ -22,11 +24,15 @@ class SettingsBREADService {
      * @param {Object} options.singleUseTokenProvider
      * @param {Object} options.urlUtils
      * @param {Object} options.labsService - labs service instance
+     * @param {Object} options.limitsService - limits service instance
+     * @param {{service: Object}} options.emailAddressService
      */
-    constructor({SettingsModel, settingsCache, labsService, mail, singleUseTokenProvider, urlUtils}) {
+    constructor({SettingsModel, settingsCache, labsService, limitsService, mail, singleUseTokenProvider, urlUtils, emailAddressService}) {
         this.SettingsModel = SettingsModel;
         this.settingsCache = settingsCache;
         this.labs = labsService;
+        this.limitsService = limitsService;
+        this.emailAddressService = emailAddressService;
 
         /* email verification setup */
 
@@ -65,7 +71,8 @@ class SettingsBREADService {
                 // @todo: need to make this more generic?
                 const adminUrl = urlUtils.urlFor('admin', true);
                 const signinURL = new URL(adminUrl);
-                signinURL.hash = `/settings/members/?verifyEmail=${token}`;
+                signinURL.hash = `/settings/portal/edit?verifyEmail=${token}`;
+
                 return signinURL.href;
             }
         };
@@ -76,7 +83,8 @@ class SettingsBREADService {
             getSigninURL,
             getText,
             getHTML,
-            getSubject
+            getSubject,
+            sentry
         });
     }
 
@@ -93,7 +101,7 @@ class SettingsBREADService {
 
     /**
      *
-     * @param {String} key setting key
+     * @param {string} key setting key
      * @param {Object} [context] API context instance
      * @returns {Object} an object with a filled out key that comes in a parameter
      */
@@ -147,7 +155,7 @@ class SettingsBREADService {
      * @param {Object[]} settings
      * @param {Object} options
      * @param {Object} [options.context]
-     * @param {Object} [stripeConnectData]
+     * @param {Object|null} [stripeConnectData]
      * @returns
      */
     async edit(settings, options, stripeConnectData) {
@@ -188,6 +196,8 @@ class SettingsBREADService {
         }
 
         if (stripeConnectData) {
+            await this.limitsService.errorIfWouldGoOverLimit('limitStripeConnect');
+
             filteredSettings.push({
                 key: 'stripe_connect_publishable_key',
                 value: stripeConnectData.public_key
@@ -208,6 +218,13 @@ class SettingsBREADService {
                 key: 'stripe_connect_account_id',
                 value: stripeConnectData.account_id
             });
+
+            if (stripeConnectData.public_key.match(/pk_live/)) {
+                // Require the Stripe service here as it breaks existing tests otherwise
+                const stripeService = require('../stripe');
+                // This method currently only triggers a DomainEvent
+                await stripeService.connect();
+            }
         }
 
         // remove any email properties that are not allowed to be set without verification
@@ -300,7 +317,18 @@ class SettingsBREADService {
                 const hasChanged = getSetting(setting).value !== email;
 
                 if (await this.requiresEmailVerification({email, hasChanged})) {
-                    emailsToVerify.push({email, key});
+                    const validated = this.emailAddressService.service.validate(email, 'replyTo');
+                    if (!validated.allowed) {
+                        throw new ValidationError({
+                            message: messages.invalidEmail
+                        });
+                    }
+
+                    if (validated.verificationEmailRequired) {
+                        emailsToVerify.push({email, key});
+                    } else {
+                        filteredSettings.push(setting);
+                    }
                 } else {
                     filteredSettings.push(setting);
                 }
@@ -345,13 +373,7 @@ class SettingsBREADService {
      * @private
      */
     async sendEmailVerificationMagicLink({email, key}) {
-        const [,toDomain] = email.split('@');
-
-        let fromEmail = `noreply@${toDomain}`;
-        if (fromEmail === email) {
-            fromEmail = `no-reply@${toDomain}`;
-        }
-
+        const fromEmail = this.emailAddressService.service.defaultFromAddress;
         const {ghostMailer} = this;
 
         this.magicLinkService.transporter = {

@@ -13,19 +13,25 @@
 //
 // The output state checker is responsible for checking the response from the app after performing a request.
 const _ = require('lodash');
+const debug = require('@tryghost/debug')('test');
 const {sequence} = require('@tryghost/promise');
 const {any, stringMatching} = require('@tryghost/express-test').snapshot;
 const {AsymmetricMatcher} = require('expect');
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
-const uuid = require('uuid');
+const crypto = require('crypto');
+
+const assert = require('node:assert/strict');
 
 const fixtureUtils = require('./fixture-utils');
+const cacheRules = require('./fixtures/cache-rules');
 const redirectsUtils = require('./redirects');
-const configUtils = require('./configUtils');
+const configUtils = require('./config-utils');
 const urlServiceUtils = require('./url-service-utils');
 const mockManager = require('./e2e-framework-mock-manager');
+const mentionsJobsService = require('../../core/server/services/mentions-jobs');
+const jobsService = require('../../core/server/services/jobs');
 
 const boot = require('../../core/boot');
 const {AdminAPITestAgent, ContentAPITestAgent, GhostAPITestAgent, MembersAPITestAgent} = require('./agents');
@@ -34,24 +40,44 @@ const db = require('./db-utils');
 // Services that need resetting
 const settingsService = require('../../core/server/services/settings/settings-service');
 const supertest = require('supertest');
+const {stopGhost} = require('./e2e-utils');
+const adapterManager = require('../../core/server/services/adapter-manager');
+const DomainEvents = require('@tryghost/domain-events');
+
+// Require additional assertions which help us keep our tests small and clear
+require('./assertions');
+
+let totalResetTime = 0;
+let totalStartTime = 0;
+let totalBoots = 0;
 
 /**
  * @param {Object} [options={}]
- * @param {Boolean} [options.backend] Boot the backend
- * @param {Boolean} [options.frontend] Boot the frontend
- * @param {Boolean} [options.server] Start a server
+ * @param {boolean} [options.backend] Boot the backend
+ * @param {boolean} [options.frontend] Boot the frontend
+ * @param {boolean} [options.server] Start a server
  * @returns {Promise<Express.Application>} ghost
  */
 const startGhost = async (options = {}) => {
+    await mentionsJobsService.allSettled();
+    await jobsService.allSettled();
+    await DomainEvents.allSettled();
+
     /**
      * We never use the root content folder for testing!
      * We use a tmp folder.
      */
-    const contentFolder = path.join(os.tmpdir(), uuid.v4(), 'ghost-test');
+    const contentFolder = path.join(os.tmpdir(), crypto.randomUUID(), 'ghost-test');
     await prepareContentFolder({contentFolder});
 
     // NOTE: need to pass this config to the server instance
     configUtils.set('paths:contentPath', contentFolder);
+
+    // Adapter cache has to be cleared to avoid reusing cached adapter instances between restarts
+    adapterManager.clearCache();
+
+    // Reset the URL service so we clear out all the listeners
+    urlServiceUtils.resetGenerators();
 
     const defaults = {
         backend: true,
@@ -60,15 +86,28 @@ const startGhost = async (options = {}) => {
     };
 
     // Ensure the state of all data, including DB and caches
+    const resetDataNow = Date.now();
     await resetData();
+    totalResetTime += Date.now() - resetDataNow;
 
     const bootOptions = Object.assign({}, defaults, options);
 
+    const bootNow = Date.now();
     const ghostServer = await boot(bootOptions);
+    const bootTime = Date.now() - bootNow;
+    totalStartTime += bootTime;
+    totalBoots += 1;
 
     if (bootOptions.frontend) {
         await urlServiceUtils.isFinished();
     }
+
+    // Disable network in tests at the start
+    mockManager.disableNetwork();
+
+    debug(`[e2e-framework] Started Ghost in ${bootTime / 1000}s`);
+    debug(`[e2e-framework] Accumulated start time across ${totalBoots} boots is ${totalStartTime / 1000}s (average = ${Math.round(totalStartTime / totalBoots)}ms)`);
+    debug(`[e2e-framework] Accumulated reset time across ${totalBoots} boots is ${totalResetTime / 1000}s (average = ${Math.round(totalResetTime / totalBoots)}ms)`);
 
     return ghostServer;
 };
@@ -88,7 +127,7 @@ const prepareContentFolder = async ({contentFolder, redirectsFile = true, routes
     await fs.ensureDir(path.join(contentFolderForTests, 'adapters'));
     await fs.ensureDir(path.join(contentFolderForTests, 'settings'));
 
-    // Copy all themes into the new test content folder. Default active theme is always casper.
+    // Copy all themes into the new test content folder. Default active theme is always source.
     // If you want to use a different theme, you have to set the active theme (e.g. stub)
     await fs.copy(
         path.join(__dirname, 'fixtures', 'themes'),
@@ -96,7 +135,7 @@ const prepareContentFolder = async ({contentFolder, redirectsFile = true, routes
     );
 
     if (redirectsFile) {
-        redirectsUtils.setupFile(contentFolderForTests, '.yaml');
+        await redirectsUtils.setupFile(contentFolderForTests, '.yaml');
     }
 
     if (routesFile) {
@@ -182,7 +221,7 @@ const getContentAPIAgent = async () => {
  * agent.get('/posts/') without having to worry about URL paths
  *
  * @param {Object} [options={}]
- * @param {Boolean} [options.members] Include members in the boot process
+ * @param {boolean} [options.members] Include members in the boot process
  * @returns {Promise<InstanceType<AdminAPITestAgent>>} agent
  */
 const getAdminAPIAgent = async (options = {}) => {
@@ -223,6 +262,31 @@ const getMembersAPIAgent = async () => {
 
         return new MembersAPITestAgent(app, {
             apiURL: '/members/',
+            originURL
+        });
+    } catch (error) {
+        error.message = `Unable to create test agent. ${error.message}`;
+        throw error;
+    }
+};
+
+/**
+ * Creates a MembersAPITestAgent which is a drop-in substitution for supertest
+ * It is automatically hooked up to the Members API so you can make requests to e.g.
+ * agent.get('/webhooks/stripe/') without having to worry about URL paths
+ *
+ * @returns {Promise<InstanceType<GhostAPITestAgent>>} agent
+ */
+const getWebmentionsAPIAgent = async () => {
+    const bootOptions = {
+        frontend: true
+    };
+    try {
+        const app = await startGhost(bootOptions);
+        const originURL = configUtils.config.get('url');
+
+        return new GhostAPITestAgent(app, {
+            apiURL: '/webmentions/',
             originURL
         });
     } catch (error) {
@@ -293,6 +357,7 @@ const getAgentsForMembers = async () => {
 };
 
 /**
+ * WARNING: when using this, you should stop the returned ghostServer after the tests.
  * @NOTE: for now method returns a supertest agent for Frontend instead of test agent with snapshot support.
  *        frontendAgent should be returning an instance of TestAgent (related: https://github.com/TryGhost/Toolbox/issues/471)
  *  @returns {Promise<{adminAgent: InstanceType<AdminAPITestAgent>, membersAgent: InstanceType<MembersAPITestAgent>, frontendAgent: InstanceType<supertest.SuperAgentTest>, contentAPIAgent: InstanceType<ContentAPITestAgent>, ghostServer: Express.Application}>} agents
@@ -309,6 +374,11 @@ const getAgentsWithFrontend = async () => {
         server: true
     };
     try {
+        // Possible that we still have a running Ghost server from a previous old E2E test
+        // Those tests never stopped the server in the tests manually
+        await stopGhost();
+
+        // Start a new Ghost server with real HTTP listener
         ghostServer = await startGhost(bootOptions);
         const app = ghostServer.rootApp;
 
@@ -342,10 +412,12 @@ const getAgentsWithFrontend = async () => {
     };
 };
 
-const insertWebhook = ({event, url}) => {
+const insertWebhook = ({event, url, integrationType = undefined}) => {
     return fixtureUtils.fixtures.insertWebhook({
         event: event,
         target_url: url
+    }, {
+        integrationType
     });
 };
 
@@ -375,11 +447,43 @@ class Nullable extends AsymmetricMatcher {
     }
 }
 
+/*
+ * Assertion Helpers
+ */
+
+/**
+ * Assert that the x-cache-invalidate header not set
+ * @returns {Function}
+ */
+function cacheInvalidateHeaderNotSet() {
+    return ({headers}) => {
+        // Assert header should not exist
+        assert.equal(
+            headers['x-cache-invalidate'],
+            undefined,
+            'x-cache-invalidate header should not be present');
+    };
+}
+
+/**
+ * Assert that the x-cache-invalidate header is set to /*
+ * @returns {Function}
+ */
+function cacheInvalidateHeaderSetToWildcard() {
+    return ({headers}) => {
+        assert.equal(
+            headers['x-cache-invalidate'],
+            '/*',
+            'x-cache-invalidate header should be set to /*');
+    };
+}
+
 module.exports = {
     // request agent
     agentProvider: {
         getAdminAPIAgent,
         getMembersAPIAgent,
+        getWebmentionsAPIAgent,
         getContentAPIAgent,
         getAgentsForMembers,
         getGhostAPIAgent,
@@ -401,6 +505,10 @@ module.exports = {
             return path.join(__dirname, 'fixtures', fixturePath);
         }
     },
+    regexes: {
+        anyMajorMinorVersion: /v\d+\.\d+/gi,
+        queryStringToken: paramName => new RegExp(`${paramName}=(\\w|-)+`, 'g')
+    },
     matchers: {
         anyBoolean: any(Boolean),
         anyString: any(String),
@@ -421,18 +529,23 @@ module.exports = {
         anyLocationFor: (resource) => {
             return stringMatching(new RegExp(`https?://.*?/${resource}/[a-f0-9]{24}/`));
         },
-        anyGhostAgent: stringMatching(/Ghost\/\d+\.\d+\.\d+\s\(https:\/\/github.com\/TryGhost\/Ghost\)/),
+        anyGhostAgent: stringMatching(/Ghost\/\d+\.\d+(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\s\(https:\/\/github.com\/TryGhost\/Ghost\)/),
         // @NOTE: hack here! it's due to https://github.com/TryGhost/Toolbox/issues/341
         //        this matcher should be removed once the issue is solved - routing is redesigned
         //        An ideal solution would be removal of this matcher altogether.
-        anyLocalURL: stringMatching(/http:\/\/127.0.0.1:2369\/[A-Za-z0-9_-]+\//),
+        anyLocalURL: stringMatching(/http:\/\/127.0.0.1:\d+\/[A-Za-z0-9_-]+\//),
         stringMatching
     },
 
+    assertions: {
+        cacheInvalidateHeaderNotSet,
+        cacheInvalidateHeaderSetToWildcard
+    },
+
     // utilities
-    configUtils: require('./configUtils'),
+    configUtils: require('./config-utils'),
     dbUtils: require('./db-utils'),
-    urlUtils: require('./urlUtils'),
-    sleep: require('./sleep'),
-    resetRateLimits
+    urlUtils: require('./url-utils'),
+    resetRateLimits,
+    cacheRules
 };

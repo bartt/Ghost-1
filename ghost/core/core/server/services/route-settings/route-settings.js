@@ -1,4 +1,3 @@
-const Promise = require('bluebird');
 const fs = require('fs-extra');
 const crypto = require('crypto');
 const urlService = require('../url');
@@ -29,8 +28,8 @@ class RouteSettings {
      *
      * @param {Object} options
      * @param {Object} options.settingsLoader
-     * @param {String} options.settingsPath
-     * @param {String} options.backupPath
+     * @param {string} options.settingsPath
+     * @param {string} options.backupPath
      */
     constructor({settingsLoader, settingsPath, backupPath}) {
         /**
@@ -46,8 +45,8 @@ class RouteSettings {
 
     /**
      * @private
-     * @param {String} settingsPath
-     * @param {String} backupPath
+     * @param {string} settingsPath
+     * @param {string} backupPath
      */
     async createBackupFile(settingsPath, backupPath) {
         return await fs.copy(settingsPath, backupPath);
@@ -55,8 +54,8 @@ class RouteSettings {
 
     /**
      * @private
-     * @param {String} settingsPath
-     * @param {String} backupPath
+     * @param {string} settingsPath
+     * @param {string} backupPath
      */
     async restoreBackupFile(settingsPath, backupPath) {
         return await fs.copy(backupPath, settingsPath);
@@ -64,8 +63,8 @@ class RouteSettings {
 
     /**
      * @private
-     * @param {String} filePath
-     * @param {String} settingsPath
+     * @param {string} filePath
+     * @param {string} settingsPath
      */
     async saveFile(filePath, settingsPath) {
         return await fs.copy(filePath, settingsPath);
@@ -73,7 +72,7 @@ class RouteSettings {
 
     /**
      * @private
-     * @param {String} settingsFilePath
+     * @param {string} settingsFilePath
      */
     async readFile(settingsFilePath) {
         return fs.readFile(settingsFilePath, 'utf-8')
@@ -120,7 +119,9 @@ class RouteSettings {
 
         function isBlogRunning() {
             debug('waiting for blog running');
-            return Promise.delay(1000)
+            return new Promise((resolve) => {
+                setTimeout(resolve, 1000);
+            })
                 .then(() => {
                     debug('waited for blog running');
                     if (!urlService.hasFinished()) {

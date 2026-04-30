@@ -1,21 +1,41 @@
-import AdminRoute from 'ghost-admin/routes/admin';
+import * as Sentry from '@sentry/ember';
 import ConfirmUnsavedChangesModal from '../components/modals/confirm-unsaved-changes';
+import MembersManagementRoute from './members-management';
 import {action} from '@ember/object';
 import {inject as service} from '@ember/service';
 
-export default class MembersRoute extends AdminRoute {
+export default class MembersRoute extends MembersManagementRoute {
     @service feature;
     @service modals;
     @service router;
+    @service('unsaved-changes') unsavedChanges;
+
+    queryParams = {
+        postAnalytics: {refreshModel: false}
+    };
 
     _requiresBackgroundRefresh = true;
-    fromAnalytics = null;
+    _unregisterUnsavedChanges = null;
 
     constructor() {
         super(...arguments);
         this.router.on('routeWillChange', (transition) => {
             this.closeImpersonateModal(transition);
         });
+    }
+
+    beforeModel(transition) {
+        super.beforeModel(...arguments);
+
+        // The outer React shell owns sibling URLs like /members/import.
+        // Ember's recognizer can still match this dynamic route for those
+        // paths and fire a bogus queryRecord that surfaces as an alert.
+        // Abort the transition for known React-owned siblings so the React
+        // shell keeps rendering the page.
+        const memberId = transition.to?.params?.member_id;
+        if (memberId === 'import') {
+            transition.abort();
+        }
     }
 
     model(params) {
@@ -38,34 +58,31 @@ export default class MembersRoute extends AdminRoute {
         }
 
         controller.directlyFromAnalytics = false;
-        if (transition.from?.name === 'posts.analytics') {
-            // Sadly transition.from.params is not reliable to use (not populated on transitions)
-            const oldParams = transition.router?.oldState?.params['posts.analytics'] ?? {};
-
-            // We need to store analytics in 'this' to have it accessible for the member route
-            this.fromAnalytics = Object.values(oldParams);
-            controller.fromAnalytics = this.fromAnalytics;
+        if (transition.from?.params?.path?.startsWith('posts/analytics')) {
             controller.directlyFromAnalytics = true;
-        } else if (transition.from?.metadata?.fromAnalytics) {
-            // Handle returning from member route
-            const fromAnalytics = transition.from?.metadata.fromAnalytics ?? null;
-            controller.fromAnalytics = fromAnalytics;
-            this.fromAnalytics = fromAnalytics;
-        } else if (transition.from?.name === 'members.index' && transition.from?.parent?.name === 'members') {
-            const fromAnalytics = transition.from?.parent?.metadata.fromAnalytics ?? null;
-            controller.fromAnalytics = fromAnalytics;
-            this.fromAnalytics = fromAnalytics;
-        } else {
-            controller.fromAnalytics = null;
-            this.fromAnalytics = null;
+        }
+
+        this._registerUnsavedChanges(controller);
+    }
+
+    resetController(controller, isExiting) {
+        super.resetController(...arguments);
+
+        // Make sure we clear
+        if (isExiting) {
+            controller.set('backPath', null);
+            controller.set('directlyFromAnalytics', false);
+        }
+
+        if (isExiting && controller.postAnalytics) {
+            controller.set('postAnalytics', null);
         }
     }
 
     deactivate() {
         this._requiresBackgroundRefresh = true;
-
-        this.confirmModal = null;
-        this.hasConfirmed = false;
+        this._unregisterUnsavedChanges?.();
+        this._unregisterUnsavedChanges = null;
     }
 
     @action
@@ -75,39 +92,7 @@ export default class MembersRoute extends AdminRoute {
 
     @action
     async willTransition(transition) {
-        let hasDirtyAttributes = this.controller.dirtyAttributes;
-
-        // wait for any existing confirm modal to be closed before allowing transition
-        if (this.confirmModal) {
-            return;
-        }
-
-        if (!this.hasConfirmed && hasDirtyAttributes) {
-            transition.abort();
-
-            if (this.controller.saveTask?.isRunning) {
-                await this.controller.saveTask.last;
-                transition.retry();
-            }
-
-            const shouldLeave = await this.confirmUnsavedChanges();
-
-            if (shouldLeave) {
-                this.controller.model.rollbackAttributes();
-                this.hasConfirmed = true;
-                return transition.retry();
-            }
-        }
-    }
-
-    async confirmUnsavedChanges() {
-        this.confirmModal = this.modals
-            .open(ConfirmUnsavedChangesModal)
-            .finally(() => {
-                this.confirmModal = null;
-            });
-
-        return this.confirmModal;
+        return this.unsavedChanges.guardTransition(transition);
     }
 
     closeImpersonateModal(transition) {
@@ -120,13 +105,39 @@ export default class MembersRoute extends AdminRoute {
         }
     }
 
-    titleToken() {
-        return this.controller.member.name;
+    _registerUnsavedChanges(controller) {
+        this._unregisterUnsavedChanges?.();
+        this._unregisterUnsavedChanges = this.unsavedChanges.register({
+            isDirty: () => controller.dirtyAttributes,
+            confirmLeave: () => this._confirmUnsavedChanges(controller)
+        });
     }
 
-    buildRouteInfoMetadata() {
-        return {
-            fromAnalytics: this.fromAnalytics
-        };
+    async _confirmUnsavedChanges(controller) {
+        if (controller.saveTask?.isRunning) {
+            try {
+                await controller.saveTask.last;
+            } catch (e) {
+                // ignore save errors — we'll check dirty state below
+            }
+        }
+
+        if (!controller.dirtyAttributes) {
+            return true;
+        }
+
+        Sentry.captureMessage('showing unsaved changes modal for members route');
+        const shouldLeave = await this.modals.open(ConfirmUnsavedChangesModal);
+
+        if (shouldLeave) {
+            controller.model.rollbackAttributes();
+            return true;
+        }
+
+        return false;
+    }
+
+    titleToken() {
+        return this.controller.member.name;
     }
 }

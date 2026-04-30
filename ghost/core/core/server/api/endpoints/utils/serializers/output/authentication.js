@@ -4,7 +4,7 @@ const debug = require('@tryghost/debug')('api:endpoints:utils:serializers:output
 
 const messages = {
     checkEmailForInstructions: 'Check your email for further instructions.',
-    passwordChanged: 'Password changed successfully.',
+    passwordChanged: 'Password updated',
     invitationAccepted: 'Invitation accepted.'
 };
 
@@ -40,10 +40,16 @@ module.exports = {
     },
 
     resetPassword(data, apiConfig, frame) {
+        const resetResponse = {
+            message: tpl(messages.passwordChanged)
+        };
+
+        if (data.emailVerificationToken) {
+            resetResponse.emailVerificationToken = data.emailVerificationToken;
+        }
+
         frame.response = {
-            password_reset: [{
-                message: tpl(messages.passwordChanged)
-            }]
+            password_reset: [resetResponse]
         };
     },
 

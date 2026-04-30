@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-import flattenGroupedOptions from 'ghost-admin/utils/flatten-grouped-options';
 import {action} from '@ember/object';
 import {isBlank} from '@ember/utils';
 import {inject as service} from '@ember/service';
@@ -11,9 +10,10 @@ const BASE_FILTERS = ['status:free', 'status:-free'];
 export default class GhMembersRecipientSelect extends Component {
     @service membersUtils;
     @service store;
+    @service labelsManager;
 
     @tracked forceSpecificChecked = false;
-    @tracked specificOptions = [];
+    @tracked _tierOptions = [];
 
     constructor() {
         super(...arguments);
@@ -53,9 +53,16 @@ export default class GhMembersRecipientSelect extends Component {
         return this.forceSpecificChecked || this.specificFilters.size > 0;
     }
 
-    get selectedSpecificOptions() {
-        return flattenGroupedOptions(this.specificOptions)
-            .filter(o => this.specificFilters.has(o.segment));
+    get hasSpecificOptions() {
+        return this._tierOptions.length > 0 || this.labelsManager.labels.length > 0;
+    }
+
+    get nonLabelOptions() {
+        return this._tierOptions;
+    }
+
+    get selectedSpecificSegments() {
+        return Array.from(this.specificFilters);
     }
 
     @action
@@ -108,6 +115,15 @@ export default class GhMembersRecipientSelect extends Component {
         }
 
         const newSpecificFilters = new Set(selectedOptions.map(o => o.segment));
+
+        // If the user has deselected all options, clear the _previousSpecificFilters
+        // and force the specific filter to be checked so that the user can still see the options select
+        // Refs https://github.com/TryGhost/Team/issues/2859
+        if (newSpecificFilters.size === 0) {
+            this._previousSpecificFilters = undefined;
+            this.forceSpecificChecked = true;
+        }
+
         this.updateFilter({newSpecificFilters});
     }
 
@@ -128,51 +144,44 @@ export default class GhMembersRecipientSelect extends Component {
 
     @task
     *fetchSpecificOptionsTask() {
-        const options = [];
+        // fetch first page of labels for "Specific people" checkbox visibility
+        yield this.labelsManager.loadMoreTask.perform();
 
-        // fetch all labels w̶i̶t̶h̶ c̶o̶u̶n̶t̶s̶
-        // TODO: add `include: 'count.members` to query once API is fixed
-        const labels = yield this.store.query('label', {limit: 'all'});
-
-        if (labels.length > 0) {
-            const labelsGroup = {
-                groupName: 'Labels',
-                options: []
-            };
-
-            labels.forEach((label) => {
-                labelsGroup.options.push({
-                    name: label.name,
-                    segment: `label:${label.slug}`,
-                    count: label.count?.members,
-                    class: 'segment-label'
-                });
-            });
-
-            options.push(labelsGroup);
-        }
         // fetch all tiers w̶i̶t̶h̶ c̶o̶u̶n̶t̶s̶
         // TODO: add `include: 'count.members` to query once API supports
         const tiers = yield this.store.query('tier', {filter: 'type:paid', limit: 'all'});
+        const tierOptions = [];
 
         if (tiers.length > 1) {
-            const tiersGroup = {
-                groupName: 'Tiers',
+            const activeTiersGroup = {
+                groupName: 'Active tiers',
+                options: []
+            };
+
+            const archivedTiersGroup = {
+                groupName: 'Archived tiers',
                 options: []
             };
 
             tiers.forEach((tier) => {
-                tiersGroup.options.push({
+                const tierData = {
                     name: tier.name,
                     segment: `tier:${tier.slug}`,
                     count: tier.count?.members,
                     class: 'segment-tier'
-                });
+                };
+
+                if (tier.active) {
+                    activeTiersGroup.options.push(tierData);
+                } else {
+                    archivedTiersGroup.options.push(tierData);
+                }
             });
 
-            options.push(tiersGroup);
+            tierOptions.push(activeTiersGroup);
+            tierOptions.push(archivedTiersGroup);
         }
 
-        this.specificOptions = options;
+        this._tierOptions = tierOptions;
     }
 }

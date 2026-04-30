@@ -20,26 +20,44 @@ const messages = {
         error: 'Only {rateSigninAttempts} tries per IP address every {rateSigninPeriod} seconds.',
         context: 'Too many login attempts.'
     },
-    tooManyAttempts: 'Too many attempts.'
+    tooManyAttempts: 'Too many attempts.',
+    tooManyOTCVerificationAttempts: {
+        error: 'Too many attempts for this verification code.',
+        context: 'Too many verification code attempts.'
+    },
+    webmentionsBlock: 'Too many mention attempts',
+    emailPreviewBlock: 'Only 10 test emails can be sent per hour'
 };
 let spamPrivateBlock = spam.private_block || {};
 let spamGlobalBlock = spam.global_block || {};
 let spamGlobalReset = spam.global_reset || {};
 let spamUserReset = spam.user_reset || {};
 let spamUserLogin = spam.user_login || {};
+let spamSendVerificationCode = spam.send_verification_code || {};
+let spamUserVerification = spam.user_verification || {};
 let spamMemberLogin = spam.member_login || {};
 let spamContentApiKey = spam.content_api_key || {};
+let spamWebmentionsBlock = spam.webmentions_block || {};
+let spamEmailPreviewBlock = spam.email_preview_block || {};
+let spamOtcVerificationEnumeration = spam.otc_verification_enumeration || {};
+let spamOtcVerification = spam.otc_verification || {};
 
 let store;
 let memoryStore;
 let privateBlogInstance;
 let globalResetInstance;
 let globalBlockInstance;
+let webmentionsBlockInstance;
 let userLoginInstance;
 let membersAuthInstance;
 let membersAuthEnumerationInstance;
 let userResetInstance;
+let sendVerificationCodeInstance;
+let userVerificationInstance;
 let contentApiKeyInstance;
+let emailPreviewBlockInstance;
+let otcVerificationEnumerationInstance;
+let otcVerificationInstance;
 
 const spamConfigKeys = ['freeRetries', 'minWait', 'maxWait', 'lifetime'];
 
@@ -123,6 +141,58 @@ const globalReset = () => {
     return globalResetInstance;
 };
 
+const webmentionsBlock = () => {
+    const ExpressBrute = require('express-brute');
+    const BruteKnex = require('brute-knex');
+    const db = require('../../../../data/db');
+
+    store = store || new BruteKnex({
+        tablename: 'brute',
+        createTable: false,
+        knex: db.knex
+    });
+
+    webmentionsBlockInstance = webmentionsBlockInstance || new ExpressBrute(store,
+        extend({
+            attachResetToRequest: false,
+            failCallback(req, res, next) {
+                return next(new errors.TooManyRequestsError({
+                    message: messages.webmentionsBlock
+                }));
+            },
+            handleStoreError: handleStoreError
+        }, pick(spamWebmentionsBlock, spamConfigKeys))
+    );
+
+    return webmentionsBlockInstance;
+};
+
+const emailPreviewBlock = () => {
+    const ExpressBrute = require('express-brute');
+    const BruteKnex = require('brute-knex');
+    const db = require('../../../../data/db');
+
+    store = store || new BruteKnex({
+        tablename: 'brute',
+        createTable: false,
+        knex: db.knex
+    });
+
+    emailPreviewBlockInstance = emailPreviewBlockInstance || new ExpressBrute(store,
+        extend({
+            attachResetToRequest: false,
+            failCallback(req, res, next) {
+                return next(new errors.TooManyRequestsError({
+                    message: messages.emailPreviewBlock
+                }));
+            },
+            handleStoreError: handleStoreError
+        }, pick(spamEmailPreviewBlock, spamConfigKeys))
+    );
+
+    return emailPreviewBlockInstance;
+};
+
 const membersAuth = () => {
     const ExpressBrute = require('express-brute');
     const BruteKnex = require('brute-knex');
@@ -173,7 +243,7 @@ const membersAuthEnumeration = () => {
                 attachResetToRequest: true,
                 failCallback(req, res, next, nextValidRequestDate) {
                     return next(new errors.TooManyRequestsError({
-                        message: `Too many different sign-in attempts try again in ${moment(nextValidRequestDate).fromNow(true)}`,
+                        message: `Too many different sign-in attempts, try again in ${moment(nextValidRequestDate).fromNow(true)}`,
                         context: tpl(messages.tooManySigninAttempts.context),
                         help: tpl(messages.tooManySigninAttempts.context)
                     }));
@@ -184,6 +254,68 @@ const membersAuthEnumeration = () => {
     }
 
     return membersAuthEnumerationInstance;
+};
+
+const otcVerificationEnumeration = () => {
+    const ExpressBrute = require('express-brute');
+    const BruteKnex = require('brute-knex');
+    const db = require('../../../../data/db');
+
+    store = store || new BruteKnex({
+        tablename: 'brute',
+        createTable: false,
+        knex: db.knex
+    });
+
+    if (!otcVerificationEnumerationInstance) {
+        otcVerificationEnumerationInstance = new ExpressBrute(store,
+            extend({
+                attachResetToRequest: false,
+                failCallback(req, res, next, nextValidRequestDate) {
+                    return next(new errors.TooManyRequestsError({
+                        message: `Too many verification attempts across multiple codes, try again in ${moment(nextValidRequestDate).fromNow(true)}`,
+                        context: tpl(messages.tooManyOTCVerificationAttempts.context),
+                        help: tpl(messages.tooManyOTCVerificationAttempts.context),
+                        code: 'OTC_TOTAL_ATTEMPTS_RATE_LIMITED'
+                    }));
+                },
+                handleStoreError: handleStoreError
+            }, pick(spamOtcVerificationEnumeration, spamConfigKeys))
+        );
+    }
+
+    return otcVerificationEnumerationInstance;
+};
+
+const otcVerification = () => {
+    const ExpressBrute = require('express-brute');
+    const BruteKnex = require('brute-knex');
+    const db = require('../../../../data/db');
+
+    store = store || new BruteKnex({
+        tablename: 'brute',
+        createTable: false,
+        knex: db.knex
+    });
+
+    if (!otcVerificationInstance) {
+        otcVerificationInstance = new ExpressBrute(store,
+            extend({
+                attachResetToRequest: false,
+                failCallback(req, res, next, nextValidRequestDate) {
+                    return next(new errors.TooManyRequestsError({
+                        message: `Too many attempts for this verification code, try again in ${moment(nextValidRequestDate).fromNow(true)}`,
+                        context: tpl(messages.tooManyOTCVerificationAttempts.context),
+                        help: tpl(messages.tooManyOTCVerificationAttempts.context),
+                        code: 'OTC_CODE_ATTEMPTS_RATE_LIMITED'
+                    }));
+                },
+                handleStoreError: handleStoreError
+            }, pick(spamOtcVerification, spamConfigKeys))
+        );
+    }
+
+    return otcVerificationInstance;
 };
 
 // Stops login attempts for a user+IP pair with an increasing time period starting from 10 minutes
@@ -206,7 +338,7 @@ const userLogin = () => {
             attachResetToRequest: true,
             failCallback(req, res, next, nextValidRequestDate) {
                 return next(new errors.TooManyRequestsError({
-                    message: `Too many sign-in attempts try again in ${moment(nextValidRequestDate).fromNow(true)}`,
+                    message: `Too many login attempts. Please wait ${moment(nextValidRequestDate).fromNow(true)} before trying again, or reset your password.`,
                     context: tpl(messages.tooManySigninAttempts.context),
                     help: tpl(messages.tooManySigninAttempts.context)
                 }));
@@ -248,6 +380,58 @@ const userReset = function userReset() {
     );
 
     return userResetInstance;
+};
+
+const userVerification = function userVerification() {
+    const ExpressBrute = require('express-brute');
+    const BruteKnex = require('brute-knex');
+    const db = require('../../../../data/db');
+
+    store = store || new BruteKnex({
+        tablename: 'brute',
+        createTable: false,
+        knex: db.knex
+    });
+
+    userVerificationInstance = userVerificationInstance || new ExpressBrute(store,
+        extend({
+            attachResetToRequest: true,
+            failCallback(req, res, next) {
+                return next(new errors.TooManyRequestsError({
+                    message: tpl(messages.tooManyAttempts)
+                }));
+            },
+            handleStoreError: handleStoreError
+        }, pick(spamUserVerification, spamConfigKeys))
+    );
+
+    return userVerificationInstance;
+};
+
+const sendVerificationCode = function sendVerificationCode() {
+    const ExpressBrute = require('express-brute');
+    const BruteKnex = require('brute-knex');
+    const db = require('../../../../data/db');
+
+    store = store || new BruteKnex({
+        tablename: 'brute',
+        createTable: false,
+        knex: db.knex
+    });
+
+    sendVerificationCodeInstance = sendVerificationCodeInstance || new ExpressBrute(store,
+        extend({
+            attachResetToRequest: true,
+            failCallback(req, res, next) {
+                return next(new errors.TooManyRequestsError({
+                    message: tpl(messages.tooManyAttempts)
+                }));
+            },
+            handleStoreError: handleStoreError
+        }, pick(spamSendVerificationCode, spamConfigKeys))
+    );
+
+    return sendVerificationCodeInstance;
 };
 
 // This protects a private blog from spam attacks. The defaults here allow 10 attempts per IP per hour
@@ -314,11 +498,17 @@ module.exports = {
     globalBlock: globalBlock,
     globalReset: globalReset,
     userLogin: userLogin,
+    sendVerificationCode: sendVerificationCode,
+    userVerification: userVerification,
     membersAuth: membersAuth,
     membersAuthEnumeration: membersAuthEnumeration,
+    otcVerification: otcVerification,
+    otcVerificationEnumeration: otcVerificationEnumeration,
     userReset: userReset,
     privateBlog: privateBlog,
     contentApiKey: contentApiKey,
+    webmentionsBlock: webmentionsBlock,
+    emailPreviewBlock: emailPreviewBlock,
     reset: () => {
         store = undefined;
         memoryStore = undefined;
@@ -329,7 +519,11 @@ module.exports = {
         membersAuthInstance = undefined;
         membersAuthEnumerationInstance = undefined;
         userResetInstance = undefined;
+        sendVerificationCodeInstance = undefined;
+        userVerificationInstance = undefined;
         contentApiKeyInstance = undefined;
+        otcVerificationEnumerationInstance = undefined;
+        otcVerificationInstance = undefined;
 
         spam = config.get('spam') || {};
         spamPrivateBlock = spam.private_block || {};
@@ -337,7 +531,11 @@ module.exports = {
         spamGlobalReset = spam.global_reset || {};
         spamUserReset = spam.user_reset || {};
         spamUserLogin = spam.user_login || {};
+        spamSendVerificationCode = spam.send_verification_code || {};
+        spamUserVerification = spam.user_verification || {};
         spamMemberLogin = spam.member_login || {};
         spamContentApiKey = spam.content_api_key || {};
+        spamOtcVerificationEnumeration = spam.otc_verification_enumeration || {};
+        spamOtcVerification = spam.otc_verification || {};
     }
 };

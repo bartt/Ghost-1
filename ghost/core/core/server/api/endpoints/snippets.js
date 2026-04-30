@@ -1,4 +1,3 @@
-const Promise = require('bluebird');
 const errors = require('@tryghost/errors');
 const tpl = require('@tryghost/tpl');
 const models = require('../../models');
@@ -8,44 +7,65 @@ const messages = {
     snippetAlreadyExists: 'Snippet already exists.'
 };
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'snippets',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'limit',
             'order',
-            'page'
+            'page',
+            'formats',
+            'filter'
         ],
         permissions: true,
+        validation: {
+            options: {
+                formats: {
+                    values: models.Snippet.allowedFormats
+                }
+            }
+        },
         query(frame) {
             return models.Snippet.findPage(frame.options);
         }
     },
 
     read: {
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
+        options: [
+            'formats'
+        ],
         data: [
             'id'
         ],
         permissions: true,
-        query(frame) {
-            return models.Snippet.findOne(frame.data, frame.options)
-                .then((model) => {
-                    if (!model) {
-                        return Promise.reject(new errors.NotFoundError({
-                            message: tpl(messages.snippetNotFound)
-                        }));
-                    }
-
-                    return model;
+        async query(frame) {
+            const model = await models.Snippet.findOne(frame.data, frame.options);
+            if (!model) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.snippetNotFound)
                 });
+            }
+
+            return model;
         }
     },
 
     add: {
         statusCode: 201,
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
+        options: [
+            'formats'
+        ],
         permissions: true,
         query(frame) {
             return models.Snippet.add(frame.data.snippets[0], frame.options)
@@ -60,9 +80,12 @@ module.exports = {
     },
 
     edit: {
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
-            'id'
+            'id',
+            'formats'
         ],
         validation: {
             options: {
@@ -72,23 +95,23 @@ module.exports = {
             }
         },
         permissions: true,
-        query(frame) {
-            return models.Snippet.edit(frame.data.snippets[0], frame.options)
-                .then((model) => {
-                    if (!model) {
-                        return Promise.reject(new errors.NotFoundError({
-                            message: tpl(messages.snippetNotFound)
-                        }));
-                    }
-
-                    return model;
+        async query(frame) {
+            const model = await models.Snippet.edit(frame.data.snippets[0], frame.options);
+            if (!model) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.snippetNotFound)
                 });
+            }
+
+            return model;
         }
     },
 
     destroy: {
         statusCode: 204,
-        headers: {},
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'id'
         ],
@@ -105,3 +128,5 @@ module.exports = {
         }
     }
 };
+
+module.exports = controller;

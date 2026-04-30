@@ -1,12 +1,12 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`member.* events member.added event is triggered 1: [headers] 1`] = `
 Object {
-  "accept-encoding": "gzip, deflate",
+  "accept-encoding": "gzip, deflate, br",
   "content-length": Any<Number>,
   "content-type": "application/json",
   "content-version": StringMatching /v\\\\d\\+\\\\\\.\\\\d\\+/,
-  "user-agent": StringMatching /Ghost\\\\/\\\\d\\+\\\\\\.\\\\d\\+\\\\\\.\\\\d\\+\\\\s\\\\\\(https:\\\\/\\\\/github\\.com\\\\/TryGhost\\\\/Ghost\\\\\\)/,
+  "user-agent": StringMatching /Ghost\\\\/\\\\d\\+\\\\\\.\\\\d\\+\\(\\?:-\\(\\[0-9A-Za-z-\\]\\+\\(\\?:\\\\\\.\\[0-9A-Za-z-\\]\\+\\)\\*\\)\\)\\?\\\\s\\\\\\(https:\\\\/\\\\/github\\.com\\\\/TryGhost\\\\/Ghost\\\\\\)/,
 }
 `;
 
@@ -15,6 +15,12 @@ Object {
   "member": Object {
     "current": Object {
       "avatar_image": null,
+      "can_comment": true,
+      "commenting": Object {
+        "disabled": false,
+        "disabled_reason": null,
+        "disabled_until": null,
+      },
       "comped": false,
       "created_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
       "email": "testemail@example.com",
@@ -23,35 +29,15 @@ Object {
       "email_opened_count": 0,
       "geolocation": null,
       "id": StringMatching /\\[a-f0-9\\]\\{24\\}/,
+      "labels": Array [],
       "last_seen_at": null,
       "name": "Test Member",
       "newsletters": Array [
         Object {
-          "body_font_category": "sans_serif",
-          "created_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
           "description": null,
-          "feedback_enabled": false,
-          "footer_content": null,
-          "header_image": null,
           "id": StringMatching /\\[a-f0-9\\]\\{24\\}/,
           "name": "Default Newsletter",
-          "sender_email": null,
-          "sender_name": null,
-          "sender_reply_to": "newsletter",
-          "show_badge": true,
-          "show_feature_image": true,
-          "show_header_icon": true,
-          "show_header_name": true,
-          "show_header_title": true,
-          "slug": "default-newsletter",
-          "sort_order": 0,
           "status": "active",
-          "subscribe_on_signup": true,
-          "title_alignment": "center",
-          "title_font_category": "sans_serif",
-          "updated_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
-          "uuid": StringMatching /\\[a-f0-9\\]\\{8\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{12\\}/,
-          "visibility": "members",
         },
       ],
       "note": "test note",
@@ -69,11 +55,11 @@ Object {
 
 exports[`member.* events member.deleted event is triggered 1: [headers] 1`] = `
 Object {
-  "accept-encoding": "gzip, deflate",
+  "accept-encoding": "gzip, deflate, br",
   "content-length": Any<Number>,
   "content-type": "application/json",
   "content-version": StringMatching /v\\\\d\\+\\\\\\.\\\\d\\+/,
-  "user-agent": StringMatching /Ghost\\\\/\\\\d\\+\\\\\\.\\\\d\\+\\\\\\.\\\\d\\+\\\\s\\\\\\(https:\\\\/\\\\/github\\.com\\\\/TryGhost\\\\/Ghost\\\\\\)/,
+  "user-agent": StringMatching /Ghost\\\\/\\\\d\\+\\\\\\.\\\\d\\+\\(\\?:-\\(\\[0-9A-Za-z-\\]\\+\\(\\?:\\\\\\.\\[0-9A-Za-z-\\]\\+\\)\\*\\)\\)\\?\\\\s\\\\\\(https:\\\\/\\\\/github\\.com\\\\/TryGhost\\\\/Ghost\\\\\\)/,
 }
 `;
 
@@ -82,6 +68,12 @@ Object {
   "member": Object {
     "current": Object {},
     "previous": Object {
+      "can_comment": true,
+      "commenting": Object {
+        "disabled": false,
+        "disabled_reason": null,
+        "disabled_until": null,
+      },
       "created_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
       "email": "testemail2@example.com",
       "email_count": 0,
@@ -93,33 +85,10 @@ Object {
       "name": "Test Member2",
       "newsletters": Array [
         Object {
-          "_pivot_member_id": StringMatching /\\[a-f0-9\\]\\{24\\}/,
-          "_pivot_newsletter_id": StringMatching /\\[a-f0-9\\]\\{24\\}/,
-          "body_font_category": "sans_serif",
-          "created_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
           "description": null,
-          "feedback_enabled": false,
-          "footer_content": null,
-          "header_image": null,
           "id": StringMatching /\\[a-f0-9\\]\\{24\\}/,
           "name": "Default Newsletter",
-          "sender_email": null,
-          "sender_name": null,
-          "sender_reply_to": "newsletter",
-          "show_badge": true,
-          "show_feature_image": true,
-          "show_header_icon": true,
-          "show_header_name": true,
-          "show_header_title": true,
-          "slug": "default-newsletter",
-          "sort_order": 0,
           "status": "active",
-          "subscribe_on_signup": true,
-          "title_alignment": "center",
-          "title_font_category": "sans_serif",
-          "updated_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
-          "uuid": StringMatching /\\[a-f0-9\\]\\{8\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{12\\}/,
-          "visibility": "members",
         },
       ],
       "note": "test note2",
@@ -133,11 +102,11 @@ Object {
 
 exports[`member.* events member.edited event is triggered 1: [headers] 1`] = `
 Object {
-  "accept-encoding": "gzip, deflate",
+  "accept-encoding": "gzip, deflate, br",
   "content-length": Any<Number>,
   "content-type": "application/json",
   "content-version": StringMatching /v\\\\d\\+\\\\\\.\\\\d\\+/,
-  "user-agent": StringMatching /Ghost\\\\/\\\\d\\+\\\\\\.\\\\d\\+\\\\\\.\\\\d\\+\\\\s\\\\\\(https:\\\\/\\\\/github\\.com\\\\/TryGhost\\\\/Ghost\\\\\\)/,
+  "user-agent": StringMatching /Ghost\\\\/\\\\d\\+\\\\\\.\\\\d\\+\\(\\?:-\\(\\[0-9A-Za-z-\\]\\+\\(\\?:\\\\\\.\\[0-9A-Za-z-\\]\\+\\)\\*\\)\\)\\?\\\\s\\\\\\(https:\\\\/\\\\/github\\.com\\\\/TryGhost\\\\/Ghost\\\\\\)/,
 }
 `;
 
@@ -146,6 +115,12 @@ Object {
   "member": Object {
     "current": Object {
       "avatar_image": null,
+      "can_comment": true,
+      "commenting": Object {
+        "disabled": false,
+        "disabled_reason": null,
+        "disabled_until": null,
+      },
       "comped": false,
       "created_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
       "email": "testemail3@example.com",
@@ -159,37 +134,17 @@ Object {
       "name": "Ghost",
       "newsletters": Array [
         Object {
-          "body_font_category": "sans_serif",
-          "created_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
           "description": null,
-          "feedback_enabled": false,
-          "footer_content": null,
-          "header_image": null,
           "id": StringMatching /\\[a-f0-9\\]\\{24\\}/,
           "name": "Default Newsletter",
-          "sender_email": null,
-          "sender_name": null,
-          "sender_reply_to": "newsletter",
-          "show_badge": true,
-          "show_feature_image": true,
-          "show_header_icon": true,
-          "show_header_name": true,
-          "show_header_title": true,
-          "slug": "default-newsletter",
-          "sort_order": 0,
           "status": "active",
-          "subscribe_on_signup": true,
-          "title_alignment": "center",
-          "title_font_category": "sans_serif",
-          "updated_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
-          "uuid": StringMatching /\\[a-f0-9\\]\\{8\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{12\\}/,
-          "visibility": "members",
         },
       ],
       "note": "test note3",
       "status": "free",
       "subscribed": true,
       "subscriptions": Array [],
+      "tiers": Array [],
       "updated_at": StringMatching /\\\\d\\{4\\}-\\\\d\\{2\\}-\\\\d\\{2\\}T\\\\d\\{2\\}:\\\\d\\{2\\}:\\\\d\\{2\\}\\\\\\.000Z/,
       "uuid": StringMatching /\\[a-f0-9\\]\\{8\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{4\\}-\\[a-f0-9\\]\\{12\\}/,
     },

@@ -6,7 +6,6 @@ import {
 } from '@tryghost/color-utils';
 import {action, get} from '@ember/object';
 import {inject} from 'ghost-admin/decorators/inject';
-import {isEmpty} from '@ember/utils';
 import {tracked} from '@glimmer/tracking';
 
 function collectMetadataClasses(transition, prop) {
@@ -42,27 +41,22 @@ function updateBodyClasses(transition) {
 export default class UiService extends Service {
     @service dropdown;
     @service feature;
-    @service mediaQueries;
     @service router;
     @service settings;
+    @service('state-bridge') stateBridge;
 
     @inject config;
 
-    @tracked contextualNavMenu = null;
-    @tracked isFullScreen = false;
+    @tracked _isFullScreen = false;
     @tracked mainClass = '';
-    @tracked showMobileMenu = false;
-
-    get isMobile() {
-        return this.mediaQueries.isMobile;
+    get isFullScreen() {
+        return this._isFullScreen;
     }
 
-    get isSideNavHidden() {
-        return this.isFullScreen || this.isMobile;
-    }
-
-    get hasSideNav() {
-        return !this.isSideNavHidden;
+    set isFullScreen(value) {
+        this._isFullScreen = value;
+        // Trigger sidebar visibility event whenever fullscreen mode changes
+        this.stateBridge.setSidebarVisible(!value);
     }
 
     get backgroundColor() {
@@ -109,17 +103,6 @@ export default class UiService extends Service {
     @action
     closeMenus() {
         this.dropdown.closeDropdowns();
-        this.showMobileMenu = false;
-    }
-
-    @action
-    closeMobileMenu() {
-        this.showMobileMenu = false;
-    }
-
-    @action
-    openMobileMenu() {
-        this.showMobileMenu = true;
     }
 
     @action
@@ -148,11 +131,7 @@ export default class UiService extends Service {
 
         let blogTitle = this.config.blogTitle;
 
-        if (!isEmpty(tokens)) {
-            window.document.title = `${tokens.join(' - ')} - ${blogTitle}`;
-        } else {
-            window.document.title = blogTitle;
-        }
+        window.document.title = `Ghost Admin - ${blogTitle}`;
     }
 
     @action

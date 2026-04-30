@@ -1,4 +1,3 @@
-import faker from 'faker';
 import moment from 'moment-timezone';
 import nql from '@tryghost/nql';
 import {Response} from 'miragejs';
@@ -7,11 +6,13 @@ import {
     paginateModelCollection,
     withPermissionsCheck
 } from '../utils';
+import {faker} from '@faker-js/faker';
 import {underscore} from '@ember/string';
 
 const ALLOWED_ROLES = [
     'Owner',
-    'Administrator'
+    'Administrator',
+    'Super Editor'
 ];
 
 export function mockMembersStats(server) {
@@ -63,7 +64,8 @@ export function mockMembersStats(server) {
                     date: key,
                     free: arr[key],
                     paid: 0,
-                    comped: 0
+                    comped: 0,
+                    gift: 0
                 };
             })
         };
@@ -78,12 +80,10 @@ export default function mockMembers(server) {
 
     server.get('/members/', withPermissionsCheck(ALLOWED_ROLES, function ({members}, {queryParams}) {
         let {filter, search, page, limit} = queryParams;
-
         page = +page || 1;
         limit = +limit || 15;
 
         let collection = members.all();
-
         if (filter) {
             try {
                 const nqlFilter = nql(filter, {
@@ -95,6 +95,14 @@ export default function mockMembers(server) {
                         {
                             key: 'tier',
                             replacement: 'tiers.slug'
+                        },
+                        {
+                            key: 'tier_id',
+                            replacement: 'tiers.id'
+                        },
+                        {
+                            key: 'offer_redemptions',
+                            replacement: 'subscriptions.offer_id'
                         }
                     ]
                 });
@@ -111,7 +119,6 @@ export default function mockMembers(server) {
                     // similar deal for associated models
                     ['labels', 'tiers', 'subscriptions', 'newsletters'].forEach((association) => {
                         serializedMember[association] = [];
-
                         member[association].models.forEach((associatedModel) => {
                             const serializedAssociation = {};
                             Object.keys(associatedModel.attrs).forEach((key) => {
@@ -120,7 +127,6 @@ export default function mockMembers(server) {
                             serializedMember[association].push(serializedAssociation);
                         });
                     });
-
                     return nqlFilter.queryJSON(serializedMember);
                 });
             } catch (err) {
@@ -131,7 +137,6 @@ export default function mockMembers(server) {
 
         if (search) {
             const query = search.toLowerCase();
-
             collection = collection.filter((member) => {
                 return member.name.toLowerCase().indexOf(query) !== -1
                     || member.email.toLowerCase().indexOf(query) !== -1;
@@ -194,11 +199,13 @@ export default function mockMembers(server) {
         const member = members.find(params.id);
 
         // API accepts `tiers: [{id: 'x'}]` which isn't handled natively by mirage
-        if (attrs.tiers.length > 0) {
+        if (attrs.tiers && attrs.tiers.length > 0) {
             attrs.tiers.forEach((p) => {
                 const tier = tiers.find(p.id);
 
                 if (!member.tiers.includes(tier)) {
+                    member.status = 'comped';
+
                     // TODO: serialize tiers through _active_ subscriptions
                     member.tiers.add(tier);
 
@@ -240,19 +247,23 @@ export default function mockMembers(server) {
             });
         }
 
-        const tierIds = (attrs.tiers || []).map(p => p.id);
+        // Only process tier removal if tiers were explicitly provided in the request
+        if (attrs.tiers) {
+            const tierIds = attrs.tiers.map(tier => tier.id);
 
-        member.tiers.models.forEach((tier) => {
-            if (!tierIds.includes(tier.id)) {
-                member.subscriptions.models.filter(sub => sub.tier.id === tier.id).forEach((sub) => {
-                    member.subscriptions.remove(sub);
-                });
+            member.tiers.models.forEach((tier) => {
+                if (!tierIds.includes(tier.id)) {
+                    member.subscriptions.models.filter(sub => sub.tier.id === tier.id).forEach((sub) => {
+                        member.subscriptions.remove(sub);
+                    });
 
-                member.tiers.remove(tier);
-            }
-        });
+                    member.tiers.remove(tier);
+                }
+            });
+        }
 
-        // these are read-only properties so make sure we don't overwrite data
+        // Don't pass tiers/subscriptions to update() - they are managed via
+        // the model relationship methods above
         delete attrs.tiers;
         delete attrs.subscriptions;
 

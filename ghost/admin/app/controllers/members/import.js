@@ -4,6 +4,7 @@ import {resetQueryParams} from 'ghost-admin/helpers/reset-query-params';
 import {inject as service} from '@ember/service';
 
 export default class ImportController extends Controller {
+    @service feature;
     @service router;
     @controller members;
 
@@ -17,7 +18,11 @@ export default class ImportController extends Controller {
     }
 
     @action
-    close() {
+    close(from) {
+        if (from === 'background') {
+            return;
+        }
+
         this.router.transitionTo('members');
     }
 }

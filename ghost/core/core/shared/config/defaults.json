@@ -13,6 +13,10 @@
         "forceUpdate": false
     },
     "privacy": false,
+    "security": {
+        "allowWebhookInternalIPs": false,
+        "staffDeviceVerification": true
+    },
     "useMinFiles": true,
     "paths": {
         "contentPath": "content/",
@@ -22,12 +26,13 @@
     },
     "adapters": {
         "sso": {
-            "active": "Default"
+            "active": "DefaultSSOAdapter"
         },
         "cache": {
-            "active": "Memory",
+            "active": "MemoryCache",
             "settings": {},
-            "imageSizes": {}
+            "imageSizes": {},
+            "gscan": {}
         }
     },
     "storage": {
@@ -38,7 +43,7 @@
         "LocalFilesStorage": {}
     },
     "scheduling": {
-        "active": "SchedulingDefault"
+        "active": "scheduling-default"
     },
     "members": {
         "contentApiAccess": [],
@@ -58,11 +63,7 @@
         },
         "transports": [
             "stdout"
-        ],
-        "slowHelper": {
-            "level": "warn",
-            "threshold": 200
-        }
+        ]
     },
     "spam": {
         "user_login": {
@@ -71,6 +72,18 @@
             "freeRetries": 4
         },
         "user_reset": {
+            "minWait": 3600000,
+            "maxWait": 3600000,
+            "lifetime": 3600,
+            "freeRetries": 4
+        },
+        "user_verification": {
+            "minWait": 3600000,
+            "maxWait": 3600000,
+            "lifetime": 3600,
+            "freeRetries": 4
+        },
+        "send_verification_code": {
             "minWait": 3600000,
             "maxWait": 3600000,
             "lifetime": 3600,
@@ -105,16 +118,41 @@
             "maxWait": 43200000,
             "lifetime": 43200,
             "freeRetries": 8
-        }
+        },
+        "webmentions_block": {
+            "minWait": 10,
+            "maxWait": 100,
+            "lifetime": 1000,
+            "freeRetries": 100
+        },
+        "email_preview_block": {
+            "minWait": 360000,
+            "maxWait": 360000,
+            "lifetime": 3600,
+            "freeRetries": 10
+        },
+        "otc_verification_enumeration": {
+            "minWait": 600000,
+            "maxWait": 43200000,
+            "lifetime": 43200,
+            "freeRetries": 8
+        },
+        "otc_verification": {
+            "minWait": 3600000,
+            "maxWait": 3600000,
+            "lifetime": 3600,
+            "freeRetries": 4
+        },
+        "blocked_email_domains": []
     },
     "caching": {
+        "301": {
+            "maxAge": 31536000
+        },
         "frontend": {
             "maxAge": 0
         },
         "publicAssets": {
-            "maxAge": 31536000
-        },
-        "301": {
             "maxAge": 31536000
         },
         "customRedirects": {
@@ -143,6 +181,35 @@
         },
         "commentsCountAPI": {
             "maxAge": 0
+        },
+        "admin": {
+            "maxAge": 31536000
+        },
+        "theme": {
+            "maxAge": 31536000
+        },
+        "assets": {
+            "contentBasedHash": {
+                "enabled": false,
+                "maxSize": 100000
+            }
+        }
+    },
+    "optimization": {
+        "maxLimit": 100,
+        "allowLimitAll": false,
+        "getHelper": {
+            "timeout": {
+                "threshold": 5000,
+                "level": "error"
+            },
+            "notify": {
+                "threshold": 200,
+                "level": "warn"
+            }
+        },
+        "themes": {
+            "skipBootChecks": false
         }
     },
     "imageOptimization": {
@@ -155,27 +222,43 @@
     "sendWelcomeEmail": true,
     "stripeDirect": false,
     "enableStripePromoCodes": false,
-    "emailAnalytics": true,
+    "enableTipsAndDonations": true,
+    "emailAnalytics": {
+        "enabled": true,
+        "batchProcessing": false,
+        "metrics": {
+            "openThroughput": {
+                "enabled": false,
+                "threshold": 500
+            }
+        },
+        "openedJobLagWarningMinutes": 30
+    },
+    "linkClickTrackingCacheMemberUuid": false,
     "backgroundJobs": {
-        "emailAnalytics": true
+        "emailAnalytics": true,
+        "clickTrackingLastSeenAtUpdater": true
     },
     "portal": {
         "url": "https://cdn.jsdelivr.net/ghost/portal@~{version}/umd/portal.min.js",
-        "version": "2.21"
+        "version": "2.68"
     },
     "sodoSearch": {
         "url": "https://cdn.jsdelivr.net/ghost/sodo-search@~{version}/umd/sodo-search.min.js",
         "styles": "https://cdn.jsdelivr.net/ghost/sodo-search@~{version}/umd/main.css",
+        "version": "1.8"
+    },
+    "announcementBar": {
+        "url": "https://cdn.jsdelivr.net/ghost/announcement-bar@~{version}/umd/announcement-bar.min.js",
         "version": "1.1"
     },
     "comments": {
         "url": "https://cdn.jsdelivr.net/ghost/comments-ui@~{version}/umd/comments-ui.min.js",
-        "styles": "https://cdn.jsdelivr.net/ghost/comments-ui@~{version}/umd/main.css",
-        "version": "0.12"
+        "version": "1.4"
     },
-    "editor": {
-        "url": "https://unpkg.com/@tryghost/koenig-lexical@~{version}/dist/koenig-lexical.umd.js",
-        "version": "0.0"
+    "signupForm": {
+        "url": "https://cdn.jsdelivr.net/ghost/signup-form@~{version}/umd/signup-form.min.js",
+        "version": "0.3"
     },
     "tenor": {
         "googleApiKey": null,
@@ -189,5 +272,42 @@
     },
     "gravatar": {
         "url": "https://www.gravatar.com/avatar/{hash}?s={size}&r={rating}&d={_default}"
-    }
+    },
+    "milestones": {
+        "arr": [
+            {
+                "currency": "usd",
+                "values": [
+                    0,
+                    100,
+                    1000,
+                    10000,
+                    50000,
+                    100000,
+                    250000,
+                    500000,
+                    1000000
+                ]
+            }
+        ],
+        "members": [
+            0,
+            100,
+            1000,
+            10000,
+            25000,
+            50000,
+            100000,
+            250000,
+            500000,
+            1000000
+        ],
+        "minDaysSinceImported": 7,
+        "minDaysSinceLastEmail": 14
+    },
+    "bulkEmail": {
+        "batchSize": 1000,
+        "captureLinkClickBadMemberUuid": false
+    },
+    "disableJSBackups": false
 }

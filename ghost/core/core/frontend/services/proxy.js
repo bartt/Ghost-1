@@ -1,6 +1,7 @@
 // This file contains everything that the helpers and frontend apps require from the core of Ghost
 const settingsCache = require('../../shared/settings-cache');
 const config = require('../../shared/config');
+const settingsHelpers = require('../../server/services/settings-helpers');
 
 // Require from the handlebars framework
 const {SafeString} = require('./handlebars');
@@ -26,6 +27,9 @@ module.exports = {
             if (resource.feature_image_caption) {
                 resource.feature_image_caption = new SafeString(resource.feature_image_caption);
             }
+
+            // some properties are extracted to local template data to force one way of using it
+            delete resource.show_title_and_feature_image;
         });
     },
 
@@ -43,6 +47,11 @@ module.exports = {
 
     // TODO: Only expose "get"
     settingsCache: settingsCache,
+
+    // Settings helpers for calculated settings
+    settingsHelpers: {
+        isWebAnalyticsEnabled: settingsHelpers.isWebAnalyticsEnabled.bind(settingsHelpers)
+    },
 
     // TODO: Expose less of the API to make this safe
     api: require('../../server/api').endpoints,

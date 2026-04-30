@@ -24,8 +24,6 @@ export default Model.extend(ValidationEngine, {
     password: attr('string'),
     slackUrl: attr('string'),
     slackUsername: attr('string'),
-    amp: attr('boolean'),
-    ampGtagId: attr('string'),
     firstpromoter: attr('boolean'),
     firstpromoterId: attr('string'),
     unsplash: attr('boolean'),
@@ -40,8 +38,6 @@ export default Model.extend(ValidationEngine, {
     mailgunApiKey: attr('string'),
     mailgunDomain: attr('string'),
     mailgunBaseUrl: attr('string'),
-    emailTrackOpens: attr('boolean'),
-    emailTrackClicks: attr('boolean'),
     portalButton: attr('boolean'),
     portalName: attr('boolean'),
     portalPlans: attr('json-string'),
@@ -49,7 +45,22 @@ export default Model.extend(ValidationEngine, {
     portalButtonStyle: attr('string'),
     portalButtonIcon: attr('string'),
     portalButtonSignupText: attr('string'),
+    portalSignupTermsHtml: attr('string'),
+    portalSignupCheckboxRequired: attr('boolean'),
     sharedViews: attr('string'),
+    announcementContent: attr('string'),
+    announcementBackground: attr('string'),
+    announcementVisibility: attr('json-string'),
+
+    /**
+     * Analytics settings
+     */
+    emailTrackOpens: attr('boolean'),
+    emailTrackClicks: attr('boolean'),
+    outboundLinkTagging: attr('boolean'),
+    membersTrackSources: attr('boolean'),
+    webAnalyticsEnabled: attr('boolean'), // computed setting
+
     /**
      * Members settings
      */
@@ -59,7 +70,6 @@ export default Model.extend(ValidationEngine, {
     membersSupportAddress: attr('string'),
     membersMonthlyPriceId: attr('string'),
     membersYearlyPriceId: attr('string'),
-    membersTrackSources: attr('boolean'),
     stripeSecretKey: attr('string'),
     stripePublishableKey: attr('string'),
     stripePlans: attr('json-string'),
@@ -82,6 +92,45 @@ export default Model.extend(ValidationEngine, {
     editorDefaultEmailRecipients: attr('string'),
     editorDefaultEmailRecipientsFilter: attr('members-segment-string'),
     emailVerificationRequired: attr('boolean'),
+    /**
+     * Pintura settings
+     */
+    pintura: attr('boolean'),
+    pinturaJsUrl: attr('string'),
+    pinturaCssUrl: attr('string'),
+
+    /**
+     * Donations
+     */
+    donationsEnabled: attr('boolean'),
+    donationsCurrency: attr('string'),
+    donationsSuggestedAmount: attr('number'),
+
+    /**
+     * Recommendations
+     */
+    recommendationsEnabled: attr('boolean'),
+
+    /**
+     * Newsletter emails
+     */
+    defaultEmailAddress: attr('string'),
+    supportEmailAddress: attr('string'),
+
+    /**
+     * Security settings
+     */
+    requireEmailMfa: attr('boolean'),
+
+    /**
+     * Social web (ActivityPub)
+     */
+    socialWebEnabled: attr('boolean'),
+
+    /**
+     * Transistor
+     */
+    transistor: attr('boolean'),
 
     // HACK - not a real model attribute but a workaround for Ember Data not
     //        exposing meta from save responses

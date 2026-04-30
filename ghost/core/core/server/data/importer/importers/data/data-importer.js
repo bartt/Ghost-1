@@ -5,16 +5,17 @@ const {IncorrectUsageError} = require('@tryghost/errors');
 const debug = require('@tryghost/debug')('importer:data');
 const {sequence} = require('@tryghost/promise');
 const models = require('../../../../models');
-const PostsImporter = require('./posts');
-const TagsImporter = require('./tags');
-const SettingsImporter = require('./settings');
-const UsersImporter = require('./users');
-const NewslettersImporter = require('./newsletters');
-const ProductsImporter = require('./products');
-const StripeProductsImporter = require('./stripe-products');
-const StripePricesImporter = require('./stripe-prices');
-const CustomThemeSettingsImporter = require('./custom-theme-settings');
-const RolesImporter = require('./roles');
+const PostsImporter = require('./posts-importer');
+const TagsImporter = require('./tags-importer');
+const SettingsImporter = require('./settings-importer');
+const UsersImporter = require('./users-importer');
+const NewslettersImporter = require('./newsletters-importer');
+const ProductsImporter = require('./products-importer');
+const StripeProductsImporter = require('./stripe-products-importer');
+const StripePricesImporter = require('./stripe-prices-importer');
+const CustomThemeSettingsImporter = require('./custom-theme-settings-importer');
+const RevueSubscriberImporter = require('./revue-subscriber-importer');
+const RolesImporter = require('./roles-importer');
 const {slugify} = require('@tryghost/string/lib');
 
 let importers = {};
@@ -24,6 +25,7 @@ DataImporter = {
     type: 'data',
 
     preProcess: function preProcess(importData) {
+        debug('preProcess');
         importData.preProcessedByData = true;
         return importData;
     },
@@ -39,12 +41,14 @@ DataImporter = {
         importers.stripe_prices = new StripePricesImporter(importData.data);
         importers.posts = new PostsImporter(importData.data);
         importers.custom_theme_settings = new CustomThemeSettingsImporter(importData.data);
+        importers.revue_subscribers = new RevueSubscriberImporter(importData.data);
 
         return importData;
     },
 
     // Allow importing with an options object that is passed through the importer
     doImport: async function doImport(importData, importOptions) {
+        debug('doImport');
         importOptions = importOptions || {};
 
         if (importOptions.importTag && importData?.data?.posts) {
@@ -55,7 +59,7 @@ DataImporter = {
             importData.data.tags.push({
                 id: tagId,
                 name: importOptions.importTag,
-                slug: slugify(importOptions.importTag)
+                slug: slugify(importOptions.importTag.replace(/^#/, 'hash-'))
             });
             if (!('posts_tags' in importData.data)) {
                 importData.data.posts_tags = [];

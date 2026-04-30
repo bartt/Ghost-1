@@ -17,7 +17,7 @@ describe('Integration: Component: gh-unsplash', function () {
         //   {{/gh-unsplash}}
         // `);
 
-        await render(hbs`{{gh-unsplash}}`);
+        await render(hbs`<GhUnsplash />`);
         expect(this.element).to.exist;
     });
 
@@ -37,7 +37,7 @@ describe('Integration: Component: gh-unsplash', function () {
 
     describe('closing', function () {
         it('triggers close action');
-        it('can be triggerd by escape key');
+        it('can be triggered by escape key');
         it('cannot be triggered by escape key when zoomed');
     });
 });

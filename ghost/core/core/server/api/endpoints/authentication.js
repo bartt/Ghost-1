@@ -1,8 +1,8 @@
-const Promise = require('bluebird');
 const api = require('./index');
 const config = require('../../../shared/config');
 const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
+const logging = require('@tryghost/logging');
 const web = require('../../web');
 const models = require('../../models');
 const auth = require('../../services/auth');
@@ -18,7 +18,8 @@ const messages = {
     notTheBlogOwner: 'You are not the site owner.'
 };
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'authentication',
 
     setup: {
@@ -70,8 +71,11 @@ module.exports = {
                     return auth.setup.doSettings(data, api.settings);
                 })
                 .then((user) => {
-                    return auth.setup.sendWelcomeEmail(user.get('email'), api.mail)
-                        .then(() => user);
+                    auth.setup.sendWelcomeEmail(user.get('email'), api.mail)
+                        .catch((err) => {
+                            logging.error(err);
+                        });
+                    return user;
                 });
         }
     },
@@ -80,46 +84,47 @@ module.exports = {
         headers: {
             cacheInvalidate: true
         },
-        permissions: (frame) => {
-            return models.User.findOne({role: 'Owner', status: 'all'})
-                .then((owner) => {
-                    if (owner.id !== frame.options.context.user) {
-                        throw new errors.NoPermissionError({message: tpl(messages.notTheBlogOwner)});
-                    }
-                });
+        permissions: async (frame) => {
+            const owner = await models.User.findOne({role: 'Owner', status: 'all'});
+            if (owner.id !== frame.options.context.user) {
+                throw new errors.NoPermissionError({message: tpl(messages.notTheBlogOwner)});
+            }
         },
         validation: {
             docName: 'setup'
         },
-        query(frame) {
-            return Promise.resolve()
-                .then(() => {
-                    return auth.setup.assertSetupCompleted(true)();
-                })
-                .then(() => {
-                    const setupDetails = {
-                        name: frame.data.setup[0].name,
-                        email: frame.data.setup[0].email,
-                        password: frame.data.setup[0].password,
-                        blogTitle: frame.data.setup[0].blogTitle,
-                        status: 'active'
-                    };
+        async query(frame) {
+            await auth.setup.assertSetupCompleted(true)();
 
-                    return auth.setup.setupUser(setupDetails);
-                })
-                .then((data) => {
-                    return auth.setup.doSettings(data, api.settings);
-                });
+            const setupDetails = {
+                name: frame.data.setup[0].name,
+                email: frame.data.setup[0].email,
+                password: frame.data.setup[0].password,
+                blogTitle: frame.data.setup[0].blogTitle,
+                status: 'active'
+            };
+
+            const data = await auth.setup.setupUser(setupDetails);
+            return auth.setup.doSettings(data, api.settings);
         }
     },
 
     isSetup: {
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: false,
         async query() {
             const isSetup = await auth.setup.checkIsSetup();
 
+            if (isSetup) {
+                return {
+                    status: true
+                };
+            }
+
             return {
-                status: isSetup,
+                status: false,
                 title: config.title,
                 name: config.user_name,
                 email: config.user_email
@@ -128,6 +133,9 @@ module.exports = {
     },
 
     generateResetToken: {
+        headers: {
+            cacheInvalidate: false
+        },
         validation: {
             docName: 'password_reset'
         },
@@ -135,21 +143,17 @@ module.exports = {
         options: [
             'email'
         ],
-        query(frame) {
-            return Promise.resolve()
-                .then(() => {
-                    return auth.setup.assertSetupCompleted(true)();
-                })
-                .then(() => {
-                    return auth.passwordreset.generateToken(frame.data.password_reset[0].email, api.settings);
-                })
-                .then((token) => {
-                    return auth.passwordreset.sendResetNotification(token, api.mail);
-                });
+        async query(frame) {
+            await auth.setup.assertSetupCompleted(true)();
+            const token = await auth.passwordreset.generateToken(frame.data.password_reset[0].email, api.settings);
+            return auth.passwordreset.sendResetNotification(token, api.mail);
         }
     },
 
     resetPassword: {
+        headers: {
+            cacheInvalidate: false
+        },
         validation: {
             docName: 'password_reset',
             data: {
@@ -161,45 +165,52 @@ module.exports = {
         options: [
             'ip'
         ],
-        query(frame) {
-            return Promise.resolve()
-                .then(() => {
-                    return auth.setup.assertSetupCompleted(true)();
-                })
-                .then(() => {
-                    return auth.passwordreset.extractTokenParts(frame);
-                })
-                .then((params) => {
-                    return auth.passwordreset.protectBruteForce(params);
-                })
-                .then(({options, tokenParts}) => {
-                    options = Object.assign(options, {context: {internal: true}});
-                    return auth.passwordreset.doReset(options, tokenParts, api.settings)
-                        .then((params) => {
-                            web.shared.middleware.api.spamPrevention.userLogin().reset(frame.options.ip, `${tokenParts.email}login`);
-                            return params;
-                        });
+        async query(frame) {
+            await auth.setup.assertSetupCompleted(true)();
+            const params = await auth.passwordreset.extractTokenParts(frame);
+            const {options, tokenParts} = await auth.passwordreset.protectBruteForce(params);
+            const internalOptions = Object.assign(options, {context: {internal: true}});
+
+            const doResetParams = await auth.passwordreset.doReset(internalOptions, tokenParts, api.settings);
+
+            if (!frame.original.session) {
+                throw new errors.InternalServerError({
+                    message: 'Could not initialize an admin session during password reset.'
                 });
+            }
+
+            // Rotate the session_id and mint a fresh verified session so that
+            // any stolen or cloned copy of the pre-reset cookie is rejected
+            // on its next request.
+            await auth.session.sessionService.rotateAndAssignVerifiedUserToSession({
+                req: frame.original.session.req,
+                user: doResetParams.user,
+                ip: frame.options.ip
+            });
+
+            web.shared.middleware.api.spamPrevention.userLogin().reset(frame.options.ip, `${tokenParts.email}login`);
+            return {};
         }
     },
 
     acceptInvitation: {
+        headers: {
+            cacheInvalidate: false
+        },
         validation: {
             docName: 'invitations'
         },
         permissions: false,
-        query(frame) {
-            return Promise.resolve()
-                .then(() => {
-                    return auth.setup.assertSetupCompleted(true)();
-                })
-                .then(() => {
-                    return invitations.accept(frame.data);
-                });
+        async query(frame) {
+            await auth.setup.assertSetupCompleted(true)();
+            return invitations.accept(frame.data);
         }
     },
 
     isInvitation: {
+        headers: {
+            cacheInvalidate: false
+        },
         data: [
             'email'
         ],
@@ -207,21 +218,18 @@ module.exports = {
             docName: 'invitations'
         },
         permissions: false,
-        query(frame) {
-            return Promise.resolve()
-                .then(() => {
-                    return auth.setup.assertSetupCompleted(true)();
-                })
-                .then(() => {
-                    const email = frame.data.email;
-
-                    return models.Invite.findOne({email: email, status: 'sent'}, frame.options);
-                });
+        async query(frame) {
+            await auth.setup.assertSetupCompleted(true)();
+            const email = frame.data.email;
+            return models.Invite.findOne({email, status: 'sent'}, frame.options);
         }
     },
 
     resetAllPasswords: {
         statusCode: 204,
+        headers: {
+            cacheInvalidate: false
+        },
         permissions: true,
         async query(frame) {
             await userService.resetAllPasswords(frame.options);
@@ -229,3 +237,5 @@ module.exports = {
         }
     }
 };
+
+module.exports = controller;

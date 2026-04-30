@@ -1,17 +1,24 @@
-import Route from '@ember/routing/route';
+import AuthenticatedRoute from 'ghost-admin/routes/authenticated';
+import {inject} from 'ghost-admin/decorators/inject';
 import {inject as service} from '@ember/service';
 
-export default class SetupFinishingTouchesRoute extends Route {
+export default class SetupFinishingTouchesRoute extends AuthenticatedRoute {
+    @inject config;
+    @service feature;
+    @service onboarding;
+    @service router;
+    @service session;
     @service settings;
-    @service themeManagement;
 
-    model() {
-        this.themeManagement.setPreviewType('homepage');
-        this.themeManagement.updatePreviewHtmlTask.perform();
-    }
+    beforeModel() {
+        super.beforeModel(...arguments);
 
-    deactivate() {
-        // rollback any unsaved setting changes when leaving
-        this.settings.rollbackAttributes();
+        if (this.session.user.isOwnerOnly) {
+            this.onboarding.startChecklist();
+        }
+
+        if (this.session.user?.isAdmin) {
+            return this.router.transitionTo('/analytics');
+        }
     }
 }

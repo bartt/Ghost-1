@@ -35,6 +35,11 @@ const author = (attrs, frame) => {
         delete attrs.free_member_signup_notification;
         delete attrs.paid_subscription_started_notification;
         delete attrs.paid_subscription_canceled_notification;
+        delete attrs.mention_notifications;
+        delete attrs.recommendation_notifications;
+        delete attrs.milestone_notifications;
+        delete attrs.donation_notifications;
+        delete attrs.gift_subscription_purchase_notification;
 
         // @NOTE: used for night shift
         delete attrs.accessibility;
@@ -76,8 +81,11 @@ const author = (attrs, frame) => {
 const post = (attrs, frame) => {
     const columns = frame && frame.options && frame.options.columns || null;
     const fields = frame && frame.original && frame.original.query && frame.original.query.fields || null;
+
     if (localUtils.isContentAPI(frame)) {
-        delete attrs.status;
+        if (!localUtils.isPreview(frame)) {
+            delete attrs.status;
+        }
         delete attrs.email_only;
         delete attrs.newsletter;
         delete attrs.email_segment;
@@ -121,6 +129,10 @@ const post = (attrs, frame) => {
 
     if (!attrs.authors) {
         delete attrs.primary_author;
+    }
+
+    if (attrs.type !== 'page') {
+        delete attrs.show_title_and_feature_image;
     }
 
     delete attrs.locale;

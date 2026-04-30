@@ -1,4 +1,3 @@
-const Promise = require('bluebird');
 const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
 const invites = require('../../services/invites');
@@ -11,10 +10,14 @@ const messages = {
     inviteNotFound: 'Invite not found.'
 };
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'invites',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'page',
@@ -36,6 +39,9 @@ module.exports = {
     },
 
     read: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include'
         ],
@@ -49,21 +55,22 @@ module.exports = {
             }
         },
         permissions: true,
-        query(frame) {
-            return models.Invite.findOne(frame.data, frame.options)
-                .then((model) => {
-                    if (!model) {
-                        return Promise.reject(new errors.NotFoundError({
-                            message: tpl(messages.inviteNotFound)
-                        }));
-                    }
-
-                    return model;
+        async query(frame) {
+            const model = await models.Invite.findOne(frame.data, frame.options);
+            if (!model) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.inviteNotFound)
                 });
+            }
+
+            return model;
         }
     },
 
     destroy: {
+        headers: {
+            cacheInvalidate: false
+        },
         statusCode: 204,
         options: [
             'include',
@@ -82,6 +89,9 @@ module.exports = {
 
     add: {
         statusCode: 201,
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'email'
@@ -109,10 +119,12 @@ module.exports = {
                 invites: frame.data.invites,
                 options: frame.options,
                 user: {
-                    name: frame.user.get('name'),
-                    email: frame.user.get('email')
+                    name: frame.user?.get('name'),
+                    email: frame.user?.get('email')
                 }
             });
         }
     }
 };
+
+module.exports = controller;

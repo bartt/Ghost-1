@@ -20,10 +20,11 @@ describe('Newsletters Content API', function () {
         await agent.get('/newsletters/')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': matchers.anyContentVersion,
                 etag: matchers.anyEtag
             })
             .matchBodySnapshot({
-                newsletters: Array(3).fill(newsletterSnapshot)
+                newsletters: Array(4).fill(newsletterSnapshot)
             });
     });
 
@@ -31,10 +32,11 @@ describe('Newsletters Content API', function () {
         await agent.get('/newsletters/?filter=status:archived')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': matchers.anyContentVersion,
                 etag: matchers.anyEtag
             })
             .matchBodySnapshot({
-                newsletters: Array(3).fill(newsletterSnapshot)
+                newsletters: Array(4).fill(newsletterSnapshot)
             });
     });
 });

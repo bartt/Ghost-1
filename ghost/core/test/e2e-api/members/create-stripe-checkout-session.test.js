@@ -1,11 +1,11 @@
+const assert = require('node:assert/strict');
 const querystring = require('querystring');
 const {agentProvider, mockManager, fixtureManager, matchers} = require('../../utils/e2e-framework');
 const nock = require('nock');
-const should = require('should');
 const models = require('../../../core/server/models');
 const urlService = require('../../../core/server/services/url');
 
-let membersAgent, adminAgent, membersService;
+let membersAgent, adminAgent;
 
 async function getPost(id) {
     // eslint-disable-next-line dot-notation
@@ -18,15 +18,12 @@ describe('Create Stripe Checkout Session', function () {
         membersAgent = agents.membersAgent;
         adminAgent = agents.adminAgent;
 
-        membersService = require('../../../core/server/services/members');
-
         await fixtureManager.init('posts', 'members');
         await adminAgent.loginAsOwner();
     });
 
     beforeEach(function () {
         mockManager.mockMail();
-        mockManager.mockStripe();
     });
 
     afterEach(function () {
@@ -81,7 +78,7 @@ describe('Create Stripe Checkout Session', function () {
         nock('https://api.stripe.com')
             .persist()
             .get(/v1\/.*/)
-            .reply((uri, body) => {
+            .reply((uri) => {
                 const [match, resource, id] = uri.match(/\/v1\/(\w+)\/(.+)\/?/) || [null];
                 if (match) {
                     if (resource === 'products') {
@@ -109,7 +106,7 @@ describe('Create Stripe Checkout Session', function () {
         nock('https://api.stripe.com')
             .persist()
             .post(/v1\/.*/)
-            .reply((uri, body) => {
+            .reply((uri) => {
                 if (uri === '/v1/checkout/sessions') {
                     return [200, {id: 'cs_123', url: 'https://site.com'}];
                 }
@@ -151,7 +148,7 @@ describe('Create Stripe Checkout Session', function () {
         nock('https://api.stripe.com')
             .persist()
             .get(/v1\/.*/)
-            .reply((uri, body) => {
+            .reply((uri) => {
                 const [match, resource, id] = uri.match(/\/v1\/(\w+)\/(.+)\/?/) || [null];
                 if (match) {
                     if (resource === 'products') {
@@ -221,7 +218,7 @@ describe('Create Stripe Checkout Session', function () {
         nock('https://api.stripe.com')
             .persist()
             .get(/v1\/.*/)
-            .reply((uri, body) => {
+            .reply((uri) => {
                 const [match, resource, id] = uri.match(/\/v1\/(\w+)\/(.+)\/?/) || [null];
                 if (match) {
                     if (resource === 'products') {
@@ -249,7 +246,7 @@ describe('Create Stripe Checkout Session', function () {
         nock('https://api.stripe.com')
             .persist()
             .post(/v1\/.*/)
-            .reply((uri, body) => {
+            .reply((uri) => {
                 if (uri === '/v1/checkout/sessions') {
                     return [200, {id: 'cs_123', url: 'https://site.com'}];
                 }
@@ -292,7 +289,7 @@ describe('Create Stripe Checkout Session', function () {
             nock('https://api.stripe.com')
                 .persist()
                 .get(/v1\/.*/)
-                .reply((uri, body) => {
+                .reply((uri) => {
                     const [match, resource, id] = uri.match(/\/v1\/(\w+)\/(.+)\/?/) || [null];
                     if (match) {
                         if (resource === 'products') {
@@ -323,9 +320,9 @@ describe('Create Stripe Checkout Session', function () {
                 .reply((uri, body) => {
                     if (uri === '/v1/checkout/sessions') {
                         const parsed = new URLSearchParams(body);
-                        should(parsed.get('metadata[attribution_url]')).eql('/test');
-                        should(parsed.get('metadata[attribution_type]')).eql('url');
-                        should(parsed.get('metadata[attribution_id]')).be.null();
+                        assert.equal(parsed.get('metadata[attribution_url]'), '/test');
+                        assert.equal(parsed.get('metadata[attribution_type]'), 'url');
+                        assert.equal(parsed.get('metadata[attribution_id]'), null);
 
                         return [200, {id: 'cs_123', url: 'https://site.com'}];
                     }
@@ -362,7 +359,7 @@ describe('Create Stripe Checkout Session', function () {
                 .matchBodySnapshot()
                 .matchHeaderSnapshot();
 
-            should(scope.isDone()).eql(true);
+            assert.equal(scope.isDone(), true);
         });
 
         it('Does pass post attribution source to session metadata', async function () {
@@ -376,7 +373,7 @@ describe('Create Stripe Checkout Session', function () {
             nock('https://api.stripe.com')
                 .persist()
                 .get(/v1\/.*/)
-                .reply((uri, body) => {
+                .reply((uri) => {
                     const [match, resource, id] = uri.match(/\/v1\/(\w+)\/(.+)\/?/) || [null];
                     if (match) {
                         if (resource === 'products') {
@@ -407,9 +404,9 @@ describe('Create Stripe Checkout Session', function () {
                 .reply((uri, body) => {
                     if (uri === '/v1/checkout/sessions') {
                         const parsed = new URLSearchParams(body);
-                        should(parsed.get('metadata[attribution_url]')).eql(url);
-                        should(parsed.get('metadata[attribution_type]')).eql('post');
-                        should(parsed.get('metadata[attribution_id]')).eql(post.id);
+                        assert.equal(parsed.get('metadata[attribution_url]'), url);
+                        assert.equal(parsed.get('metadata[attribution_type]'), 'post');
+                        assert.equal(parsed.get('metadata[attribution_id]'), post.id);
 
                         return [200, {id: 'cs_123', url: 'https://site.com'}];
                     }
@@ -446,7 +443,7 @@ describe('Create Stripe Checkout Session', function () {
                 .matchBodySnapshot()
                 .matchHeaderSnapshot();
 
-            should(scope.isDone()).eql(true);
+            assert.equal(scope.isDone(), true);
         });
 
         it('Ignores attribution_* values in metadata', async function () {
@@ -457,7 +454,7 @@ describe('Create Stripe Checkout Session', function () {
             nock('https://api.stripe.com')
                 .persist()
                 .get(/v1\/.*/)
-                .reply((uri, body) => {
+                .reply((uri) => {
                     const [match, resource, id] = uri.match(/\/v1\/(\w+)\/(.+)\/?/) || [null];
                     if (match) {
                         if (resource === 'products') {
@@ -488,9 +485,9 @@ describe('Create Stripe Checkout Session', function () {
                 .reply((uri, body) => {
                     if (uri === '/v1/checkout/sessions') {
                         const parsed = new URLSearchParams(body);
-                        should(parsed.get('metadata[attribution_url]')).be.null();
-                        should(parsed.get('metadata[attribution_type]')).be.null();
-                        should(parsed.get('metadata[attribution_id]')).be.null();
+                        assert.equal(parsed.get('metadata[attribution_url]'), null);
+                        assert.equal(parsed.get('metadata[attribution_type]'), null);
+                        assert.equal(parsed.get('metadata[attribution_id]'), null);
 
                         return [200, {id: 'cs_123', url: 'https://site.com'}];
                     }
@@ -524,7 +521,100 @@ describe('Create Stripe Checkout Session', function () {
                 .matchBodySnapshot()
                 .matchHeaderSnapshot();
 
-            should(scope.isDone()).eql(true);
+            assert.equal(scope.isDone(), true);
+        });
+
+        it('Does pass UTM parameters to session metadata', async function () {
+            const {body: {tiers}} = await adminAgent.get('/tiers/?include=monthly_price&yearly_price');
+
+            const paidTier = tiers.find(tier => tier.type === 'paid');
+
+            nock('https://api.stripe.com')
+                .persist()
+                .get(/v1\/.*/)
+                .reply((uri) => {
+                    const [match, resource, id] = uri.match(/\/v1\/(\w+)\/(.+)\/?/) || [null];
+                    if (match) {
+                        if (resource === 'products') {
+                            return [200, {
+                                id: id,
+                                active: true
+                            }];
+                        }
+                        if (resource === 'prices') {
+                            return [200, {
+                                id: id,
+                                active: true,
+                                currency: 'usd',
+                                unit_amount: 500,
+                                recurring: {
+                                    interval: 'month'
+                                }
+                            }];
+                        }
+                    }
+
+                    return [500];
+                });
+
+            const scope = nock('https://api.stripe.com')
+                .persist()
+                .post(/v1\/.*/)
+                .reply((uri, body) => {
+                    if (uri === '/v1/checkout/sessions') {
+                        const parsed = new URLSearchParams(body);
+
+                        // Check UTM parameters are passed through
+                        assert.equal(parsed.get('subscription_data[metadata][utm_source]'), 'newsletter');
+                        assert.equal(parsed.get('subscription_data[metadata][utm_medium]'), 'email');
+                        assert.equal(parsed.get('subscription_data[metadata][utm_campaign]'), 'spring_sale');
+                        assert.equal(parsed.get('subscription_data[metadata][utm_term]'), 'ghost_pro');
+                        assert.equal(parsed.get('subscription_data[metadata][utm_content]'), 'header_link');
+
+                        return [200, {id: 'cs_123', url: 'https://site.com'}];
+                    }
+                    if (uri === '/v1/prices') {
+                        return [200, {
+                            id: 'price_7',
+                            active: true,
+                            currency: 'usd',
+                            unit_amount: 500,
+                            recurring: {
+                                interval: 'month'
+                            }
+                        }];
+                    }
+
+                    return [500];
+                });
+
+            await membersAgent.post('/api/create-stripe-checkout-session/')
+                .body({
+                    customerEmail: 'utm@test.com',
+                    tierId: paidTier.id,
+                    cadence: 'month',
+                    metadata: {
+                        urlHistory: [
+                            {
+                                path: '/pricing',
+                                time: Date.now(),
+                                referrerSource: 'google',
+                                referrerMedium: null,
+                                referrerUrl: null,
+                                utmSource: 'newsletter',
+                                utmMedium: 'email',
+                                utmCampaign: 'spring_sale',
+                                utmTerm: 'ghost_pro',
+                                utmContent: 'header_link'
+                            }
+                        ]
+                    }
+                })
+                .expectStatus(200)
+                .matchBodySnapshot()
+                .matchHeaderSnapshot();
+
+            assert.equal(scope.isDone(), true);
         });
     });
 });

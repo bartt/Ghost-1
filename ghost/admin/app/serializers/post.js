@@ -1,4 +1,3 @@
-/* eslint-disable camelcase */
 import ApplicationSerializer from 'ghost-admin/serializers/application';
 import {EmbeddedRecordsMixin} from '@ember-data/serializer/rest';
 
@@ -11,10 +10,11 @@ export default class PostSerializer extends ApplicationSerializer.extend(Embedde
         createdAtUTC: {key: 'created_at'},
         updatedAtUTC: {key: 'updated_at'},
         email: {embedded: 'always'},
-        newsletter: {embedded: 'always'}
+        newsletter: {embedded: 'always'},
+        postRevisions: {embedded: 'always'}
     };
 
-    serialize(/*snapshot, options*/) {
+    serialize(snapshot/*, options*/) {
         let json = super.serialize(...arguments);
 
         // Inserted locally as a convenience.
@@ -26,8 +26,13 @@ export default class PostSerializer extends ApplicationSerializer.extend(Embedde
         delete json.email_recipient_filter;
         delete json.email;
         delete json.newsletter;
+        delete json.post_revisions;
         // Deprecated property (replaced with data.authors)
         delete json.author;
+        // Page-only properties
+        if (snapshot.modelName !== 'page') {
+            delete json.show_title_and_feature_image;
+        }
 
         if (json.visibility === null) {
             delete json.visibility;

@@ -8,7 +8,7 @@ const errors = require('@tryghost/errors');
 
 const validate = require('./validate');
 const list = require('./list');
-const ThemeStorage = require('./ThemeStorage');
+const ThemeStorage = require('./theme-storage');
 const themeLoader = require('./loader');
 const activator = require('./activation-bridge');
 const toJSON = require('./to-json');
@@ -18,8 +18,8 @@ const settingsCache = require('../../../shared/settings-cache');
 const messages = {
     themeDoesNotExist: 'Theme does not exist.',
     invalidThemeName: 'Please select a valid theme.',
-    overrideCasper: 'Please rename your zip, it\'s not allowed to override the default casper theme.',
-    destroyCasper: 'Deleting the default casper theme is not allowed.',
+    overrideDefaultTheme: 'Please rename your zip, it\'s not allowed to override the default theme.',
+    destroyDefaultTheme: 'Deleting the default theme is not allowed.',
     destroyActive: 'Deleting the active theme is not allowed.'
 };
 
@@ -49,10 +49,10 @@ module.exports = {
         const themeName = getStorage().getSanitizedFileName(zip.name.split('.zip')[0]);
         const backupName = `${themeName}_${ObjectID()}`;
 
-        // check if zip name is casper.zip
-        if (zip.name === 'casper.zip') {
+        // check if zip name matches one of the default themes
+        if (zip.name === 'casper.zip' || zip.name === 'source.zip') {
             throw new errors.ValidationError({
-                message: tpl(messages.overrideCasper)
+                message: tpl(messages.overrideDefaultTheme)
             });
         }
 
@@ -86,10 +86,12 @@ module.exports = {
                 await activator.activateFromAPIOverride(themeName, loadedTheme, checkedTheme);
             }
 
+            const themeErrors = validate.getErrorsFromCheckedTheme(checkedTheme);
+
             // @TODO: unify the name across gscan and Ghost!
             return {
                 themeOverridden: overrideTheme,
-                theme: toJSON(themeName, checkedTheme)
+                theme: toJSON(themeName, themeErrors)
             };
         } catch (error) {
             // restore backup if we renamed an existing theme but saving failed
@@ -125,9 +127,9 @@ module.exports = {
         }
     },
     destroy: async function (themeName) {
-        if (themeName === 'casper') {
+        if (themeName === 'casper' || themeName === 'source') {
             throw new errors.ValidationError({
-                message: tpl(messages.destroyCasper)
+                message: tpl(messages.destroyDefaultTheme)
             });
         }
 

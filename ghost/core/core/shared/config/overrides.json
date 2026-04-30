@@ -12,10 +12,7 @@
         "publicFilePath": "core/frontend/public"
     },
     "apps": {
-        "internal": [
-            "private-blogging",
-            "amp"
-        ]
+        "internal": ["private-blogging"]
     },
     "slugs": {
         "protected": ["ghost", "rss", "amp"]
@@ -41,8 +38,63 @@
                 "audio/wav",
                 "audio/x-wav",
                 "audio/ogg",
+                "audio/mp4",
                 "audio/x-m4a"
             ]
+        },
+        "files": {
+            "extensions": [
+                ".pdf",
+                ".json",
+                ".jsonld",
+                ".ods",
+                ".odt",
+                ".pptx",
+                ".rtf",
+                ".txt",
+                ".xls",
+                ".xlsx",
+                ".xml",
+                ".apkg",
+                ".css",
+                ".csv",
+                ".doc",
+                ".docx",
+                ".epub",
+                ".gif",
+                ".gpx",
+                ".html",
+                ".ics",
+                ".ipynb",
+                ".jpeg",
+                ".jpg",
+                ".js",
+                ".key",
+                ".kml",
+                ".m4a",
+                ".md",
+                ".mobi",
+                ".mov",
+                ".mp3",
+                ".mp4",
+                ".otf",
+                ".pages",
+                ".paprikarecipes",
+                ".png",
+                ".psd",
+                ".py",
+                ".skp",
+                ".svg",
+                ".wav",
+                ".webp",
+                ".woff",
+                ".woff2",
+                ".xlsb",
+                ".xlsm",
+                ".yaml",
+                ".zip"
+            ],
+            "contentTypes": []
         },
         "thumbnails": {
             "extensions": [".jpg", ".jpeg", ".gif", ".png", ".svg", ".svgz", ".ico", ".webp"],
@@ -87,7 +139,15 @@
         },
         "internalImageSizes": {
             "icon": {"width": 256, "height": 256},
-            "email-header-image": {"width": 1200}
+            "signup-form-icon": {"width": 192, "height": 192},
+            "email-cta-card": {"width": 64, "height": 64},
+            "email-header-image": {"width": 1200},
+            "email-latest-posts-image": {"width": 200, "height": 200},
+            "email-latest-posts-image-mobile": {"width": 1200, "height": 960},
+            "social-image": {"width": 1200}
+        },
+        "emailSizes" : {
+            "ctaMinimal": {"width": 64, "height": 64}
         }
     }
 }

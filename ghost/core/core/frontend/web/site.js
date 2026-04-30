@@ -2,28 +2,29 @@ const debug = require('@tryghost/debug')('frontend');
 const path = require('path');
 const express = require('../../shared/express');
 const DomainEvents = require('@tryghost/domain-events');
-const {MemberPageViewEvent} = require('@tryghost/member-events');
+const {MemberPageViewEvent} = require('../../shared/events');
 
 // App requires
 const config = require('../../shared/config');
-const constants = require('@tryghost/constants');
 const storage = require('../../server/adapters/storage');
 const urlUtils = require('../../shared/url-utils');
 const sitemapHandler = require('../services/sitemap/handler');
+const serveFavicon = require('./routers/serve-favicon');
+const servePublicFiles = require('./routers/serve-public-file');
 const themeEngine = require('../services/theme-engine');
 const themeMiddleware = themeEngine.middleware;
 const membersService = require('../../server/services/members');
 const offersService = require('../../server/services/offers');
 const customRedirects = require('../../server/services/custom-redirects');
-const linkRedirects = require('../../server/services/link-redirection');
+const linkRedirectsHandler = require('./routers/link-redirects');
 const siteRoutes = require('./routes');
 const shared = require('../../server/web/shared');
 const errorHandler = require('@tryghost/mw-error-handler');
 const mw = require('./middleware');
 
 const STATIC_IMAGE_URL_PREFIX = `/${urlUtils.STATIC_IMAGE_URL_PREFIX}`;
-const STATIC_MEDIA_URL_PREFIX = `/${constants.STATIC_MEDIA_URL_PREFIX}`;
-const STATIC_FILES_URL_PREFIX = `/${constants.STATIC_FILES_URL_PREFIX}`;
+const STATIC_MEDIA_URL_PREFIX = `/${urlUtils.STATIC_MEDIA_URL_PREFIX}`;
+const STATIC_FILES_URL_PREFIX = `/${urlUtils.STATIC_FILES_URL_PREFIX}`;
 
 let router;
 
@@ -50,7 +51,7 @@ module.exports = function setupSiteApp(routerConfig) {
 
     siteApp.use(offersService.middleware);
 
-    siteApp.use(linkRedirects.service.handleRequest);
+    linkRedirectsHandler(siteApp);
 
     // you can extend Ghost with a custom redirects file
     // see https://github.com/TryGhost/Ghost/issues/7707
@@ -62,24 +63,10 @@ module.exports = function setupSiteApp(routerConfig) {
     // Static content/assets
     // @TODO make sure all of these have a local 404 error handler
     // Favicon
-    siteApp.use(mw.serveFavicon());
+    serveFavicon(siteApp);
 
-    // Serve sitemap.xsl file
-    siteApp.use(mw.servePublicFile('static', 'sitemap.xsl', 'text/xsl', config.get('caching:sitemapXSL:maxAge')));
-
-    // Serve stylesheets for default templates
-    siteApp.use(mw.servePublicFile('static', 'public/ghost.css', 'text/css', config.get('caching:publicAssets:maxAge')));
-    siteApp.use(mw.servePublicFile('static', 'public/ghost.min.css', 'text/css', config.get('caching:publicAssets:maxAge')));
-
-    // Card assets
-    siteApp.use(mw.servePublicFile('built', 'public/cards.min.css', 'text/css', config.get('caching:publicAssets:maxAge')));
-    siteApp.use(mw.servePublicFile('built', 'public/cards.min.js', 'application/javascript', config.get('caching:publicAssets:maxAge')));
-
-    // Comment counts
-    siteApp.use(mw.servePublicFile('built', 'public/comment-counts.min.js', 'application/javascript', config.get('caching:publicAssets:maxAge')));
-
-    // Member attribution
-    siteApp.use(mw.servePublicFile('built', 'public/member-attribution.min.js', 'application/javascript', config.get('caching:publicAssets:maxAge')));
+    // Public files (sitemap.xsl, stylesheets, scripts, etc.)
+    servePublicFiles(siteApp);
 
     // Serve site images using the storage adapter
     siteApp.use(STATIC_IMAGE_URL_PREFIX, mw.handleImageSizes, storage.getStorage('images').serve());
@@ -88,14 +75,13 @@ module.exports = function setupSiteApp(routerConfig) {
     // Serve site files using the storage adapter
     siteApp.use(STATIC_FILES_URL_PREFIX, storage.getStorage('files').serve());
 
-    // Global handling for member session, ensures a member is logged in to the frontend
-    siteApp.use(membersService.middleware.loadMemberSession);
-
     // /member/.well-known/* serves files (e.g. jwks.json) so it needs to be mounted before the prettyUrl mw to avoid trailing slashes
     siteApp.use(
         '/members/.well-known',
         shared.middleware.cacheControl('public', {maxAge: config.get('caching:wellKnown:maxAge')}),
-        (req, res, next) => membersService.api.middleware.wellKnown(req, res, next)
+        function lazyWellKnownMw(req, res, next) {
+            return membersService.api.middleware.wellKnown(req, res, next);
+        }
     );
 
     // setup middleware for internal apps
@@ -108,20 +94,25 @@ module.exports = function setupSiteApp(routerConfig) {
         }
     });
 
+    // Serve IndexNow API key verification file (/{key}.txt)
+    siteApp.use(mw.serveIndexNowKey);
+
     // Theme static assets/files
     siteApp.use(mw.staticTheme());
+
     debug('Static content done');
+
+    // site map - this should probably be refactored to be an internal app
+    sitemapHandler(siteApp);
+
+    // Global handling for member session, ensures a member is logged in to the frontend
+    siteApp.use(membersService.middleware.loadMemberSession);
 
     // Theme middleware
     // This should happen AFTER any shared assets are served, as it only changes things to do with templates
     siteApp.use(themeMiddleware);
     debug('Themes done');
 
-    // Serve robots.txt if not found in theme
-    siteApp.use(mw.servePublicFile('static', 'robots.txt', 'text/plain', config.get('caching:robotstxt:maxAge')));
-
-    // site map - this should probably be refactored to be an internal app
-    sitemapHandler(siteApp);
     debug('Internal apps done');
 
     // Add in all trailing slashes & remove uppercase
@@ -129,16 +120,16 @@ module.exports = function setupSiteApp(routerConfig) {
     siteApp.use(shared.middleware.prettyUrls);
 
     // ### Caching
-    siteApp.use(function (req, res, next) {
-        // Site frontend is cacheable UNLESS request made by a member or site is in private mode
-        if (req.member || res.isPrivateBlog) {
-            return shared.middleware.cacheControl('private')(req, res, next);
-        } else {
-            return shared.middleware.cacheControl('public', {maxAge: config.get('caching:frontend:maxAge')})(req, res, next);
+    siteApp.use(async function frontendCaching(req, res, next) {
+        try {
+            const middleware = await mw.frontendCaching.getMiddleware();
+            return middleware(req, res, next);
+        } catch {
+            return next();
         }
     });
 
-    siteApp.use(function (req, res, next) {
+    siteApp.use(function memberPageViewMiddleware(req, res, next) {
         if (req.member) {
             // This event needs memberLastSeenAt to avoid doing un-necessary database queries when updating `last_seen_at`
             DomainEvents.dispatch(MemberPageViewEvent.create({url: req.url, memberId: req.member.id, memberLastSeenAt: req.member.last_seen_at}, new Date()));
@@ -147,6 +138,19 @@ module.exports = function setupSiteApp(routerConfig) {
     });
 
     debug('General middleware done');
+
+    // Middleware to set analytics indicator header when analytics tracking is included
+    siteApp.use(function ghostAnalyticsHeaderMiddleware(req, res, next) {
+        const originalSend = res.send;
+        // Has to be on res.send otherwise this executes prior to ghost_head
+        res.send = function (data) {
+            if (res.locals && (res.locals.ghostAnalytics)) {
+                res.set('X-Ghost-Analytics', 'true');
+            }
+            return originalSend.call(this, data);
+        };
+        next();
+    });
 
     router = siteRoutes(routerConfig);
     Object.setPrototypeOf(SiteRouter, router);

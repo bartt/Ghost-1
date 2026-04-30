@@ -41,7 +41,7 @@ const expectedProperties = {
         'emailAnalytics',
         'tenor',
         'mailgunIsConfigured',
-        'editor'
+        'signupForm'
     ],
 
     post: [
@@ -50,6 +50,7 @@ const expectedProperties = {
         'title',
         'slug',
         'mobiledoc',
+        'lexical',
         'comment_id',
         'feature_image',
         'feature_image_alt',
@@ -86,7 +87,8 @@ const expectedProperties = {
         'email_only',
         'tiers',
         'newsletter',
-        'count'
+        'count',
+        'reading_time'
     ],
 
     page: [
@@ -95,6 +97,7 @@ const expectedProperties = {
         'title',
         'slug',
         'mobiledoc',
+        'lexical',
         'comment_id',
         'feature_image',
         'feature_image_alt',
@@ -126,7 +129,8 @@ const expectedProperties = {
         'meta_description',
         'frontmatter',
         'tiers',
-        'count'
+        'count',
+        'show_title_and_feature_image'
     ],
 
     user: _(schema.users)
@@ -198,8 +202,6 @@ _.each(expectedProperties, (value, key) => {
      */
     expectedProperties[key] = value
         .without(
-            'created_by',
-            'updated_by',
             'published_by'
         )
         .value();
@@ -221,13 +223,14 @@ module.exports = {
         return testUtils.API.doAuth(`${API_URL}session/`, ...args);
     },
 
-    getValidAdminToken(audience, keyid = 0) {
+    getValidAdminToken(audience, keyid = 0, opts = {}) {
         const jwt = require('jsonwebtoken');
         const JWT_OPTIONS = {
             keyid: testUtils.DataGenerator.Content.api_keys[keyid].id,
             algorithm: 'HS256',
             expiresIn: '5m',
-            audience: audience
+            audience: audience,
+            ...opts
         };
 
         return jwt.sign(

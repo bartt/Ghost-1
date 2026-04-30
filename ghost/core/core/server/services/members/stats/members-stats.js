@@ -1,5 +1,4 @@
 const moment = require('moment-timezone');
-const Promise = require('bluebird');
 
 const dateFormat = 'YYYY-MM-DD HH:mm:ss';
 class MembersStats {
@@ -7,7 +6,7 @@ class MembersStats {
      * @param {Object} config
      * @param {Object} config.db - an instance holding knex connection to the database
      * @param {Object} config.settingsCache - an instance of the Ghost Settings Cache
-     * @param {Boolean} config.isSQLite - flag identifying if storage is connected to SQLite
+     * @param {boolean} config.isSQLite - flag identifying if storage is connected to SQLite
      */
     constructor({db, settingsCache, isSQLite}) {
         this._db = db;
@@ -26,8 +25,8 @@ class MembersStats {
     /**
      *
      * @param {Number | String} days  - number of days to fetch of 'all-time' to get for all existing records
-     * @param {Number} totalMembers - number of registered members
-     * @param {String} siteTimezone - site's current timezone
+     * @param {number} totalMembers - number of registered members
+     * @param {string} siteTimezone - site's current timezone
      */
     async getTotalMembersInRange({days, totalMembers, siteTimezone}) {
         if (days === 'all-time') {
@@ -42,7 +41,7 @@ class MembersStats {
     /**
      * Fetches member signups for current day
      *
-     * @param {String} siteTimezone - site's current timezone
+     * @param {string} siteTimezone - site's current timezone
      */
     async getNewMembersToday({siteTimezone}) {
         const startOfToday = moment.tz(siteTimezone).startOf('day').utc().format(dateFormat);
@@ -53,8 +52,8 @@ class MembersStats {
     /**
      *
      * @param {Number | String} days  - number of days to fetch of 'all-time' to get for all existing records
-     * @param {Number} totalMembers - number of registered members
-     * @param {String} siteTimezone - site's current timezone
+     * @param {number} totalMembers - number of registered members
+     * @param {string} siteTimezone - site's current timezone
      */
     async getTotalMembersOnDatesInRange({days, totalMembers, siteTimezone}) {
         const startOfRange = moment.tz(siteTimezone).subtract(days - 1, 'days').startOf('day').utc().format(dateFormat);
@@ -131,14 +130,19 @@ class MembersStats {
         const totalMembers = await this.getTotalMembers();
 
         // perform final calculations in parallel
-        const results = await Promise.props({
-            total: totalMembers,
-            total_in_range: this.getTotalMembersInRange({days, totalMembers, siteTimezone}),
-            total_on_date: this.getTotalMembersOnDatesInRange({days, totalMembers, siteTimezone}),
-            new_today: this.getNewMembersToday({siteTimezone})
-        });
+        const [total, totalInRange, totalOnDate, newToday] = await Promise.all([
+            totalMembers,
+            this.getTotalMembersInRange({days, totalMembers, siteTimezone}),
+            this.getTotalMembersOnDatesInRange({days, totalMembers, siteTimezone}),
+            this.getNewMembersToday({siteTimezone})
+        ]);
 
-        return results;
+        return {
+            total,
+            total_in_range: totalInRange,
+            total_on_date: totalOnDate,
+            new_today: newToday
+        };
     }
 }
 

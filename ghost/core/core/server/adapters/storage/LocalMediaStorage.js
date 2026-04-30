@@ -1,7 +1,7 @@
 // # Local File System Media Storage module
 // The (default) module for storing media, using the local file system
 const config = require('../../../shared/config');
-const constants = require('@tryghost/constants');
+const urlUtils = require('../../../shared/url-utils');
 const LocalStorageBase = require('./LocalStorageBase');
 
 const messages = {
@@ -10,15 +10,15 @@ const messages = {
     cannotRead: 'Could not read media file: {file}'
 };
 
-class LocalMediaStore extends LocalStorageBase {
+class LocalMediaStorage extends LocalStorageBase {
     constructor() {
         super({
             storagePath: config.getContentPath('media'),
-            staticFileURLPrefix: constants.STATIC_MEDIA_URL_PREFIX,
+            staticFileURLPrefix: urlUtils.STATIC_MEDIA_URL_PREFIX,
             siteUrl: config.getSiteUrl(),
             errorMessages: messages
         });
     }
 }
 
-module.exports = LocalMediaStore;
+module.exports = LocalMediaStorage;

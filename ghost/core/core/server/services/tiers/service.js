@@ -5,11 +5,11 @@ class TiersServiceWrapper {
             return;
         }
 
-        const {TiersAPI} = require('@tryghost/tiers');
+        const TiersAPI = require('./tiers-api');
         const DomainEvents = require('@tryghost/domain-events');
 
         const models = require('../../models');
-        const TierRepository = require('./TierRepository');
+        const TierRepository = require('./tier-repository');
 
         const repository = new TierRepository({
             ProductModel: models.Product,
@@ -21,6 +21,10 @@ class TiersServiceWrapper {
                 return models.Product.generateSlug(models.Product, input, {});
             }
         };
+
+        await repository.init();
+
+        this.repository = repository;
 
         this.api = new TiersAPI({
             repository,

@@ -1,9 +1,8 @@
 const models = require('../../models');
 const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
-const megaService = require('../../services/mega');
 const emailService = require('../../services/email-service');
-const labs = require('../../../shared/labs');
+const emailAnalytics = require('../../services/email-analytics');
 
 const messages = {
     emailNotFound: 'Email not found.',
@@ -13,10 +12,14 @@ const messages = {
 const allowedBatchIncludes = ['count.recipients'];
 const allowedFailureIncludes = ['member', 'email_recipient'];
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'emails',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'limit',
             'fields',
@@ -31,6 +34,9 @@ module.exports = {
     },
 
     read: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'fields'
         ],
@@ -43,32 +49,7 @@ module.exports = {
             'id'
         ],
         permissions: true,
-        query(frame) {
-            return models.Email.findOne(frame.data, frame.options)
-                .then((model) => {
-                    if (!model) {
-                        throw new errors.NotFoundError({
-                            message: tpl(messages.emailNotFound)
-                        });
-                    }
-
-                    return model;
-                });
-        }
-    },
-
-    retry: {
-        data: [
-            'id'
-        ],
-        permissions: true,
-        // (complexity removed with new labs flag)
-        // eslint-disable-next-line ghost/ghost-custom/max-api-complexity
         async query(frame) {
-            if (labs.isSet('emailStability')) {
-                return await emailService.controller.retryFailedEmail(frame);
-            }
-
             const model = await models.Email.findOne(frame.data, frame.options);
             if (!model) {
                 throw new errors.NotFoundError({
@@ -76,17 +57,27 @@ module.exports = {
                 });
             }
 
-            if (model.get('status') !== 'failed') {
-                throw new errors.IncorrectUsageError({
-                    message: tpl(messages.retryNotAllowed)
-                });
-            }
+            return model;
+        }
+    },
 
-            return await megaService.mega.retryFailedEmail(model);
+    retry: {
+        headers: {
+            cacheInvalidate: false
+        },
+        data: [
+            'id'
+        ],
+        permissions: true,
+        async query(frame) {
+            return await emailService.controller.retryFailedEmail(frame);
         }
     },
 
     browseBatches: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'limit',
             'fields',
@@ -115,6 +106,9 @@ module.exports = {
     },
 
     browseFailures: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'limit',
             'fields',
@@ -140,5 +134,60 @@ module.exports = {
             const filter = `email_id:'${frame.data.id}'` + (frame.options.filter ? `+(${frame.options.filter})` : '');
             return await models.EmailRecipientFailure.findPage({...frame.options, filter});
         }
+    },
+
+    analyticsStatus: {
+        headers: {
+            cacheInvalidate: false
+        },
+        permissions: {
+            method: 'browse'
+        },
+        async query() {
+            return emailAnalytics.service.getStatus();
+        }
+    },
+
+    scheduleAnalytics: {
+        headers: {
+            cacheInvalidate: false
+        },
+        permissions: {
+            method: 'browse'
+        },
+        data: [
+            'id'
+        ],
+        options: [
+            'begin',
+            'end'
+        ],
+        async query(frame) {
+            const {begin: beginParam, end: endParam, ...findOptions} = frame.options;
+            const model = await models.Email.findOne(frame.data, findOptions);
+
+            const begin = beginParam
+                ? new Date(beginParam)
+                : model.get('created_at');
+            const end = endParam
+                ? new Date(endParam)
+                : new Date(Math.min(Date.now() - 60 * 60 * 1000, model.get('created_at').getTime() + 24 * 60 * 60 * 1000 * 7));
+
+            return emailAnalytics.service.schedule({begin, end});
+        }
+    },
+
+    cancelScheduledAnalytics: {
+        headers: {
+            cacheInvalidate: false
+        },
+        permissions: {
+            method: 'browse'
+        },
+        async query() {
+            return emailAnalytics.service.cancelScheduled();
+        }
     }
 };
+
+module.exports = controller;

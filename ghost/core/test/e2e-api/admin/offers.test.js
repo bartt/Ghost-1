@@ -1,7 +1,10 @@
+const assert = require('node:assert/strict');
+const {assertObjectMatches} = require('../../utils/assertions');
 const {agentProvider, fixtureManager, matchers} = require('../../utils/e2e-framework');
-const {anyEtag, anyObjectId, anyLocationFor, anyErrorId} = matchers;
-const should = require('should');
+const {anyContentVersion, anyEtag, anyObjectId, anyLocationFor, anyErrorId, anyISODateTime} = matchers;
 const models = require('../../../core/server/models');
+const sinon = require('sinon');
+const logging = require('@tryghost/logging');
 
 let agent;
 
@@ -25,11 +28,16 @@ describe('Offers API', function () {
         defaultTier = await getPaidProduct();
     });
 
+    this.afterEach(function () {
+        sinon.restore();
+    });
+
     it('Has no initial offers', async function () {
         await agent
             .get(`offers/`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot();
@@ -50,6 +58,7 @@ describe('Offers API', function () {
             currency: null,
             status: 'active',
             redemption_count: 0,
+            redemption_type: 'signup',
             tier: {
                 id: defaultTier.id
             }
@@ -60,6 +69,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag,
                 location: anyLocationFor('offers')
             })
@@ -68,7 +78,8 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 }]
             });
         savedOffer = body.offers[0];
@@ -92,6 +103,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag,
                 location: anyLocationFor('offers')
             })
@@ -100,7 +112,8 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 }]
             });
     });
@@ -123,6 +136,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag,
                 location: anyLocationFor('offers')
             })
@@ -131,11 +145,12 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 }]
             })
             .expect(({body}) => {
-                body.offers[0].code.should.eql('summer-sale');
+                assert.equal(body.offers[0].code, 'summer-sale');
             });
     });
 
@@ -158,6 +173,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag,
                 location: anyLocationFor('offers')
             })
@@ -166,7 +182,8 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 }]
             });
     });
@@ -190,6 +207,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag,
                 location: anyLocationFor('offers')
             })
@@ -198,13 +216,117 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 }]
             });
         trialOffer = body.offers[0];
     });
 
+    it('Can add a retention offer without a tier', async function () {
+        const newOffer = {
+            name: 'Stay With Us',
+            code: 'stay-with-us',
+            display_title: 'Stay With Us',
+            display_description: '10% off if you stay',
+            type: 'percent',
+            cadence: 'month',
+            amount: 10,
+            duration: 'forever',
+            duration_in_months: null,
+            currency_restriction: false,
+            currency: null,
+            status: 'active',
+            redemption_count: 0,
+            redemption_type: 'retention',
+            tier: null
+        };
+
+        await agent
+            .post(`offers/`)
+            .body({offers: [newOffer]})
+            .expectStatus(200)
+            .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
+                etag: anyEtag,
+                location: anyLocationFor('offers')
+            })
+            .matchBodySnapshot({
+                offers: [{
+                    id: anyObjectId,
+                    tier: null,
+                    created_at: anyISODateTime
+                }]
+            })
+            .expect(({body}) => {
+                assert.equal(body.offers[0].redemption_type, 'retention');
+                assert.equal(body.offers[0].tier, null);
+            });
+    });
+
+    it('Cannot create a signup offer without a tier', async function () {
+        sinon.stub(logging, 'error');
+
+        const newOffer = {
+            name: 'Bad Signup Offer',
+            code: 'bad-signup',
+            type: 'percent',
+            cadence: 'month',
+            amount: 10,
+            duration: 'once',
+            redemption_type: 'signup',
+            tier: null
+        };
+
+        await agent
+            .post(`offers/`)
+            .body({offers: [newOffer]})
+            .expectStatus(400)
+            .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
+                etag: anyEtag
+            })
+            .matchBodySnapshot({
+                errors: [{
+                    id: anyErrorId
+                }]
+            });
+    });
+
+    it('Cannot create a retention offer with a tier', async function () {
+        sinon.stub(logging, 'error');
+
+        const newOffer = {
+            name: 'Bad Retention Offer',
+            code: 'bad-retention',
+            type: 'percent',
+            cadence: 'month',
+            amount: 10,
+            duration: 'forever',
+            redemption_type: 'retention',
+            tier: {
+                id: defaultTier.id
+            }
+        };
+
+        await agent
+            .post(`offers/`)
+            .body({offers: [newOffer]})
+            .expectStatus(400)
+            .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
+                etag: anyEtag
+            })
+            .matchBodySnapshot({
+                errors: [{
+                    id: anyErrorId
+                }]
+            });
+    });
+
     it('Cannot create offer with same code', async function () {
+        sinon.stub(logging, 'error');
+
         const newOffer = {
             name: 'Fourth of July',
             code: '4th',
@@ -223,6 +345,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(400)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -233,6 +356,8 @@ describe('Offers API', function () {
     });
 
     it('Cannot create offer with same slugified code', async function () {
+        sinon.stub(logging, 'error');
+
         const newOffer = {
             name: 'Another Black Friday Sale',
             code: 'black friday',
@@ -251,6 +376,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(400)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -261,6 +387,8 @@ describe('Offers API', function () {
     });
 
     it('Cannot create offer with same name', async function () {
+        sinon.stub(logging, 'error');
+
         const newOffer = {
             name: 'Fourth of July Sales',
             code: 'july4',
@@ -279,6 +407,7 @@ describe('Offers API', function () {
             .body({offers: [newOffer]})
             .expectStatus(400)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -293,15 +422,24 @@ describe('Offers API', function () {
             .get(`offers/`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
-                offers: new Array(5).fill({
-                    id: anyObjectId,
-                    tier: {
-                        id: anyObjectId
+                offers: [
+                    ...new Array(5).fill({
+                        id: anyObjectId,
+                        tier: {
+                            id: anyObjectId
+                        },
+                        created_at: anyISODateTime
+                    }),
+                    {
+                        id: anyObjectId,
+                        tier: null,
+                        created_at: anyISODateTime
                     }
-                })
+                ]
             });
     });
 
@@ -310,6 +448,7 @@ describe('Offers API', function () {
             .get(`offers/${savedOffer.id}/`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -317,7 +456,8 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             });
     });
@@ -327,6 +467,7 @@ describe('Offers API', function () {
             .get(`offers/${trialOffer.id}/`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -336,7 +477,8 @@ describe('Offers API', function () {
                     duration: 'trial',
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             });
     });
@@ -355,6 +497,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -362,16 +505,19 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             })
             .expect(({body}) => {
                 // Test if all the changes were applied, and that the code has been slugified
-                body.offers[0].should.match({...updatedOffer, code: 'cyber-monday'});
+                assertObjectMatches(body.offers[0], {...updatedOffer, code: 'cyber-monday'});
             });
     });
 
     it('Cannot update offer code to one that exists', async function () {
+        sinon.stub(logging, 'error');
+
         // We can change all fields except discount related fields
         let updatedOffer = {
             code: '4th'
@@ -382,6 +528,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(400)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -392,6 +539,8 @@ describe('Offers API', function () {
     });
 
     it('Cannot update offer code to one that exists after it is slugified', async function () {
+        sinon.stub(logging, 'error');
+
         // We can change all fields except discount related fields
         let updatedOffer = {
             code: 'Summer sale'
@@ -402,6 +551,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(400)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -412,6 +562,8 @@ describe('Offers API', function () {
     });
 
     it('Cannot update offer name to one that exists', async function () {
+        sinon.stub(logging, 'error');
+
         // We can change all fields except discount related fields
         let updatedOffer = {
             name: 'Easter Sales'
@@ -422,6 +574,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(400)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -442,6 +595,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -449,11 +603,12 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             })
             .expect(({body}) => {
-                body.offers[0].should.match(updatedOffer);
+                assertObjectMatches(body.offers[0], updatedOffer);
             });
     });
 
@@ -463,6 +618,7 @@ describe('Offers API', function () {
             .get(`offers/?filter=${filter}`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -470,26 +626,63 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             });
     });
 
-    it('Can browse active', async function () {
+    it('Can filter by status', async function () {
         const filter = encodeURIComponent(`status:active`);
         await agent
             .get(`offers/?filter=${filter}`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
-                offers: new Array(4).fill({
-                    id: anyObjectId,
-                    tier: {
-                        id: anyObjectId
+                offers: [
+                    ...new Array(4).fill({
+                        id: anyObjectId,
+                        status: 'active',
+                        tier: {
+                            id: anyObjectId
+                        },
+                        created_at: anyISODateTime
+                    }),
+                    {
+                        id: anyObjectId,
+                        status: 'active',
+                        tier: null,
+                        created_at: anyISODateTime
                     }
-                })
+                ]
+            });
+    });
+
+    it('Can filter by status and redemption type', async function () {
+        const filter = encodeURIComponent(`status:active+redemption_type:signup`);
+
+        await agent
+            .get(`offers/?filter=${filter}`)
+            .expectStatus(200)
+            .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
+                etag: anyEtag
+            })
+            .matchBodySnapshot({
+                offers: [
+                    ...new Array(4).fill({
+                        id: anyObjectId,
+                        status: 'active',
+                        redemption_type: 'signup',
+                        tier: {
+                            id: anyObjectId
+                        },
+                        created_at: anyISODateTime
+                    })
+                ]
             });
     });
 
@@ -504,6 +697,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -511,11 +705,12 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             })
             .expect(({body}) => {
-                body.offers[0].cadence.should.eql('year');
+                assert.equal(body.offers[0].cadence, 'year');
             });
     });
 
@@ -531,6 +726,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -538,11 +734,12 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             })
             .expect(({body}) => {
-                body.offers[0].amount.should.eql(12);
+                assert.equal(body.offers[0].amount, 12);
             });
     });
 
@@ -561,6 +758,7 @@ describe('Offers API', function () {
             .body({offers: [updatedOffer]})
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -568,11 +766,118 @@ describe('Offers API', function () {
                     id: anyObjectId,
                     tier: {
                         id: anyObjectId
-                    }
+                    },
+                    created_at: anyISODateTime
                 })
             })
             .expect(({body}) => {
-                body.offers[0].tier.id.should.eql(defaultTier.id);
+                assert.equal(body.offers[0].tier.id, defaultTier.id);
             });
+    });
+
+    it('Keeps one active retention offer per cadence on create', async function () {
+        const suffix = Date.now().toString(16).slice(-6);
+
+        const firstOffer = {
+            name: `Yearly retention one ${suffix}`,
+            code: `yearly-retention-${suffix}-1`,
+            display_title: '',
+            display_description: '',
+            type: 'percent',
+            cadence: 'year',
+            amount: 20,
+            duration: 'once',
+            duration_in_months: null,
+            currency_restriction: false,
+            currency: null,
+            status: 'active',
+            redemption_type: 'retention',
+            tier: null
+        };
+
+        const secondOffer = {
+            ...firstOffer,
+            name: `Yearly retention two ${suffix}`,
+            code: `yearly-retention-${suffix}-2`,
+            amount: 25
+        };
+
+        const firstCreateResponse = await agent
+            .post('offers/')
+            .body({offers: [firstOffer]})
+            .expectStatus(200);
+        const firstOfferId = firstCreateResponse.body.offers[0].id;
+
+        const secondCreateResponse = await agent
+            .post('offers/')
+            .body({offers: [secondOffer]})
+            .expectStatus(200);
+        const secondOfferId = secondCreateResponse.body.offers[0].id;
+
+        const firstReadResponse = await agent
+            .get(`offers/${firstOfferId}/`)
+            .expectStatus(200);
+        const secondReadResponse = await agent
+            .get(`offers/${secondOfferId}/`)
+            .expectStatus(200);
+
+        assert.equal(firstReadResponse.body.offers[0].status, 'archived');
+        assert.equal(secondReadResponse.body.offers[0].status, 'active');
+    });
+
+    it('Keeps one active retention offer per cadence on activate', async function () {
+        const suffix = (Date.now() + 1).toString(16).slice(-6);
+
+        const activeOffer = {
+            name: `Yearly retention active ${suffix}`,
+            code: `yearly-retention-${suffix}-active`,
+            display_title: '',
+            display_description: '',
+            type: 'percent',
+            cadence: 'year',
+            amount: 20,
+            duration: 'once',
+            duration_in_months: null,
+            currency_restriction: false,
+            currency: null,
+            status: 'active',
+            redemption_type: 'retention',
+            tier: null
+        };
+
+        const archivedOffer = {
+            ...activeOffer,
+            name: `Yearly retention archived ${suffix}`,
+            code: `yearly-retention-${suffix}-archived`,
+            status: 'archived',
+            amount: 30
+        };
+
+        const activeCreateResponse = await agent
+            .post('offers/')
+            .body({offers: [activeOffer]})
+            .expectStatus(200);
+        const activeOfferId = activeCreateResponse.body.offers[0].id;
+
+        const archivedCreateResponse = await agent
+            .post('offers/')
+            .body({offers: [archivedOffer]})
+            .expectStatus(200);
+        const archivedOfferId = archivedCreateResponse.body.offers[0].id;
+
+        await agent
+            .put(`offers/${archivedOfferId}/`)
+            .body({offers: [{status: 'active'}]})
+            .expectStatus(200);
+
+        const activeReadResponse = await agent
+            .get(`offers/${activeOfferId}/`)
+            .expectStatus(200);
+        const archivedReadResponse = await agent
+            .get(`offers/${archivedOfferId}/`)
+            .expectStatus(200);
+
+        assert.equal(activeReadResponse.body.offers[0].status, 'archived');
+        assert.equal(archivedReadResponse.body.offers[0].status, 'active');
     });
 });

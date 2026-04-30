@@ -16,7 +16,7 @@ export function feature(name, options = {}) {
 
             if (user) {
                 enabled = this.get(`accessibility.${name}`);
-            } else if (this.get(`config.${name}`)) {
+            } else if (typeof this.get(`config.${name}`) === 'boolean') {
                 enabled = this.get(`config.${name}`);
             } else {
                 enabled = this.get(`labs.${name}`) || false;
@@ -40,6 +40,7 @@ export function feature(name, options = {}) {
 
 @classic
 export default class FeatureService extends Service {
+    @service ghostPaths;
     @service lazyLoader;
     @service notifications;
     @service session;
@@ -55,16 +56,19 @@ export default class FeatureService extends Service {
     @feature('nightShift', {user: true, onChange: '_setAdminTheme'})
         nightShift;
 
-    // labs flags
-    @feature('urlCache') urlCache;
-    @feature('beforeAfterCard') beforeAfterCard;
-    @feature('memberAttribution') memberAttribution;
-    @feature('sourceAttribution') sourceAttribution;
-    @feature('lexicalEditor') lexicalEditor;
-    @feature('audienceFeedback') audienceFeedback;
-    @feature('suppressionList') suppressionList;
-    @feature('emailStability') emailStability;
+    // user-specific referral invitation
+    @feature('referralInviteDismissed', {user: true}) referralInviteDismissed;
 
+    // labs flags
+    @feature('stripeAutomaticTax') stripeAutomaticTax;
+    @feature('emailCustomization') emailCustomization;
+    @feature('importMemberTier') importMemberTier;
+    @feature('adminUIRefresh') adminUIRefresh;
+    @feature('lexicalIndicators') lexicalIndicators;
+    @feature('editorExcerpt') editorExcerpt;
+    @feature('tagsX') tagsX;
+    @feature('commentModeration') commentModeration;
+    @feature('giftSubscriptions') giftSubscriptions;
     _user = null;
 
     @computed('settings.labs')
@@ -140,11 +144,14 @@ export default class FeatureService extends Service {
             nightShift = enabled || this.nightShift;
         }
 
+        document.documentElement.classList.toggle('dark', nightShift ?? false);
+
         return this.lazyLoader.loadStyle('dark', 'assets/ghost-dark.css', true).then(() => {
             $('link[title=dark]').prop('disabled', !nightShift);
         }).catch(() => {
             //TODO: Also disable toggle from settings and Labs hover
             $('link[title=dark]').prop('disabled', true);
+            document.documentElement.classList.remove('dark');
         });
     }
 }

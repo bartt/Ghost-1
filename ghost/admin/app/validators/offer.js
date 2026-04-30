@@ -9,28 +9,53 @@ export default BaseValidator.create({
             model.errors.add('name', 'Please enter a name.');
             this.invalidate();
         }
-        if (!validator.isLength(model.name || '', 0, 40)) {
+        if (!validator.isLength(model.name || '', {max: 40})) {
             model.errors.add('name', 'Name cannot be longer than 40 characters.');
             this.invalidate();
         }
     },
 
     amount(model) {
-        if (!model.amount) {
-            if (model.type === 'trial') {
+        if (model.amount === '' || model.amount === undefined) {
+            model.errors.add('amount', 'Please enter the amount.');
+
+            return this.invalidate();
+        }
+
+        if (model.type === 'trial') {
+            if (model.amount < 1) {
                 model.errors.add('amount', 'Free trial must be at least 1 day.');
-            } else {
-                model.errors.add('amount', 'Please enter the amount.');
+                return this.invalidate();
             }
-            this.invalidate();
-        } else if (model.type === 'trial' && model.amount < 0) {
-            model.errors.add('amount', 'Free trial must be at least 1 day.');
-            this.invalidate();
+
+            if (!model.amount.toString().match(/^\d+$/)) {
+                model.errors.add('amount', 'Trial days must be a whole number.');
+                return this.invalidate();
+            }
+        }
+
+        if (model.type === 'percent') {
+            if (model.amount < 0 || model.amount > 100) {
+                model.errors.add('amount', 'Amount must be between 0 and 100%.');
+                return this.invalidate();
+            }
+
+            if (!model.amount.toString().match(/^\d+$/)) {
+                model.errors.add('amount', 'Amount must be a whole number.');
+                return this.invalidate();
+            }
+        }
+
+        if (model.type === 'fixed') {
+            if (model.amount < 0) {
+                model.errors.add('amount', 'Amount must be greater than 0.');
+                return this.invalidate();
+            }
         }
     },
 
     displayDescription(model) {
-        if (!validator.isLength(model.displayDescription || '', 0, 191)) {
+        if (!validator.isLength(model.displayDescription || '', {max: 191})) {
             model.errors.add('displayDescription', 'Display description cannot be longer than 191 characters.');
             this.invalidate();
         }

@@ -1,8 +1,6 @@
-const should = require('should');
 const sinon = require('sinon');
 const rewire = require('rewire');
-const urlUtils = require('../../../../../utils/urlUtils');
-const configUtils = require('../../../../../utils/configUtils');
+const configUtils = require('../../../../../utils/config-utils');
 const urlRedirects = rewire('../../../../../../core/server/web/shared/middleware/url-redirects');
 const {frontendSSLRedirect, adminSSLAndHostRedirect} = urlRedirects;
 const getAdminRedirectUrl = urlRedirects.__get__('_private.getAdminRedirectUrl');
@@ -29,9 +27,9 @@ describe('UNIT: url redirects', function () {
         next = sinon.spy();
     });
 
-    afterEach(function () {
+    afterEach(async function () {
         sinon.restore();
-        configUtils.restore();
+        await configUtils.restore();
         host = null;
     });
 
@@ -48,7 +46,7 @@ describe('UNIT: url redirects', function () {
 
             frontendSSLRedirect(req, res, next);
 
-            redirectSpy.calledWith(req, res, next, getFrontendRedirectUrl).should.eql(true);
+            sinon.assert.calledWith(redirectSpy, req, res, next, getFrontendRedirectUrl);
         });
 
         it('adminSSLAndHostRedirect passes getAdminRedirectUrl', function () {
@@ -56,12 +54,12 @@ describe('UNIT: url redirects', function () {
 
             adminSSLAndHostRedirect(req, res, next);
 
-            redirectSpy.calledWith(req, res, next, getAdminRedirectUrl).should.eql(true);
+            sinon.assert.calledWith(redirectSpy, req, res, next, getAdminRedirectUrl);
         });
     });
 
     describe('expect redirect', function () {
-        it('site is https, request is http', function (done) {
+        it('site is https, request is http', function () {
             configUtils.set({
                 url: 'https://default.com:2368/'
             });
@@ -70,14 +68,13 @@ describe('UNIT: url redirects', function () {
 
             req.originalUrl = '/';
             redirect(req, res, next, getFrontendRedirectUrl);
-            next.called.should.be.false();
-            res.redirect.called.should.be.true();
-            res.redirect.calledWith(301, 'https://default.com:2368/').should.be.true();
-            res.set.called.should.be.true();
-            done();
+            sinon.assert.notCalled(next);
+            sinon.assert.called(res.redirect);
+            sinon.assert.calledWith(res.redirect, 301, 'https://default.com:2368/');
+            sinon.assert.called(res.set);
         });
 
-        it('site host is !== request host', function (done) {
+        it('site host is !== request host', function () {
             configUtils.set({
                 url: 'https://default.com'
             });
@@ -85,15 +82,14 @@ describe('UNIT: url redirects', function () {
 
             req.originalUrl = '/';
             redirect(req, res, next, getFrontendRedirectUrl);
-            next.called.should.be.false();
-            res.redirect.called.should.be.true();
-            res.redirect.calledWith(301, 'https://localhost:2368/').should.be.true();
-            res.set.called.should.be.true();
-            done();
+            sinon.assert.notCalled(next);
+            sinon.assert.called(res.redirect);
+            sinon.assert.calledWith(res.redirect, 301, 'https://localhost:2368/');
+            sinon.assert.called(res.set);
         });
 
         describe(`admin redirects`, function () {
-            it('url and admin url are equal, but protocol is different, request is http', function (done) {
+            it('url and admin url are equal, but protocol is different, request is http', function () {
                 configUtils.set({
                     url: 'http://default.com:2368',
                     admin: {
@@ -105,13 +101,12 @@ describe('UNIT: url redirects', function () {
 
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.false();
-                res.redirect.calledWith(301, 'https://default.com:2368/ghost/').should.be.true();
-                res.set.called.should.be.true();
-                done();
+                sinon.assert.notCalled(next);
+                sinon.assert.calledWith(res.redirect, 301, 'https://default.com:2368/ghost/');
+                sinon.assert.called(res.set);
             });
 
-            it('url and admin url are different, request is http', function (done) {
+            it('url and admin url are different, request is http', function () {
                 configUtils.set({
                     url: 'http://default.com:2368',
                     admin: {
@@ -123,13 +118,12 @@ describe('UNIT: url redirects', function () {
 
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.false();
-                res.redirect.calledWith(301, 'https://admin.default.com:2368/ghost/').should.be.true();
-                res.set.called.should.be.true();
-                done();
+                sinon.assert.notCalled(next);
+                sinon.assert.calledWith(res.redirect, 301, 'https://admin.default.com:2368/ghost/');
+                sinon.assert.called(res.set);
             });
 
-            it('subdirectory', function (done) {
+            it('subdirectory', function () {
                 configUtils.set({
                     url: 'http://default.com:2368/blog',
                     admin: {
@@ -141,20 +135,19 @@ describe('UNIT: url redirects', function () {
 
                 req.originalUrl = '/blog/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.false();
-                res.redirect.calledWith(301, 'https://admin.default.com:2368/blog/ghost/').should.be.true();
-                res.set.called.should.be.true();
+                sinon.assert.notCalled(next);
+                sinon.assert.calledWith(res.redirect, 301, 'https://admin.default.com:2368/blog/ghost/');
+                sinon.assert.called(res.set);
 
                 req.secure = true;
                 host = 'admin.default.com:2368';
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.true();
-                res.redirect.calledOnce.should.be.true();
-                res.set.calledOnce.should.be.true();
-                done();
+                sinon.assert.called(next);
+                sinon.assert.calledOnce(res.redirect);
+                sinon.assert.calledOnce(res.set);
             });
 
-            it('keeps query', function (done) {
+            it('keeps query', function () {
                 configUtils.set({
                     url: 'http://default.com:2368',
                     admin: {
@@ -170,13 +163,12 @@ describe('UNIT: url redirects', function () {
                 };
 
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.false();
-                res.redirect.calledWith(301, 'https://admin.default.com:2368/ghost/?test=true').should.be.true();
-                res.set.called.should.be.true();
-                done();
+                sinon.assert.notCalled(next);
+                sinon.assert.calledWith(res.redirect, 301, 'https://admin.default.com:2368/ghost/?test=true');
+                sinon.assert.called(res.set);
             });
 
-            it('original url has search params', function (done) {
+            it('original url has search params', function () {
                 configUtils.set({
                     url: 'http://default.com:2368',
                     admin: {
@@ -192,13 +184,12 @@ describe('UNIT: url redirects', function () {
                 };
 
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.false();
-                res.redirect.calledWith(301, 'https://admin.default.com:2368/ghost/something/?a=b').should.be.true();
-                res.set.called.should.be.true();
-                done();
+                sinon.assert.notCalled(next);
+                sinon.assert.calledWith(res.redirect, 301, 'https://admin.default.com:2368/ghost/something/?a=b');
+                sinon.assert.called(res.set);
             });
 
-            it('ensure redirect loop won\'t happen', function (done) {
+            it('ensure redirect loop won\'t happen', function () {
                 configUtils.set({
                     url: 'http://default.com:2368',
                     admin: {
@@ -211,24 +202,23 @@ describe('UNIT: url redirects', function () {
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
 
-                next.called.should.be.false();
-                res.redirect.calledWith(301, 'https://default.com:2368/ghost/').should.be.true();
-                res.set.called.should.be.true();
+                sinon.assert.notCalled(next);
+                sinon.assert.calledWith(res.redirect, 301, 'https://default.com:2368/ghost/');
+                sinon.assert.called(res.set);
 
                 res.redirect.resetHistory();
 
                 req.secure = true;
                 redirect(req, res, next, getAdminRedirectUrl);
-                res.redirect.called.should.be.false();
-                res.set.calledOnce.should.be.true();
-                next.called.should.be.true();
-                done();
+                sinon.assert.notCalled(res.redirect);
+                sinon.assert.calledOnce(res.set);
+                sinon.assert.called(next);
             });
         });
     });
 
     describe('expect no redirect', function () {
-        it('site is http, request is http', function (done) {
+        it('site is http, request is http', function () {
             configUtils.set({
                 url: 'http://default.com:2368/'
             });
@@ -237,14 +227,13 @@ describe('UNIT: url redirects', function () {
 
             req.originalUrl = '/';
             redirect(req, res, next, getFrontendRedirectUrl);
-            next.called.should.be.true();
-            res.redirect.called.should.be.false();
-            res.set.called.should.be.false();
-            next.calledWith().should.be.true();
-            done();
+            sinon.assert.called(next);
+            sinon.assert.notCalled(res.redirect);
+            sinon.assert.notCalled(res.set);
+            sinon.assert.calledWith(next);
         });
 
-        it('site is http, request is https', function (done) {
+        it('site is http, request is https', function () {
             configUtils.set({
                 url: 'http://default.com:2368/'
             });
@@ -254,13 +243,12 @@ describe('UNIT: url redirects', function () {
             req.originalUrl = '/';
             req.secure = true;
             redirect(req, res, next, getFrontendRedirectUrl);
-            next.called.should.be.true();
-            res.redirect.called.should.be.false();
-            res.set.called.should.be.false();
-            done();
+            sinon.assert.called(next);
+            sinon.assert.notCalled(res.redirect);
+            sinon.assert.notCalled(res.set);
         });
 
-        it('blog is http, request is https (trailing slash is missing)', function (done) {
+        it('blog is http, request is https (trailing slash is missing)', function () {
             configUtils.set({
                 url: 'http://default.com:2368/'
             });
@@ -270,13 +258,12 @@ describe('UNIT: url redirects', function () {
             req.originalUrl = '/';
             req.secure = true;
             redirect(req, res, next, getFrontendRedirectUrl);
-            next.called.should.be.true();
-            res.redirect.called.should.be.false();
-            res.set.called.should.be.false();
-            done();
+            sinon.assert.called(next);
+            sinon.assert.notCalled(res.redirect);
+            sinon.assert.notCalled(res.set);
         });
 
-        it('blog is https, request is https', function (done) {
+        it('blog is https, request is https', function () {
             configUtils.set({
                 url: 'https://default.com:2368/'
             });
@@ -286,14 +273,13 @@ describe('UNIT: url redirects', function () {
             req.originalUrl = '/';
             req.secure = true;
             redirect(req, res, next, getFrontendRedirectUrl);
-            next.called.should.be.true();
-            res.redirect.called.should.be.false();
-            res.set.called.should.be.false();
-            next.calledWith().should.be.true();
-            done();
+            sinon.assert.called(next);
+            sinon.assert.calledWith(next);
+            sinon.assert.notCalled(res.redirect);
+            sinon.assert.notCalled(res.set);
         });
 
-        it('blog host is !== request host', function (done) {
+        it('blog host is !== request host', function () {
             configUtils.set({
                 url: 'https://default.com'
             });
@@ -303,14 +289,13 @@ describe('UNIT: url redirects', function () {
             req.originalUrl = '/';
             req.secure = true;
             redirect(req, res, next, getFrontendRedirectUrl);
-            next.called.should.be.true();
-            res.redirect.called.should.be.false();
-            res.set.called.should.be.false();
-            done();
+            sinon.assert.called(next);
+            sinon.assert.notCalled(res.redirect);
+            sinon.assert.notCalled(res.set);
         });
 
         describe(`admin redirects`, function () {
-            it('admin is blog url and http, requester is http', function (done) {
+            it('admin is blog url and http, requester is http', function () {
                 configUtils.set({
                     url: 'http://default.com:2368'
                 });
@@ -319,13 +304,12 @@ describe('UNIT: url redirects', function () {
 
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.true();
-                res.redirect.called.should.be.false();
-                res.set.called.should.be.false();
-                done();
+                sinon.assert.called(next);
+                sinon.assert.notCalled(res.redirect);
+                sinon.assert.notCalled(res.set);
             });
 
-            it('admin request, no custom admin.url configured', function (done) {
+            it('admin request, no custom admin.url configured', function () {
                 configUtils.set({
                     url: 'http://default.com:2368'
                 });
@@ -334,13 +318,12 @@ describe('UNIT: url redirects', function () {
 
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
-                next.called.should.be.true();
-                res.redirect.called.should.be.false();
-                res.set.called.should.be.false();
-                done();
+                sinon.assert.called(next);
+                sinon.assert.notCalled(res.redirect);
+                sinon.assert.notCalled(res.set);
             });
 
-            it('url and admin url are different, protocol is different, request is not secure', function (done) {
+            it('url and admin url are different, protocol is different, request is not secure', function () {
                 configUtils.set({
                     url: 'http://ghost.org/blog/',
                     admin: {
@@ -353,13 +336,12 @@ describe('UNIT: url redirects', function () {
 
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
-                res.redirect.called.should.be.false();
-                res.set.called.should.be.false();
-                next.called.should.be.true();
-                done();
+                sinon.assert.notCalled(res.redirect);
+                sinon.assert.notCalled(res.set);
+                sinon.assert.called(next);
             });
 
-            it('url and admin url are different, protocol is different, request is secure', function (done) {
+            it('url and admin url are different, protocol is different, request is secure', function () {
                 configUtils.set({
                     url: 'http://ghost.org/blog/',
                     admin: {
@@ -373,13 +355,12 @@ describe('UNIT: url redirects', function () {
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
 
-                res.redirect.called.should.be.false();
-                res.set.called.should.be.false();
-                next.called.should.be.true();
-                done();
+                sinon.assert.notCalled(res.redirect);
+                sinon.assert.notCalled(res.set);
+                sinon.assert.called(next);
             });
 
-            it('url and admin url are different, request matches, uses a port', function (done) {
+            it('url and admin url are different, request matches, uses a port', function () {
                 configUtils.set({
                     url: 'https://default.com:2368',
                     admin: {
@@ -393,11 +374,9 @@ describe('UNIT: url redirects', function () {
                 req.originalUrl = '/ghost';
                 redirect(req, res, next, getAdminRedirectUrl);
 
-                res.redirect.called.should.be.false();
-                res.set.called.should.be.false();
-                next.called.should.be.true();
-
-                done();
+                sinon.assert.notCalled(res.redirect);
+                sinon.assert.notCalled(res.set);
+                sinon.assert.called(next);
             });
         });
     });

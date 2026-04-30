@@ -1,10 +1,10 @@
 const _ = require('lodash');
 const errors = require('@tryghost/errors');
 const tpl = require('@tryghost/tpl');
-const MembersSSR = require('@tryghost/members-ssr');
+const MembersSSR = require('./members-ssr');
 const db = require('../../data/db');
-const MembersConfigProvider = require('./config');
-const MembersCSVImporter = require('@tryghost/members-importer');
+const MembersConfigProvider = require('./members-config-provider');
+const makeMembersCSVImporter = require('./importer');
 const MembersStats = require('./stats/members-stats');
 const memberJobs = require('./jobs');
 const logging = require('@tryghost/logging');
@@ -16,9 +16,12 @@ const models = require('../../models');
 const {GhostMailer} = require('../mail');
 const jobsService = require('../jobs');
 const tiersService = require('../tiers');
-const VerificationTrigger = require('@tryghost/verification-trigger');
+const giftService = require('../gifts');
+const VerificationTrigger = require('../verification-trigger');
+const {verificationWebhookService} = require('../verification/verification-webhook-service');
 const DatabaseInfo = require('@tryghost/database-info');
 const settingsHelpers = require('../settings-helpers');
+const RequestIntegrityTokenProvider = require('./request-integrity-token-provider');
 
 const messages = {
     noLiveKeysInDevelopment: 'Cannot use live stripe keys in development. Please restart in production mode.',
@@ -43,54 +46,56 @@ const membersStats = new MembersStats({
 let membersApi;
 let verificationTrigger;
 
-const membersImporter = new MembersCSVImporter({
-    storagePath: config.getContentPath('data'),
-    getTimezone: () => settingsCache.get('timezone'),
-    getMembersRepository: async () => {
-        const api = await module.exports.api;
-        return api.members;
-    },
-    getDefaultTier: () => {
-        return tiersService.api.readDefaultTier();
-    },
-    sendEmail: ghostMailer.send.bind(ghostMailer),
-    isSet: flag => labsService.isSet(flag),
-    addJob: jobsService.addJob.bind(jobsService),
-    knex: db.knex,
-    urlFor: urlUtils.urlFor.bind(urlUtils),
-    context: {
-        importer: true
-    }
-});
+const initMembersCSVImporter = ({stripeAPIService}) => {
+    return makeMembersCSVImporter({
+        storagePath: config.getContentPath('data'),
+        getTimezone: () => settingsCache.get('timezone'),
+        getMembersRepository: async () => {
+            const api = await module.exports.api;
+            return api.members;
+        },
+        getDefaultTier: () => {
+            return tiersService.api.readDefaultTier();
+        },
+        getTierByName: async (name) => {
+            const tiers = await tiersService.api.browse({
+                filter: {
+                    name
+                }
+            });
 
-const processImport = async (options) => {
-    return await membersImporter.process({...options, verificationTrigger});
+            if (tiers.data.length > 0) {
+                // It is possible that there are multiple tiers with the same name so return the last one in the array -
+                // `tiersService.api.browse` returns all tiers, but without any ordering applied, so we assume that
+                // the last one in the array is the most recently created
+                return tiers.data.pop();
+            }
+
+            return null;
+        },
+        getGiftService: () => giftService.service,
+        sendEmail: ghostMailer.send.bind(ghostMailer),
+        isSet: flag => labsService.isSet(flag),
+        addJob: jobsService.addJob.bind(jobsService),
+        knex: db.knex,
+        urlFor: urlUtils.urlFor.bind(urlUtils),
+        context: {
+            importer: true
+        },
+        stripeAPIService,
+        productRepository: membersApi.productRepository
+    });
 };
 
-const updateVerificationTrigger = () => {
-    verificationTrigger = new VerificationTrigger({
-        apiTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.apiThreshold'),
-        adminTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.adminThreshold'),
-        importTriggerThreshold: _.get(config.get('hostSettings'), 'emailVerification.importThreshold'),
+const initVerificationTrigger = () => {
+    return new VerificationTrigger({
+        getApiTriggerThreshold: () => _.get(config.get('hostSettings'), 'emailVerification.apiThreshold'),
+        getAdminTriggerThreshold: () => _.get(config.get('hostSettings'), 'emailVerification.adminThreshold'),
+        getImportTriggerThreshold: () => _.get(config.get('hostSettings'), 'emailVerification.importThreshold'),
         isVerified: () => config.get('hostSettings:emailVerification:verified') === true,
         isVerificationRequired: () => settingsCache.get('email_verification_required') === true,
-        sendVerificationEmail: async ({subject, message, amountTriggered}) => {
-            const escalationAddress = config.get('hostSettings:emailVerification:escalationAddress');
-            const fromAddress = config.get('user_email');
-
-            if (escalationAddress) {
-                await ghostMailer.send({
-                    subject,
-                    html: tpl(message, {
-                        amountTriggered: amountTriggered,
-                        siteUrl: urlUtils.getSiteUrl()
-                    }),
-                    forceTextContent: true,
-                    from: fromAddress,
-                    to: escalationAddress
-                });
-            }
-        },
+        setVerificationRequired: value => settingsCache.set('email_verification_required', {value}),
+        sendVerificationWebhook: verificationWebhookService.sendVerificationWebhook.bind(verificationWebhookService),
         membersStats,
         Settings: models.Settings,
         eventRepository: membersApi.events
@@ -118,6 +123,7 @@ module.exports = {
                 });
             }
         }
+
         if (!membersApi) {
             membersApi = createMembersApiInstance(membersConfig);
 
@@ -130,19 +136,19 @@ module.exports = {
             cookieSecure: urlUtils.isSSL(urlUtils.getSiteUrl()),
             cookieKeys: [settingsCache.get('theme_session_secret')],
             cookieName: 'ghost-members-ssr',
+            cookiePath: urlUtils.getSubdir() || '/',
             getMembersApi: () => module.exports.api
         });
 
-        updateVerificationTrigger();
+        if (!verificationTrigger) {
+            verificationTrigger = initVerificationTrigger();
+        }
+        module.exports.verificationTrigger = verificationTrigger;
 
-        (async () => {
-            try {
-                const collection = await models.SingleUseToken.fetchAll();
-                await collection.invokeThen('destroy');
-            } catch (err) {
-                logging.error(err);
-            }
-        })();
+        const membersCSVImporter = initMembersCSVImporter({stripeAPIService: stripeService.api});
+        module.exports.processImport = async (options) => {
+            return await membersCSVImporter.process({...options, verificationTrigger});
+        };
 
         if (!env?.startsWith('testing')) {
             const membersMigrationJobName = 'members-migrations';
@@ -159,6 +165,16 @@ module.exports = {
 
         // Schedule daily cron job to clean expired comp subs
         memberJobs.scheduleExpiredCompCleanupJob();
+
+        // Schedule daily cron job to clean expired tokens
+        memberJobs.scheduleTokenCleanupJob();
+
+        // Schedule daily cron jobs to clean up consumed/expired gifts and to
+        // send gift reminder emails.
+        if (labsService.isSet('giftSubscriptions')) {
+            memberJobs.scheduleGiftCleanupJob();
+            memberJobs.scheduleGiftReminderJob();
+        }
     },
     contentGating: require('./content-gating'),
 
@@ -169,16 +185,19 @@ module.exports = {
     },
 
     ssr: null,
+    verificationTrigger: null,
+
+    requestIntegrityTokenProvider: new RequestIntegrityTokenProvider({
+        themeSecret: settingsCache.get('theme_session_secret'),
+        tokenDuration: 1000 * 60 * 5
+    }),
 
     stripeConnect: require('./stripe-connect'),
 
-    processImport: processImport,
+    processImport: null,
 
     stats: membersStats,
-    export: require('./exporter/query'),
-
-    // Only for tests
-    _updateVerificationTrigger: updateVerificationTrigger
+    export: require('./exporter/query')
 };
 
 module.exports.middleware = require('./middleware');

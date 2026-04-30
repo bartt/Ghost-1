@@ -1,11 +1,15 @@
-const assert = require('assert');
+const assert = require('node:assert/strict');
 const cheerio = require('cheerio');
+const sinon = require('sinon');
+const config = require('../../../core/shared/config');
 const moment = require('moment');
 const testUtils = require('../../utils');
 const models = require('../../../core/server/models');
+const api = require('../../../core/server/api/endpoints');
+const urlUtilsHelper = require('../../utils/url-utils');
 
-const {agentProvider, fixtureManager, matchers} = require('../../utils/e2e-framework');
-const {anyArray, anyEtag, anyUuid, anyISODateTimeWithTZ} = matchers;
+const {agentProvider, fixtureManager, matchers, mockManager} = require('../../utils/e2e-framework');
+const {anyArray, anyContentVersion, anyErrorId, anyEtag, anyUuid, anyISODateTimeWithTZ} = matchers;
 
 const postMatcher = {
     published_at: anyISODateTimeWithTZ,
@@ -14,13 +18,35 @@ const postMatcher = {
     uuid: anyUuid
 };
 
-const postMatcheShallowIncludes = Object.assign(
+const postMatcherShallowIncludes = Object.assign(
     {},
     postMatcher, {
         tags: anyArray,
         authors: anyArray
     }
 );
+
+async function trackDb(fn, skip) {
+    const db = require('../../../core/server/data/db');
+    if (db?.knex?.client?.config?.client !== 'sqlite3') {
+        return skip();
+    }
+    /** @type {import('sqlite3').Database} */
+    const database = db.knex.client;
+
+    const queries = [];
+    function handler(/** @type {{sql: string}} */ query) {
+        queries.push(query);
+    }
+
+    database.on('query', handler);
+
+    await fn();
+
+    database.off('query', handler);
+
+    return queries;
+}
 
 describe('Posts Content API', function () {
     let agent;
@@ -40,10 +66,11 @@ describe('Posts Content API', function () {
         const res = await agent.get('posts/')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
-                posts: new Array(11)
+                posts: new Array(13)
                     .fill(postMatcher)
             });
 
@@ -51,25 +78,27 @@ describe('Posts Content API', function () {
         assert.equal(res.body.posts[6].slug, 'integrations', 'Default order "published_at desc" check');
 
         // kitchen sink
-        assert.equal(res.body.posts[9].slug, fixtureManager.get('posts', 1).slug);
+        assert.equal(res.body.posts[11].slug, fixtureManager.get('posts', 1).slug);
 
-        let urlParts = new URL(res.body.posts[9].feature_image);
-        assert.equal(urlParts.protocol, 'http:');
-        assert.equal(urlParts.host, '127.0.0.1:2369');
+        const configUrl = new URL(config.get('url'));
+        let urlParts = new URL(res.body.posts[11].feature_image);
+        assert.equal(urlParts.protocol, configUrl.protocol);
+        assert.equal(urlParts.host, configUrl.host);
 
-        urlParts = new URL(res.body.posts[9].url);
-        assert.equal(urlParts.protocol, 'http:');
-        assert.equal(urlParts.host, '127.0.0.1:2369');
+        urlParts = new URL(res.body.posts[11].url);
+        assert.equal(urlParts.protocol, configUrl.protocol);
+        assert.equal(urlParts.host, configUrl.host);
 
-        const $ = cheerio.load(res.body.posts[9].html);
+        const $ = cheerio.load(res.body.posts[11].html);
         urlParts = new URL($('img').attr('src'));
-        assert.equal(urlParts.protocol, 'http:');
-        assert.equal(urlParts.host, '127.0.0.1:2369');
+        assert.equal(urlParts.protocol, configUrl.protocol);
+        assert.equal(urlParts.host, configUrl.host);
 
-        assert.equal(res.body.posts[7].slug, 'not-so-short-bit-complex');
-        assert.match(res.body.posts[7].html, /<a href="http:\/\/127.0.0.1:2369\/about#nowhere" title="Relative URL/);
-        assert.equal(res.body.posts[9].slug, 'ghostly-kitchen-sink');
-        assert.match(res.body.posts[9].html, /<img src="http:\/\/127.0.0.1:2369\/content\/images\/lol.jpg"/);
+        const escapedUrl = config.get('url').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        assert.equal(res.body.posts[9].slug, 'not-so-short-bit-complex');
+        assert.match(res.body.posts[9].html, new RegExp(`<a href="${escapedUrl}/about#nowhere" title="Relative URL`));
+        assert.equal(res.body.posts[11].slug, 'ghostly-kitchen-sink');
+        assert.match(res.body.posts[11].html, new RegExp(`<img src="${escapedUrl}/content/images/lol.jpg"`));
     });
 
     it('Cannot request mobiledoc or lexical formats', async function () {
@@ -77,7 +106,31 @@ describe('Posts Content API', function () {
             .get(`posts/?formats=mobiledoc,lexical`)
             .expectStatus(200)
             .matchBodySnapshot({
-                posts: new Array(11).fill(postMatcher)
+                posts: new Array(13).fill(postMatcher)
+            });
+    });
+
+    it('Cannot request mobiledoc or lexical fields', async function () {
+        await agent
+            .get(`posts/?fields=mobiledoc,lexical,published_at,created_at,updated_at,uuid`)
+            .expectStatus(200)
+            .matchBodySnapshot({
+                posts: new Array(13).fill(postMatcher)
+            });
+    });
+
+    it('Errors upon invalid filter value', async function () {
+        if (process.env.NODE_ENV !== 'testing-mysql') {
+            this.skip();
+        }
+
+        await agent
+            .get(`posts/?filter=published_at%3A%3C%271715091791890%27`)
+            .expectStatus(422)
+            .matchBodySnapshot({
+                errors: [{
+                    id: anyErrorId
+                }]
             });
     });
 
@@ -85,6 +138,7 @@ describe('Posts Content API', function () {
         const res = await agent.get('posts/?filter=tag:kitchen-sink,featured:true&include=tags')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -109,7 +163,8 @@ describe('Posts Content API', function () {
             } else {
                 const tag = post.tags
                     .map(t => t.slug)
-                    .filter(s => s === 'kitchen-sink');
+                    .filter(s => s === 'kitchen-sink')
+                    .pop();
                 assert.equal(tag, 'kitchen-sink', `Each post must either be featured or have the tag 'kitchen-sink'`);
             }
         });
@@ -120,16 +175,17 @@ describe('Posts Content API', function () {
             .get('posts/?filter=authors:[joe-bloggs,pat,ghost,slimer-mcectoplasm]&include=authors')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
-                posts: new Array(11)
+                posts: new Array(13)
                     .fill(postMatcher)
             });
 
         const jsonResponse = res.body;
 
-        assert.equal(jsonResponse.posts[0].slug, 'not-so-short-bit-complex', 'The API orders by number of matched authors');
+        assert.equal(jsonResponse.posts[0].slug, 'welcome', 'The API orders by number of matched authors, then by published_at desc, then by id desc');
 
         const primaryAuthors = jsonResponse.posts.map((post) => {
             return post.primary_author.slug;
@@ -142,7 +198,7 @@ describe('Posts Content API', function () {
         });
 
         assert.equal(ghostPrimaryAuthors.length, 7, `Each post must either have the author 'joe-bloggs' or 'ghost', 'pat' is non existing author`);
-        assert.equal(joePrimaryAuthors.length, 4, `Each post must either have the author 'joe-bloggs' or 'ghost', 'pat' is non existing author`);
+        assert.equal(joePrimaryAuthors.length, 6, `Each post must either have the author 'joe-bloggs' or 'ghost', 'pat' is non existing author`);
     });
 
     it('Can request fields of posts', async function () {
@@ -150,6 +206,7 @@ describe('Posts Content API', function () {
             .get('posts/?&fields=url')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot();
@@ -160,11 +217,12 @@ describe('Posts Content API', function () {
             .get('posts/?include=tags,authors')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
-                posts: new Array(11)
-                    .fill(postMatcheShallowIncludes)
+                posts: new Array(13)
+                    .fill(postMatcherShallowIncludes)
             });
     });
 
@@ -174,10 +232,11 @@ describe('Posts Content API', function () {
             .header('Origin', 'https://example.com')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
-                posts: new Array(11)
+                posts: new Array(13)
                     .fill(postMatcher)
             });
     });
@@ -193,6 +252,7 @@ describe('Posts Content API', function () {
             .get('posts/?limit=1')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -207,6 +267,7 @@ describe('Posts Content API', function () {
             .get(`posts/?limit=1&filter=${createFilter(publishedAt, `<`)}`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -223,6 +284,7 @@ describe('Posts Content API', function () {
             .get(`posts/?limit=1&filter=${createFilter(publishedAt2, `>`)}`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -239,6 +301,7 @@ describe('Posts Content API', function () {
             .get(`posts/${fixtureManager.get('posts', 0).id}/`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -259,7 +322,7 @@ describe('Posts Content API', function () {
             .get(`posts/${publicPost.id}/?include=tiers`)
             .expectStatus(200);
         const publicPostData = publicPostRes.body.posts[0];
-        publicPostData.tiers.length.should.eql(2);
+        assert.equal(publicPostData.tiers.length, 2);
     });
 
     it('Can include free and paid tiers for members only post', async function () {
@@ -274,7 +337,7 @@ describe('Posts Content API', function () {
             .get(`posts/${membersPost.id}/?include=tiers`)
             .expectStatus(200);
         const membersPostData = membersPostRes.body.posts[0];
-        membersPostData.tiers.length.should.eql(2);
+        assert.equal(membersPostData.tiers.length, 2);
     });
 
     it('Can include only paid tier for paid post', async function () {
@@ -289,7 +352,7 @@ describe('Posts Content API', function () {
             .get(`posts/${paidPost.id}/?include=tiers`)
             .expectStatus(200);
         const paidPostData = paidPostRes.body.posts[0];
-        paidPostData.tiers.length.should.eql(1);
+        assert.equal(paidPostData.tiers.length, 1);
     });
 
     it('Can include specific tier for post with tiers visibility', async function () {
@@ -316,7 +379,7 @@ describe('Posts Content API', function () {
 
         const tiersPostData = tiersPostRes.body.posts[0];
 
-        tiersPostData.tiers.length.should.eql(1);
+        assert.equal(tiersPostData.tiers.length, 1);
     });
 
     it('Can use post excerpt as field', async function () {
@@ -331,5 +394,227 @@ describe('Posts Content API', function () {
             .get(`posts/?fields=plaintext`)
             .expectStatus(200)
             .matchBodySnapshot();
+    });
+
+    it('Adds ?ref tags', async function () {
+        const post = await models.Post.add({
+            title: 'title',
+            status: 'published',
+            slug: 'add-ref-tags',
+            mobiledoc: JSON.stringify({version: '0.3.1',atoms: [],cards: [['html',{html: '<a href="https://example.com">Link</a><a href="invalid">Test</a>'}]],markups: [],sections: [[10,0],[1,'p',[]]],ghostVersion: '4.0'})
+        }, {context: {internal: true}});
+
+        let response = await agent
+            .get(`posts/${post.id}/`)
+            .expectStatus(200);
+        assert(response.body.posts[0].html.includes('<a href="https://example.com/?ref=127.0.0.1">Link</a><a href="invalid">Test</a>'), 'Html not expected (should contain ?ref): ' + response.body.posts[0].html);
+
+        // Disable outbound link tracking
+        mockManager.mockSetting('outbound_link_tagging', false);
+        response = await agent
+            .get(`posts/${post.id}/`)
+            .expectStatus(200);
+        assert(response.body.posts[0].html.includes('<a href="https://example.com">Link</a><a href="invalid">Test</a>'), 'Html not expected: ' + response.body.posts[0].html);
+    });
+
+    it('Does not select * by default', async function () {
+        let queries = await trackDb(() => agent.get('posts/?limit=all').expectStatus(200), this.skip.bind(this));
+        let postsRelatedQueries = queries.filter(q => q.sql.includes('`posts`'));
+        for (const query of postsRelatedQueries) {
+            const sqlWithoutCount = query.sql.replace(/count\(\*\)/g, '');
+            assert(!sqlWithoutCount.includes('*'), 'Query should not select *');
+        }
+
+        queries = await trackDb(() => agent.get('posts/?limit=3').expectStatus(200), this.skip.bind(this));
+        postsRelatedQueries = queries.filter(q => q.sql.includes('`posts`'));
+        for (const query of postsRelatedQueries) {
+            const sqlWithoutCount = query.sql.replace(/count\(\*\)/g, '');
+            assert(!sqlWithoutCount.includes('*'), 'Query should not select *');
+        }
+
+        queries = await trackDb(() => agent.get('posts/?include=tags,authors').expectStatus(200), this.skip.bind(this));
+        postsRelatedQueries = queries.filter(q => q.sql.includes('`posts`'));
+        for (const query of postsRelatedQueries) {
+            const sqlWithoutCount = query.sql.replace(/count\(\*\)/g, '');
+            assert(!sqlWithoutCount.includes('*'), 'Query should not select *');
+        }
+    });
+
+    it('Can skip pagination counts when skipPagination is true', async function () {
+        const queries = await trackDb(() => {
+            return api.postsPublic.browse({
+                filter: 'published_at:>\'2015-07-20\'',
+                skipPagination: true,
+                limit: 1,
+                order: 'published_at asc',
+                context: {}
+            });
+        }, this.skip.bind(this));
+
+        const postsCountQueries = queries.filter((query) => {
+            return query.sql.includes('count(') && query.sql.includes('`posts`');
+        });
+
+        assert.equal(postsCountQueries.length, 0);
+    });
+
+    it('Strips out gated blocks not viewable by anonymous viewers ', async function () {
+        const post = await models.Post.add({
+            title: 'title',
+            status: 'published',
+            slug: 'gated-blocks',
+            lexical: JSON.stringify({root: {children: [{type: 'html',version: 1,html: '<p>Visible to free/paid members</p>',visibility: {web: {nonMember: false,memberSegment: 'status:free,status:-free'},email: {memberSegment: ''}}},{type: 'html',version: 1,html: '<p>Visible to anonymous viewers</p>',visibility: {web: {nonMember: true,memberSegment: ''},email: {memberSegment: ''}}},{children: [],direction: null,format: '',indent: 0,type: 'paragraph',version: 1}],direction: null,format: '',indent: 0,type: 'root',version: 1}})
+        }, {context: {internal: true}});
+
+        const response = await agent
+            .get(`posts/${post.id}/`)
+            .expectStatus(200);
+
+        assert.doesNotMatch(response.body.posts[0].html, /Visible to free\/paid members/);
+        assert.match(response.body.posts[0].html, /Visible to anonymous viewers/);
+    });
+
+    it('has consistent ordering of posts across pages with the same published_at timestamp', async function () {
+        const publishedAt = moment().toDate().toISOString();
+
+        const post1 = await models.Post.add({
+            title: 'title',
+            status: 'published',
+            published_at: publishedAt,
+            slug: 'consistent-ordering-1',
+            tags: [{slug: 'consistent-order-test'}],
+            mobiledoc: testUtils.DataGenerator.markdownToMobiledoc('post 1')
+        }, {context: {internal: true}});
+
+        const post2 = await models.Post.add({
+            title: 'title',
+            status: 'published',
+            published_at: publishedAt,
+            slug: 'consistent-ordering-2',
+            tags: [{slug: 'consistent-order-test'}],
+            mobiledoc: testUtils.DataGenerator.markdownToMobiledoc('post 2')
+        }, {context: {internal: true}});
+
+        const page1Response = await agent
+            .get('posts/?filter=tags:consistent-order-test&page=1&limit=1')
+            .expectStatus(200);
+
+        const page2Response = await agent
+            .get('posts/?filter=tags:consistent-order-test&page=2&limit=1')
+            .expectStatus(200);
+
+        // published_at desc, id desc. First page should have post 2, second page should have post 1.
+        assert.equal(page1Response.body.posts[0].id, post2.id, 'First page should have post 2');
+        assert.equal(page2Response.body.posts[0].id, post1.id, 'Second post should have post 1');
+    });
+
+    describe('URL transformations', function () {
+        const siteUrl = config.get('url');
+        const cdnUrl = 'https://cdn.example.com';
+
+        afterEach(function () {
+            sinon.restore();
+        });
+
+        it('Can read Mobiledoc post with all URLs as absolute site URLs', async function () {
+            const res = await agent
+                .get('posts/?filter=slug:post-with-all-media-types-mobiledoc')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+
+            assert.equal(post.feature_image, `${siteUrl}/content/images/feature.jpg`);
+            assert(post.html.includes(`${siteUrl}/content/images/inline.jpg`));
+            assert(post.html.includes(`${siteUrl}/content/files/document.pdf`));
+            assert(post.html.includes(`${siteUrl}/content/media/video.mp4`));
+            assert(post.html.includes(`${siteUrl}/content/media/audio.mp3`));
+            assert(post.html.includes(`${siteUrl}/content/images/snippet-inline.jpg`));
+            assert(post.html.includes(`${siteUrl}/content/files/snippet-document.pdf`));
+            assert(post.html.includes(`${siteUrl}/content/media/snippet-video.mp4`));
+            assert(post.html.includes(`${siteUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.html.includes('__GHOST_URL__'));
+        });
+
+        it('Can read Lexical post with all URLs as absolute site URLs', async function () {
+            const res = await agent
+                .get('posts/?filter=slug:post-with-all-media-types-lexical')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+
+            assert.equal(post.feature_image, `${siteUrl}/content/images/feature.jpg`);
+            assert(post.html.includes(`${siteUrl}/content/images/inline.jpg`));
+            assert(post.html.includes(`${siteUrl}/content/files/document.pdf`));
+            assert(post.html.includes(`${siteUrl}/content/media/video.mp4`));
+            assert(post.html.includes(`${siteUrl}/content/media/audio.mp3`));
+            assert(post.html.includes(`${siteUrl}/content/images/snippet-inline.jpg`));
+            assert(post.html.includes(`${siteUrl}/content/files/snippet-document.pdf`));
+            assert(post.html.includes(`${siteUrl}/content/media/snippet-video.mp4`));
+            assert(post.html.includes(`${siteUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.html.includes('__GHOST_URL__'));
+        });
+
+        it('Can read Mobiledoc post with CDN URLs when configured', async function () {
+            urlUtilsHelper.stubUrlUtilsWithCdn({
+                assetBaseUrls: {image: cdnUrl, media: cdnUrl, files: cdnUrl}
+            }, sinon);
+
+            const res = await agent
+                .get('posts/?filter=slug:post-with-all-media-types-mobiledoc')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+
+            // All assets use CDN URL
+            assert.equal(post.feature_image, `${cdnUrl}/content/images/feature.jpg`);
+            assert(post.html.includes(`${cdnUrl}/content/images/inline.jpg`));
+            assert(post.html.includes(`${cdnUrl}/content/files/document.pdf`));
+            assert(post.html.includes(`${cdnUrl}/content/media/video.mp4`));
+            assert(post.html.includes(`${cdnUrl}/content/media/audio.mp3`));
+            // Video/audio thumbnails use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/images/video-thumb.jpg`));
+            // Gallery images use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/images/gallery-1.jpg`));
+            assert(post.html.includes(`${cdnUrl}/content/images/gallery-2.jpg`));
+            // Inserted snippet use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/images/snippet-inline.jpg`));
+            assert(post.html.includes(`${cdnUrl}/content/files/snippet-document.pdf`));
+            assert(post.html.includes(`${cdnUrl}/content/media/snippet-video.mp4`));
+            assert(post.html.includes(`${cdnUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.html.includes('__GHOST_URL__'));
+        });
+
+        it('Can read Lexical post with CDN URLs when configured', async function () {
+            urlUtilsHelper.stubUrlUtilsWithCdn({
+                assetBaseUrls: {media: cdnUrl, files: cdnUrl, image: cdnUrl}
+            }, sinon);
+
+            const res = await agent
+                .get('posts/?filter=slug:post-with-all-media-types-lexical')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+
+            // Images use CDN URL
+            assert.equal(post.feature_image, `${cdnUrl}/content/images/feature.jpg`);
+            assert(post.html.includes(`${cdnUrl}/content/images/inline.jpg`));
+            // Video/audio thumbnails use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/images/video-thumb.jpg`));
+            assert(post.html.includes(`${cdnUrl}/content/images/audio-thumb.jpg`));
+            // Gallery images use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/images/gallery-1.jpg`));
+            assert(post.html.includes(`${cdnUrl}/content/images/gallery-2.jpg`));
+            // Media/files use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/files/document.pdf`));
+            assert(post.html.includes(`${cdnUrl}/content/media/video.mp4`));
+            assert(post.html.includes(`${cdnUrl}/content/media/audio.mp3`));
+            // Inserted snippet images use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/images/snippet-inline.jpg`));
+            // Inserted snippet media/files use CDN URL
+            assert(post.html.includes(`${cdnUrl}/content/files/snippet-document.pdf`));
+            assert(post.html.includes(`${cdnUrl}/content/media/snippet-video.mp4`));
+            assert(post.html.includes(`${cdnUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.html.includes('__GHOST_URL__'));
+        });
     });
 });

@@ -1,17 +1,22 @@
-const Promise = require('bluebird');
 const tpl = require('@tryghost/tpl');
 const errors = require('@tryghost/errors');
 const models = require('../../models');
+const {rejectContentApiRestrictedFieldsTransformer} = require('./utils/api-filter-utils');
+
 const ALLOWED_INCLUDES = ['count.posts'];
 
 const messages = {
     notFound: 'Author not found.'
 };
 
-module.exports = {
+/** @type {import('@tryghost/api-framework').Controller} */
+const controller = {
     docName: 'authors',
 
     browse: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'filter',
@@ -29,11 +34,18 @@ module.exports = {
         },
         permissions: true,
         query(frame) {
-            return models.Author.findPage(frame.options);
+            const options = {
+                ...frame.options,
+                mongoTransformer: rejectContentApiRestrictedFieldsTransformer
+            };
+            return models.Author.findPage(options);
         }
     },
 
     read: {
+        headers: {
+            cacheInvalidate: false
+        },
         options: [
             'include',
             'filter',
@@ -53,17 +65,22 @@ module.exports = {
             }
         },
         permissions: true,
-        query(frame) {
-            return models.Author.findOne(frame.data, frame.options)
-                .then((model) => {
-                    if (!model) {
-                        return Promise.reject(new errors.NotFoundError({
-                            message: tpl(messages.notFound)
-                        }));
-                    }
+        async query(frame) {
+            const options = {
+                ...frame.options,
+                mongoTransformer: rejectContentApiRestrictedFieldsTransformer
+            };
 
-                    return model;
+            const model = await models.Author.findOne(frame.data, options);
+            if (!model) {
+                throw new errors.NotFoundError({
+                    message: tpl(messages.notFound)
                 });
+            }
+
+            return model;
         }
     }
 };
+
+module.exports = controller;

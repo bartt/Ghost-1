@@ -1,21 +1,48 @@
 const {agentProvider, fixtureManager, matchers, mockManager} = require('../../utils/e2e-framework');
-const {anyEtag, anyErrorId} = matchers;
-const assert = require('assert');
+const {anyEtag, anyErrorId, anyContentVersion, anyString} = matchers;
+const assert = require('node:assert/strict');
+const {assertMatchSnapshot} = require('../../utils/assertions');
+const config = require('../../../core/shared/config');
+const sinon = require('sinon');
+const escapeRegExp = require('lodash/escapeRegExp');
+const settingsHelpers = require('../../../core/server/services/settings-helpers');
+const urlUtilsHelper = require('../../utils/url-utils');
 
 // @TODO: factor out these requires
 const ObjectId = require('bson-objectid').default;
 const testUtils = require('../../utils');
 const models = require('../../../core/server/models/index');
+const logging = require('@tryghost/logging');
+
+function testCleanedSnapshot(html, cleaned) {
+    for (const [key, value] of Object.entries(cleaned)) {
+        html = html.replace(new RegExp(escapeRegExp(key), 'g'), value);
+    }
+    assertMatchSnapshot({html});
+}
+
+const matchEmailPreviewBody = {
+    email_previews: [
+        {
+            html: anyString,
+            plaintext: anyString
+        }
+    ]
+};
 
 describe('Email Preview API', function () {
     let agent;
 
-    beforeEach(function () {
-        mockManager.mockLabsDisabled('emailStability');
-    });
-
     afterEach(function () {
         mockManager.restore();
+        sinon.restore();
+    });
+
+    beforeEach(function () {
+        mockManager.mockMailgun();
+        sinon.stub(settingsHelpers, 'getMembersValidationKey').returns('test-validation-key');
+        // Stub Date.getFullYear to return a fixed year for consistent snapshots
+        sinon.stub(Date.prototype, 'getFullYear').returns(2025);
     });
 
     before(async function () {
@@ -29,6 +56,7 @@ describe('Email Preview API', function () {
             await agent.get('email_previews/posts/abcd1234abcd1234abcd1234/')
                 .expectStatus(404)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
                 .matchBodySnapshot({
@@ -39,16 +67,27 @@ describe('Email Preview API', function () {
         });
 
         it('can read post email preview with fields', async function () {
+            const defaultNewsletter = await models.Newsletter.getDefaultNewsletter();
             await agent
                 .get(`email_previews/posts/${fixtureManager.get('posts', 0).id}/`)
                 .expectStatus(200)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
-                .matchBodySnapshot();
+                .matchBodySnapshot(matchEmailPreviewBody)
+                .expect(({body}) => {
+                    testCleanedSnapshot(body.email_previews[0].html, {
+                        [defaultNewsletter.get('uuid')]: 'requested-newsletter-uuid'
+                    });
+                    testCleanedSnapshot(body.email_previews[0].plaintext, {
+                        [defaultNewsletter.get('uuid')]: 'requested-newsletter-uuid'
+                    });
+                });
         });
 
         it('can read post email preview with email card and replacements', async function () {
+            const defaultNewsletter = await models.Newsletter.getDefaultNewsletter();
             const post = testUtils.DataGenerator.forKnex.createPost({
                 id: ObjectId().toHexString(),
                 title: 'Post with email-only card',
@@ -67,12 +106,22 @@ describe('Email Preview API', function () {
                 .get(`email_previews/posts/${post.id}/`)
                 .expectStatus(200)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
-                .matchBodySnapshot();
+                .matchBodySnapshot(matchEmailPreviewBody)
+                .expect(({body}) => {
+                    testCleanedSnapshot(body.email_previews[0].html, {
+                        [defaultNewsletter.get('uuid')]: 'requested-newsletter-uuid'
+                    });
+                    testCleanedSnapshot(body.email_previews[0].plaintext, {
+                        [defaultNewsletter.get('uuid')]: 'requested-newsletter-uuid'
+                    });
+                });
         });
 
         it('has custom content transformations for email compatibility', async function () {
+            const defaultNewsletter = await models.Newsletter.getDefaultNewsletter();
             const post = testUtils.DataGenerator.forKnex.createPost({
                 id: ObjectId().toHexString(),
                 title: 'Post with email-only card',
@@ -91,20 +140,32 @@ describe('Email Preview API', function () {
                 .get(`email_previews/posts/${post.id}/`)
                 .expectStatus(200)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
-                .matchBodySnapshot()
+                .matchBodySnapshot(matchEmailPreviewBody)
                 .expect(({body}) => {
                     // Extra assert to ensure apostrophe is transformed
                     assert.doesNotMatch(body.email_previews[0].html, /Testing links in email excerpt and apostrophes &apos;/);
                     assert.match(body.email_previews[0].html, /Testing links in email excerpt and apostrophes &#39;/);
+
+                    testCleanedSnapshot(body.email_previews[0].html, {
+                        [defaultNewsletter.get('uuid')]: 'requested-newsletter-uuid'
+                    });
+                    testCleanedSnapshot(body.email_previews[0].plaintext, {
+                        [defaultNewsletter.get('uuid')]: 'requested-newsletter-uuid'
+                    });
                 });
         });
 
         it('uses the posts newsletter by default', async function () {
             const defaultNewsletter = await models.Newsletter.getDefaultNewsletter();
             const selectedNewsletter = fixtureManager.get('newsletters', 0);
-            defaultNewsletter.id.should.not.eql(selectedNewsletter.id, 'Should use a non-default newsletter for this test');
+            assert.notEqual(
+                defaultNewsletter.id,
+                selectedNewsletter.id,
+                'Should use a non-default newsletter for this test'
+            );
 
             const post = testUtils.DataGenerator.forKnex.createPost({
                 id: ObjectId().toHexString(),
@@ -125,13 +186,20 @@ describe('Email Preview API', function () {
                 .get(`email_previews/posts/${post.id}/`)
                 .expectStatus(200)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
-                .matchBodySnapshot()
+                .matchBodySnapshot(matchEmailPreviewBody)
                 .expect(({body}) => {
                     // Extra assert to ensure newsletter is correct
                     assert.doesNotMatch(body.email_previews[0].html, new RegExp(defaultNewsletter.get('name')));
                     assert.match(body.email_previews[0].html, new RegExp(selectedNewsletter.name));
+                    testCleanedSnapshot(body.email_previews[0].html, {
+                        [selectedNewsletter.uuid]: 'requested-newsletter-uuid'
+                    });
+                    testCleanedSnapshot(body.email_previews[0].plaintext, {
+                        [selectedNewsletter.uuid]: 'requested-newsletter-uuid'
+                    });
                 });
         });
 
@@ -139,7 +207,11 @@ describe('Email Preview API', function () {
             const defaultNewsletter = await models.Newsletter.getDefaultNewsletter();
             const selectedNewsletter = fixtureManager.get('newsletters', 0);
 
-            selectedNewsletter.id.should.not.eql(defaultNewsletter.id, 'Should use a non-default newsletter for this test');
+            assert.notEqual(
+                selectedNewsletter.id,
+                defaultNewsletter.id,
+                'Should use a non-default newsletter for this test'
+            );
 
             const post = testUtils.DataGenerator.forKnex.createPost({
                 id: ObjectId().toHexString(),
@@ -159,13 +231,112 @@ describe('Email Preview API', function () {
                 .get(`email_previews/posts/${post.id}/?newsletter=${selectedNewsletter.slug}`)
                 .expectStatus(200)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
-                .matchBodySnapshot()
+                .matchBodySnapshot(matchEmailPreviewBody)
                 .expect(({body}) => {
                     // Extra assert to ensure newsletter is correct
                     assert.doesNotMatch(body.email_previews[0].html, new RegExp(defaultNewsletter.get('name')));
                     assert.match(body.email_previews[0].html, new RegExp(selectedNewsletter.name));
+                    testCleanedSnapshot(body.email_previews[0].html, {
+                        [selectedNewsletter.uuid]: 'requested-newsletter-uuid'
+                    });
+                    testCleanedSnapshot(body.email_previews[0].plaintext, {
+                        [selectedNewsletter.uuid]: 'requested-newsletter-uuid'
+                    });
+                });
+        });
+
+        it('Mobiledoc post email preview renders with all URLs as absolute site URLs', async function () {
+            const siteUrl = config.get('url');
+            const post = await models.Post.findOne({slug: 'post-with-all-media-types-mobiledoc'});
+
+            await agent
+                .get(`email_previews/posts/${post.id}/`)
+                .expectStatus(200)
+                .expect(({body}) => {
+                    const html = body.email_previews[0].html;
+                    assert(html.includes(`${siteUrl}/content/images/feature.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/inline.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/gallery-1.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/video-thumb.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/audio-thumb.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/snippet-inline.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/snippet-video-thumb.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/snippet-audio-thumb.jpg`));
+                    assert(!html.includes('__GHOST_URL__'));
+                });
+        });
+
+        it('Lexical post email preview renders with all URLs as absolute site URLs', async function () {
+            const siteUrl = config.get('url');
+            const post = await models.Post.findOne({slug: 'post-with-all-media-types-lexical'});
+
+            await agent
+                .get(`email_previews/posts/${post.id}/`)
+                .expectStatus(200)
+                .expect(({body}) => {
+                    const html = body.email_previews[0].html;
+                    assert(html.includes(`${siteUrl}/content/images/feature.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/inline.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/gallery-1.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/video-thumb.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/audio-thumb.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/snippet-inline.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/snippet-video-thumb.jpg`));
+                    assert(html.includes(`${siteUrl}/content/images/snippet-audio-thumb.jpg`));
+                    assert(!html.includes('__GHOST_URL__'));
+                });
+        });
+
+        it('Mobiledoc post email preview renders with CDN URLs when configured', async function () {
+            const cdnUrl = 'https://cdn.example.com/c/site-uuid';
+            urlUtilsHelper.stubUrlUtilsWithCdn({
+                assetBaseUrls: {media: cdnUrl, files: cdnUrl, image: cdnUrl}
+            }, sinon);
+
+            const post = await models.Post.findOne({slug: 'post-with-all-media-types-mobiledoc'});
+
+            await agent
+                .get(`email_previews/posts/${post.id}/`)
+                .expectStatus(200)
+                .expect(({body}) => {
+                    const html = body.email_previews[0].html;
+                    assert(html.includes(`${cdnUrl}/content/images/feature.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/inline.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/gallery-1.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/video-thumb.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/audio-thumb.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/snippet-inline.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/snippet-video-thumb.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/snippet-audio-thumb.jpg`));
+                    assert(!html.includes('__GHOST_URL__'));
+                });
+        });
+
+        it('Lexical post email preview renders with CDN URLs when configured', async function () {
+            const cdnUrl = 'https://cdn.example.com/c/site-uuid';
+            urlUtilsHelper.stubUrlUtilsWithCdn({
+                assetBaseUrls: {media: cdnUrl, files: cdnUrl, image: cdnUrl}
+            }, sinon);
+
+            const post = await models.Post.findOne({slug: 'post-with-all-media-types-lexical'});
+
+            await agent
+                .get(`email_previews/posts/${post.id}/`)
+                .expectStatus(200)
+                .expect(({body}) => {
+                    const html = body.email_previews[0].html;
+                    assert(html.includes(`${cdnUrl}/content/images/feature.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/inline.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/gallery-1.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/video-thumb.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/audio-thumb.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/snippet-inline.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/snippet-video-thumb.jpg`));
+                    assert(html.includes(`${cdnUrl}/content/images/snippet-audio-thumb.jpg`));
+                    assert(!html.includes('__GHOST_URL__'));
                 });
         });
     });
@@ -179,6 +350,7 @@ describe('Email Preview API', function () {
                 })
                 .expectStatus(204)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
                 .expectEmptyBody();
@@ -198,6 +370,7 @@ describe('Email Preview API', function () {
                 })
                 .expectStatus(204)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
                 .expectEmptyBody();
@@ -217,6 +390,7 @@ describe('Email Preview API', function () {
                 })
                 .expectStatus(204)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
                 .expectEmptyBody();
@@ -229,6 +403,7 @@ describe('Email Preview API', function () {
         });
 
         it('cannot send test email', async function () {
+            const loggingStub = sinon.stub(logging, 'error');
             await agent
                 .post(`email_previews/posts/${fixtureManager.get('posts', 0).id}/`)
                 .body({
@@ -236,6 +411,7 @@ describe('Email Preview API', function () {
                 })
                 .expectStatus(403)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
                 .matchBodySnapshot({
@@ -243,6 +419,7 @@ describe('Email Preview API', function () {
                         id: anyErrorId
                     }]
                 });
+            sinon.assert.calledOnce(loggingStub);
         });
     });
 
@@ -252,6 +429,7 @@ describe('Email Preview API', function () {
         });
 
         it('cannot send test email', async function () {
+            const loggingStub = sinon.stub(logging, 'error');
             await agent
                 .post(`email_previews/posts/${fixtureManager.get('posts', 0).id}/`)
                 .body({
@@ -259,6 +437,7 @@ describe('Email Preview API', function () {
                 })
                 .expectStatus(403)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
                 .matchBodySnapshot({
@@ -266,6 +445,7 @@ describe('Email Preview API', function () {
                         id: anyErrorId
                     }]
                 });
+            sinon.assert.calledOnce(loggingStub);
         });
     });
 });

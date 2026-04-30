@@ -1,8 +1,6 @@
-const errors = require('@tryghost/errors');
 const _ = require('lodash');
-const should = require('should');
+const assert = require('node:assert/strict');
 const sinon = require('sinon');
-const Promise = require('bluebird');
 const validators = require('../../../../../../../core/server/api/endpoints/utils/validators');
 
 describe('Unit: endpoints/utils/validators/input/webhooks', function () {
@@ -26,7 +24,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.add(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 
@@ -41,7 +39,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.add(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 
@@ -56,7 +54,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.add(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 
@@ -72,7 +70,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.add(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 
@@ -89,7 +87,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.add(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 
@@ -123,27 +121,23 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                             last_triggered_status: 'strip me',
                             last_triggered_error: 'strip me',
                             created_at: 'strip me',
-                            created_by: 'strip me',
-                            updated_at: 'strip me',
-                            updated_by: 'strip me'
+                            updated_at: 'strip me'
                         }]
                     }
                 };
 
-                let result = validators.input.webhooks.add(apiConfig, frame);
+                validators.input.webhooks.add(apiConfig, frame);
 
-                frame.data.webhooks[0].name.should.equal('pass');
-                frame.data.webhooks[0].target_url.should.equal('https://example.com/target/1');
-                frame.data.webhooks[0].event.should.equal('post.published');
-                frame.data.webhooks[0].integration_id.should.equal('1234');
-                should.not.exist(frame.data.webhooks[0].status);
-                should.not.exist(frame.data.webhooks[0].last_triggered_at);
-                should.not.exist(frame.data.webhooks[0].last_triggered_status);
-                should.not.exist(frame.data.webhooks[0].last_triggered_error);
-                should.not.exist(frame.data.webhooks[0].created_at);
-                should.not.exist(frame.data.webhooks[0].created_by);
-                should.not.exist(frame.data.webhooks[0].updated_at);
-                should.not.exist(frame.data.webhooks[0].updated_by);
+                assert.equal(frame.data.webhooks[0].name, 'pass');
+                assert.equal(frame.data.webhooks[0].target_url, 'https://example.com/target/1');
+                assert.equal(frame.data.webhooks[0].event, 'post.published');
+                assert.equal(frame.data.webhooks[0].integration_id, '1234');
+                assert.equal(frame.data.webhooks[0].status, undefined);
+                assert.equal(frame.data.webhooks[0].last_triggered_at, undefined);
+                assert.equal(frame.data.webhooks[0].last_triggered_status, undefined);
+                assert.equal(frame.data.webhooks[0].last_triggered_error, undefined);
+                assert.equal(frame.data.webhooks[0].created_at, undefined);
+                assert.equal(frame.data.webhooks[0].updated_at, undefined);
             });
         });
 
@@ -177,7 +171,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                         return validators.input.webhooks.add(apiConfig, frame)
                             .then(Promise.reject)
                             .catch((err) => {
-                                err.errorType.should.equal('ValidationError');
+                                assert.equal(err.errorType, 'ValidationError');
                             });
                     });
 
@@ -203,7 +197,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.edit(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 
@@ -218,7 +212,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.edit(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 
@@ -234,7 +228,7 @@ describe('Unit: endpoints/utils/validators/input/webhooks', function () {
                 return validators.input.webhooks.edit(apiConfig, frame)
                     .then(Promise.reject)
                     .catch((err) => {
-                        err.errorType.should.equal('ValidationError');
+                        assert.equal(err.errorType, 'ValidationError');
                     });
             });
 

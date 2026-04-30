@@ -1,4 +1,3 @@
-const Promise = require('bluebird');
 const crypto = require('crypto');
 const tpl = require('@tryghost/tpl');
 
@@ -24,7 +23,7 @@ class Gravatar {
         return tpl(gravatarUrl, Object.assign(defaultOptions, options, {hash: emailHash}));
     }
 
-    lookup(userData, timeout) {
+    async lookup(userData, timeout) {
         if (this.config.isPrivacyDisabled('useGravatar')) {
             return Promise.resolve();
         }
@@ -34,21 +33,20 @@ class Gravatar {
         const testUrl = this.url(userData.email, {default: 404, rating: 'x'});
         const imageUrl = this.url(userData.email, {default: 'mp', rating: 'x'});
 
-        return Promise.resolve(this.request(testUrl, {timeout: timeout || 2 * 1000}))
-            .then(function () {
+        try {
+            await this.request(testUrl, {timeout: {request: timeout || 2 * 1000}});
+            return {
+                image: imageUrl
+            };
+        } catch (err) {
+            if (err.statusCode === 404) {
                 return {
-                    image: imageUrl
+                    image: undefined
                 };
-            })
-            .catch(function (err) {
-                if (err.statusCode === 404) {
-                    return {
-                        image: undefined
-                    };
-                }
+            }
 
-                // ignore error, just resolve with no image url
-            });
+            // ignore error, just resolve with no image url
+        }
     }
 }
 

@@ -1,29 +1,22 @@
+const assert = require('node:assert/strict');
 const {agentProvider, mockManager, fixtureManager, matchers} = require('../utils/e2e-framework');
 const {anyGhostAgent, anyObjectId, anyISODateTime, anyUuid, anyContentVersion, anyNumber} = matchers;
 
-const buildNewsletterSnapshot = (deleteMember = false) => {
+const buildNewsletterSnapshot = () => {
     const newsLetterSnapshot = {
-        id: anyObjectId,
-        uuid: anyUuid,
-        created_at: anyISODateTime,
-        updated_at: anyISODateTime
+        id: anyObjectId
     };
-
-    if (deleteMember) {
-        newsLetterSnapshot._pivot_member_id = anyObjectId;
-        newsLetterSnapshot._pivot_newsletter_id = anyObjectId;
-    }
 
     return newsLetterSnapshot;
 };
 
-const buildMemberSnapshot = (deleteMember = false) => {
+const buildMemberSnapshot = () => {
     const memberSnapshot = {
         id: anyObjectId,
         uuid: anyUuid,
         created_at: anyISODateTime,
         updated_at: anyISODateTime,
-        newsletters: new Array(1).fill(buildNewsletterSnapshot(deleteMember))
+        newsletters: new Array(1).fill(buildNewsletterSnapshot())
     };
 
     return memberSnapshot;
@@ -99,7 +92,7 @@ describe('member.* events', function () {
                 }]
             })
             .expectStatus(201);
-        
+
         const id = res.body.members[0].id;
 
         await adminAPIAgent
@@ -117,7 +110,7 @@ describe('member.* events', function () {
             .matchBodySnapshot({
                 member: {
                     current: {},
-                    previous: buildMemberSnapshot(true)
+                    previous: buildMemberSnapshot()
                 }
             });
     });
@@ -140,7 +133,7 @@ describe('member.* events', function () {
                 }]
             })
             .expectStatus(201);
-        
+
         const id = res.body.members[0].id;
 
         await adminAPIAgent
@@ -166,5 +159,47 @@ describe('member.* events', function () {
                     }
                 }
             });
+    });
+
+    it('member.edited event includes tiers when comped', async function () {
+        mockManager.mockStripe();
+
+        const webhookURL = 'https://test-webhook-receiver.example/member-comped/';
+        await webhookMockReceiver.mock(webhookURL);
+        await fixtureManager.insertWebhook({
+            event: 'member.edited',
+            url: webhookURL
+        });
+
+        const res = await adminAPIAgent
+            .post('members/')
+            .body({
+                members: [{
+                    name: 'Comped Test Member',
+                    email: 'comped-test@example.com'
+                }]
+            })
+            .expectStatus(201);
+
+        const memberId = res.body.members[0].id;
+
+        await adminAPIAgent
+            .put('members/' + memberId)
+            .body({
+                members: [{
+                    comped: true
+                }]
+            })
+            .expectStatus(200);
+
+        await webhookMockReceiver.receivedRequest();
+
+        const webhookPayload = webhookMockReceiver.body.body;
+        const current = webhookPayload.member.current;
+
+        assert.equal(current.tiers.length, 1, 'Webhook should include one tier');
+        assert.ok(current.tiers[0].id, 'Tier should have an id');
+        assert.ok(current.tiers[0].name, 'Tier should have a name');
+        assert.ok(current.tiers[0].slug, 'Tier should have a slug');
     });
 });

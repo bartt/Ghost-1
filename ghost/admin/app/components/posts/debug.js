@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import moment from 'moment-timezone';
 import {action} from '@ember/object';
-import {didCancel, task} from 'ember-concurrency';
+import {didCancel, task, timeout} from 'ember-concurrency';
 import {formatNumber} from 'ghost-admin/helpers/format-number';
 import {ghPluralize} from 'ghost-admin/helpers/gh-pluralize';
 import {inject as service} from '@ember/service';
@@ -13,13 +13,31 @@ export default class Debug extends Component {
     @service membersUtils;
     @service utils;
     @service feature;
+    @service store;
 
     @tracked emailBatches = null;
     @tracked recipientFailures = null;
     @tracked loading = true;
+    @tracked analyticsStatus = null;
+    @tracked latestEmail = null;
+    @tracked showCustomSchedule = false;
+    @tracked customBeginDate = null;
+    @tracked customEndDate = null;
 
     get post() {
         return this.args.post;
+    }
+
+    get email() {
+        return this.latestEmail ?? this.post.email;
+    }
+
+    async updateEmail() {
+        try {
+            this.latestEmail = await this.store.findRecord('email', this.post.email.id, {reload: true});
+        } catch (e) {
+            // Skip
+        }
     }
 
     get emailError() {
@@ -39,17 +57,18 @@ export default class Debug extends Component {
 
     get emailSettings() {
         return {
-            statusClass: this.post.email?.status,
-            status: this.getStatusLabel(this.post.email?.status),
-            recipientFilter: this.post.email?.recipientFilter,
-            createdAt: this.post.email?.createdAtUTC ? moment(this.post.email.createdAtUTC).format('DD MMM, YYYY, HH:mm:ss') : '',
-            submittedAt: this.post.email?.submittedAtUTC ? moment(this.post.email.submittedAtUTC).format('DD MMM, YYYY, HH:mm:ss') : '',
-            emailsSent: this.post.email?.emailCount,
-            emailsDelivered: this.post.email?.deliveredCount,
-            emailsFailed: this.post.email?.failedCount,
-            trackOpens: this.post.email?.trackOpens,
-            trackClicks: this.post.email?.trackClicks,
-            feedbackEnabled: this.post.email?.feedbackEnabled
+            statusClass: this.email?.status,
+            status: this.getStatusLabel(this.email?.status),
+            recipientFilter: this.email?.recipientFilter,
+            createdAt: this.email?.createdAtUTC ? moment(this.email.createdAtUTC).format('DD MMM, YYYY, HH:mm:ss') : '',
+            submittedAt: this.email?.submittedAtUTC ? moment(this.email.submittedAtUTC).format('DD MMM, YYYY, HH:mm:ss') : '',
+            emailsSent: this.email?.emailCount,
+            emailsDelivered: this.email?.deliveredCount,
+            emailsOpened: this.email?.openedCount,
+            emailsFailed: this.email?.failedCount,
+            trackOpens: this.email?.trackOpens,
+            trackClicks: this.email?.trackClicks,
+            feedbackEnabled: this.email?.feedbackEnabled
         };
     }
 
@@ -97,6 +116,8 @@ export default class Debug extends Component {
                     initials: this.getInitials(failure.email_recipient?.member_name || failure.email_recipient?.member_email)
                 },
                 member: {
+                    record: failure.member,
+                    id: failure.member?.id,
                     name: failure.member?.name || '',
                     email: failure.member?.email || '',
                     initials: this.getInitials(failure.member?.name)
@@ -120,6 +141,8 @@ export default class Debug extends Component {
                     initials: this.getInitials(failure.email_recipient?.member_name || failure.email_recipient?.member_email)
                 },
                 member: {
+                    record: failure.member,
+                    id: failure.member?.id,
                     name: failure.member?.name || '',
                     email: failure.member?.email || '',
                     initials: this.getInitials(failure.member?.name)
@@ -155,6 +178,8 @@ export default class Debug extends Component {
         if (this.post.email) {
             this.fetchEmailBatches();
             this.fetchRecipientFailures();
+            this.pollAnalyticsStatus.perform();
+            this.pollEmail.perform();
         }
     }
 
@@ -201,6 +226,33 @@ export default class Debug extends Component {
     }
 
     @task
+    *pollAnalyticsStatus() {
+        while (true) {
+            yield this.fetchAnalyticsStatus();
+            yield timeout(5 * 1000);
+        }
+    }
+
+    @task
+    *pollEmail() {
+        while (true) {
+            yield timeout(10 * 1000);
+            yield this.updateEmail();
+        }
+    }
+
+    async fetchAnalyticsStatus() {
+        try {
+            if (this._fetchAnalyticsStatus.isRunning) {
+                return this._fetchAnalyticsStatus.last;
+            }
+            return this._fetchAnalyticsStatus.perform();
+        } catch (e) {
+            // Skip
+        }
+    }
+
+    @task
     *_fetchRecipientFailures() {
         const data = {
             include: 'member,email_recipient',
@@ -209,5 +261,113 @@ export default class Debug extends Component {
         let statsUrl = this.ghostPaths.url.api(`/emails/${this.post.email.id}/recipient-failures`);
         let result = yield this.ajax.request(statsUrl, {data});
         this.recipientFailures = result.failures;
+    }
+
+    @task
+    *_fetchAnalyticsStatus() {
+        let statsUrl = this.ghostPaths.url.api(`/emails/${this.post.email.id}/analytics`);
+        let result = yield this.ajax.request(statsUrl);
+        this.analyticsStatus = result;
+
+        // Parse dates
+        for (const type of Object.keys(result)) {
+            if (!result[type]) {
+                result[type] = {};
+            }
+            let object = result[type];
+            for (const key of ['lastStarted', 'lastBegin', 'lastEventTimestamp']) {
+                if (object[key]) {
+                    object[key] = moment(object[key]).format('DD MMM, YYYY, HH:mm:ss.SSS');
+                } else {
+                    object[key] = 'N/A';
+                }
+            }
+
+            if (object.schedule) {
+                object = object.schedule;
+                for (const key of ['begin', 'end']) {
+                    if (object[key]) {
+                        object[key] = moment(object[key]).format('DD MMM, YYYY, HH:mm:ss.SSS');
+                    } else {
+                        object[key] = 'N/A';
+                    }
+                }
+            }
+        }
+    }
+
+    @action
+    toggleCustomSchedule() {
+        this.showCustomSchedule = !this.showCustomSchedule;
+        if (this.showCustomSchedule) {
+            this.customBeginDate = moment(this.email?.createdAtUTC).format('YYYY-MM-DDTHH:mm');
+            const createdAt = moment(this.email?.createdAtUTC);
+            const maxEnd = moment.min(moment().subtract(1, 'hour'), createdAt.clone().add(7, 'days'));
+            this.customEndDate = maxEnd.format('YYYY-MM-DDTHH:mm');
+        } else {
+            this.customBeginDate = null;
+            this.customEndDate = null;
+        }
+    }
+
+    @action
+    updateCustomBeginDate(event) {
+        this.customBeginDate = event.target.value;
+    }
+
+    @action
+    updateCustomEndDate(event) {
+        this.customEndDate = event.target.value;
+    }
+
+    @action
+    scheduleAnalytics() {
+        try {
+            if (this._scheduleAnalytics.isRunning) {
+                return this._scheduleAnalytics.last;
+            }
+            return this._scheduleAnalytics.perform();
+        } catch (e) {
+            if (!didCancel(e)) {
+                // re-throw the non-cancelation error
+                throw e;
+            }
+        }
+    }
+
+    @task
+    *_scheduleAnalytics() {
+        const url = new URL(this.ghostPaths.url.api(`/emails/${this.post.email.id}/analytics`), window.location.origin);
+        if (this.customBeginDate) {
+            url.searchParams.set('begin', new Date(this.customBeginDate).toISOString());
+        }
+        if (this.customEndDate) {
+            url.searchParams.set('end', new Date(this.customEndDate).toISOString());
+        }
+        yield this.ajax.put(url.pathname + url.search, {});
+        yield this.fetchAnalyticsStatus();
+        this.showCustomSchedule = false;
+    }
+
+    @action
+    cancelScheduleAnalytics() {
+        try {
+            if (this._cancelScheduleAnalytics.isRunning) {
+                return this._cancelScheduleAnalytics.last;
+            }
+            return this._cancelScheduleAnalytics.perform();
+        } catch (e) {
+            if (!didCancel(e)) {
+                // re-throw the non-cancelation error
+                throw e;
+            }
+        }
+    }
+
+    @task
+    *_cancelScheduleAnalytics() {
+        let statsUrl = this.ghostPaths.url.api(`/emails/analytics`);
+        yield this.ajax.delete(statsUrl, {});
+        yield this.fetchAnalyticsStatus();
     }
 }

@@ -5,6 +5,9 @@ const {http} = require('@tryghost/api-framework');
 const mw = require('./middleware');
 const config = require('../../../../../shared/config');
 
+/**
+ * @returns {import('express').Router}
+ */
 module.exports = function apiRoutes() {
     const router = express.Router('content api');
 
@@ -37,6 +40,14 @@ module.exports = function apiRoutes() {
     router.get('/newsletters', mw.authenticatePublic, http(api.newslettersPublic.browse));
     router.get('/tiers', mw.authenticatePublic, http(api.tiersPublic.browse));
     router.get('/offers/:id', mw.authenticatePublic, http(api.offersPublic.read));
+
+    // ## Recommendations
+    router.get('/recommendations', mw.authenticatePublic, http(api.recommendationsPublic.browse));
+
+    // ## Search index
+    router.get('/search-index/posts', mw.authenticatePublic, http(api.searchIndexPublic.fetchPosts));
+    router.get('/search-index/authors', mw.authenticatePublic, http(api.searchIndexPublic.fetchAuthors));
+    router.get('/search-index/tags', mw.authenticatePublic, http(api.searchIndexPublic.fetchTags));
 
     return router;
 };

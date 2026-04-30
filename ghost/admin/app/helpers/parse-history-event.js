@@ -1,9 +1,7 @@
 import Helper from '@ember/component/helper';
-import {inject as service} from '@ember/service';
+import {prefixAssetUrl} from 'ghost-admin/utils/asset-base';
 
 export default class ParseHistoryEvent extends Helper {
-    @service ghostPaths;
-
     compute([ev]) {
         const action = getAction(ev);
         const actionIcon = getActionIcon(ev);
@@ -13,8 +11,7 @@ export default class ParseHistoryEvent extends Helper {
         const actor = getActor(ev);
         const actorLinkTarget = getActorLinkTarget(ev);
 
-        const assetRoot = this.ghostPaths.assetRoot.replace(/\/$/, '');
-        const actorIcon = getActorIcon(ev, assetRoot);
+        const actorIcon = getActorIcon(ev);
 
         return {
             contextResource,
@@ -24,7 +21,8 @@ export default class ParseHistoryEvent extends Helper {
             actor,
             actorIcon,
             actorLinkTarget,
-            original: ev
+            original: ev,
+            isBulkAction: !!ev.context.count
         };
     }
 }
@@ -37,15 +35,11 @@ function getActor(ev) {
     return ev.actor;
 }
 
-function getActorIcon(ev, assetRoot) {
-    const defaultImage = `${assetRoot}/img/user-image.png`;
-
-    if (!ev.actor.id) {
-        return defaultImage;
-    }
-
-    if (!ev.actor.image) {
-        return defaultImage;
+function getActorIcon(ev) {
+    if (!ev.actor.id || !ev.actor.image) {
+        // keep path separate so asset rewriting correctly picks it up
+        const defaultImage = '/img/user-image.png';
+        return prefixAssetUrl(`assets${defaultImage}`);
     }
 
     return ev.actor.image;
@@ -88,7 +82,7 @@ function getLinkTarget(ev) {
         switch (ev.resource_type) {
         case 'page':
         case 'post':
-            if (!ev.resource.id) {
+            if (!ev.resource || !ev.resource.id) {
                 return null;
             }
 
@@ -99,11 +93,11 @@ function getLinkTarget(ev) {
             }
 
             return {
-                route: 'editor.edit',
+                route: 'lexical-editor.edit',
                 models: [resourceType, ev.resource.id]
             };
         case 'integration':
-            if (!ev.resource.id) {
+            if (!ev.resource || !ev.resource.id) {
                 return null;
             }
 
@@ -112,7 +106,7 @@ function getLinkTarget(ev) {
                 models: [ev.resource.id]
             };
         case 'offer':
-            if (!ev.resource.id) {
+            if (!ev.resource || !ev.resource.id) {
                 return null;
             }
 
@@ -121,7 +115,7 @@ function getLinkTarget(ev) {
                 models: [ev.resource.id]
             };
         case 'tag':
-            if (!ev.resource.slug) {
+            if (!ev.resource || !ev.resource.slug) {
                 return null;
             }
 
@@ -135,7 +129,7 @@ function getLinkTarget(ev) {
                 models: null
             };
         case 'user':
-            if (!ev.resource.slug) {
+            if (!ev.resource || !ev.resource.slug) {
                 return null;
             }
 
@@ -181,7 +175,19 @@ function getAction(ev) {
         }
     }
 
-    return `${resourceType} ${ev.event}`;
+    let action = ev.event;
+
+    if (ev.event === 'edited') {
+        if (ev.context.action_name) {
+            action = ev.context.action_name;
+        }
+    }
+
+    if (ev.context.count && ev.context.count > 1) {
+        return `${ev.context.count} ${resourceType}s ${action}`;
+    }
+
+    return `${resourceType} ${action}`;
 }
 
 function getContextResource(ev) {

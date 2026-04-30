@@ -1,7 +1,11 @@
 import AuthenticatedRoute from 'ghost-admin/routes/authenticated';
+import {ALL_POST_INCLUDES} from '../../adapters/post';
+import {NotFoundError} from 'ember-ajax/errors';
 import {pluralize} from 'ember-inflector';
-
+import {inject as service} from '@ember/service';
 export default class EditRoute extends AuthenticatedRoute {
+    @service feature;
+
     beforeModel(transition) {
         super.beforeModel(...arguments);
 
@@ -14,25 +18,28 @@ export default class EditRoute extends AuthenticatedRoute {
         }
     }
 
-    async model(params, transition) {
+    async model(params) {
         // eslint-disable-next-line camelcase
         let {type: modelName, post_id} = params;
 
         if (!['post', 'page'].includes(modelName)) {
-            let path = transition.intent.url.replace(/^\//, '');
-            return this.replaceWith('error404', {path, status: 404});
+            throw new NotFoundError();
         }
 
         let query = {
             // eslint-disable-next-line camelcase
-            id: post_id
+            id: post_id,
+            // we need to explicitly request post_revisions which means we need
+            // to specify every post include option
+            include: ALL_POST_INCLUDES
         };
 
         const records = await this.store.query(modelName, query);
-        const post = records.firstObject;
+        let post = records.firstObject;
 
+        // CASE: Post is in mobiledoc — convert to lexical
         if (post.mobiledoc) {
-            return this.router.transitionTo('editor.edit', post);
+            post = await post.save({adapterOptions: {convertToLexical: 1}});
         }
 
         return post;

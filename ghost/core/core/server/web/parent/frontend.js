@@ -5,7 +5,7 @@ const shared = require('../shared');
 /**
  *
  * @param {import('../../../frontend/services/routing/router-manager').RouterConfig} routerConfig
- * @returns {import('express').RequestHandler}
+ * @returns {import('express').Application}
  */
 module.exports = (routerConfig) => {
     debug('FrontendApp setup start', routerConfig);
@@ -18,6 +18,8 @@ module.exports = (routerConfig) => {
     frontendApp.use(shared.middleware.urlRedirects.frontendSSLRedirect);
 
     frontendApp.lazyUse('/members', require('../members'));
+    frontendApp.lazyUse('/webmentions', require('../webmentions'));
+    frontendApp.lazyUse('/gift', require('../gift-preview'));
     frontendApp.use('/', require('../../../frontend/web')(routerConfig));
 
     return frontendApp;

@@ -1,8 +1,13 @@
-const should = require('should');
-const assert = require('assert');
+const assert = require('node:assert/strict');
+const sinon = require('sinon');
+const {assertMatchSnapshot} = require('../../utils/assertions');
 const {agentProvider, fixtureManager, mockManager, matchers} = require('../../utils/e2e-framework');
-const {anyArray, anyEtag, anyErrorId, anyLocationFor, anyObject, anyObjectId, anyISODateTime, anyString, anyStringNumber, anyUuid, stringMatching} = matchers;
+const {anyArray, anyContentVersion, anyEtag, anyErrorId, anyLocationFor, anyObject, anyObjectId, anyISODateTime, anyString, anyStringNumber, anyUuid, stringMatching} = matchers;
+const config = require('../../../core/shared/config');
 const models = require('../../../core/server/models');
+const urlUtilsHelper = require('../../utils/url-utils');
+const escapeRegExp = require('lodash/escapeRegExp');
+const {mobiledocToLexical} = require('@tryghost/kg-converters');
 
 const tierSnapshot = {
     id: anyObjectId,
@@ -24,6 +29,17 @@ const matchPostShallowIncludes = {
     updated_at: anyISODateTime,
     published_at: anyISODateTime
 };
+
+function testCleanedSnapshot(text, ignoreReplacements) {
+    for (const {match, replacement} of ignoreReplacements) {
+        if (match instanceof RegExp) {
+            text = text.replace(match, replacement);
+        } else {
+            text = text.replace(new RegExp(escapeRegExp(match), 'g'), replacement);
+        }
+    }
+    assertMatchSnapshot({text});
+}
 
 const createLexical = (text) => {
     return JSON.stringify({
@@ -79,16 +95,27 @@ describe('Posts API', function () {
         agent = await agentProvider.getAdminAPIAgent();
         await fixtureManager.init('posts');
         await agent.loginAsOwner();
+
+        // convert inserted pages to lexical so we can test page.html reset/re-render
+        const pages = await models.Post.where('type', 'page').fetchAll();
+        for (const page of pages) {
+            const lexical = mobiledocToLexical(page.get('mobiledoc'));
+            await models.Base.knex.raw('UPDATE posts SET mobiledoc=NULL, lexical=? where id=?', [lexical, page.id]);
+        }
     });
 
-    afterEach(function () {
+    afterEach(async function () {
+        // gives pages some HTML back to alleviate test interdependence when pages are reset on create/update/delete
+        await models.Base.knex.raw('update posts set html = "<p>Testing</p>" where type = \'page\'');
+
         mockManager.restore();
     });
 
     it('Can browse', async function () {
-        const res = await agent.get('posts/?limit=2')
+        await agent.get('posts/?limit=2')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -97,14 +124,89 @@ describe('Posts API', function () {
     });
 
     it('Can browse with formats', async function () {
-        const res = await agent.get('posts/?formats=mobiledoc,lexical,html,plaintext&limit=2')
+        await agent.get('posts/?formats=mobiledoc,lexical,html,plaintext&limit=2')
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
                 posts: new Array(2).fill(matchPostShallowIncludes)
             });
+    });
+
+    describe('Export', function () {
+        it('Can export', async function () {
+            const {text} = await agent.get('posts/export')
+                .expectStatus(200)
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag,
+                    'content-disposition': stringMatching(/^Attachment; filename="post-analytics.\d{4}-\d{2}-\d{2}.csv"$/)
+                });
+
+            // body snapshot doesn't work with text/csv
+            testCleanedSnapshot(text, [
+                {
+                    match: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z/g,
+                    replacement: '2050-01-01T00:00:00.000Z'
+                }
+            ]);
+        });
+
+        it('Can export with order', async function () {
+            const {text} = await agent.get('posts/export?order=published_at%20ASC')
+                .expectStatus(200)
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag,
+                    'content-disposition': stringMatching(/^Attachment; filename="post-analytics.\d{4}-\d{2}-\d{2}.csv"$/)
+                });
+
+            // body snapshot doesn't work with text/csv
+            testCleanedSnapshot(text, [
+                {
+                    match: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z/g,
+                    replacement: '2050-01-01T00:00:00.000Z'
+                }
+            ]);
+        });
+
+        it('Can export with limit', async function () {
+            const {text} = await agent.get('posts/export?limit=1')
+                .expectStatus(200)
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag,
+                    'content-disposition': stringMatching(/^Attachment; filename="post-analytics.\d{4}-\d{2}-\d{2}.csv"$/)
+                });
+
+            // body snapshot doesn't work with text/csv
+            testCleanedSnapshot(text, [
+                {
+                    match: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z/g,
+                    replacement: '2050-01-01T00:00:00.000Z'
+                }
+            ]);
+        });
+
+        it('Can export with filter', async function () {
+            const {text} = await agent.get('posts/export?filter=featured:true')
+                .expectStatus(200)
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag,
+                    'content-disposition': stringMatching(/^Attachment; filename="post-analytics.\d{4}-\d{2}-\d{2}.csv"$/)
+                });
+
+            // body snapshot doesn't work with text/csv
+            testCleanedSnapshot(text, [
+                {
+                    match: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z/g,
+                    replacement: '2050-01-01T00:00:00.000Z'
+                }
+            ]);
+        });
     });
 
     describe('Create', function () {
@@ -116,13 +218,18 @@ describe('Posts API', function () {
             };
 
             await agent
-                .post('/posts/?formats=mobiledoc,lexical,html')
+                .post('/posts/?formats=mobiledoc,lexical,html', {
+                    headers: {
+                        'content-type': 'application/json'
+                    }
+                })
                 .body({posts: [post]})
                 .expectStatus(201)
                 .matchBodySnapshot({
-                    posts: [Object.assign(matchPostShallowIncludes, {published_at: null})]
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
                 })
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag,
                     location: anyLocationFor('posts')
                 });
@@ -142,9 +249,10 @@ describe('Posts API', function () {
                 .body({posts: [post]})
                 .expectStatus(201)
                 .matchBodySnapshot({
-                    posts: [Object.assign(matchPostShallowIncludes, {published_at: null})]
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
                 })
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag,
                     location: anyLocationFor('posts')
                 });
@@ -157,8 +265,8 @@ describe('Posts API', function () {
                 .orderBy('created_at_ts', 'desc')
                 .fetchAll();
 
-            postRevisions.length.should.equal(1);
-            postRevisions.at(0).get('lexical').should.equal(lexical);
+            assert.equal(postRevisions.length, 1);
+            assert.equal(postRevisions.at(0).get('lexical'), lexical);
 
             // mobiledoc revision is not created
             const mobiledocRevisions = await models.MobiledocRevision
@@ -166,7 +274,27 @@ describe('Posts API', function () {
                 .orderBy('created_at_ts', 'desc')
                 .fetchAll();
 
-            mobiledocRevisions.length.should.equal(0);
+            assert.equal(mobiledocRevisions.length, 0);
+        });
+
+        it('Can create a post with html', async function () {
+            const post = {
+                title: 'HTML test',
+                html: '<p>Testing post creation with html</p>'
+            };
+
+            await agent
+                .post('/posts/?source=html&formats=mobiledoc,lexical,html')
+                .body({posts: [post]})
+                .expectStatus(201)
+                .matchBodySnapshot({
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
+                })
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag,
+                    location: anyLocationFor('posts')
+                });
         });
 
         it('Errors if both mobiledoc and lexical are present', async function () {
@@ -186,6 +314,7 @@ describe('Posts API', function () {
                     }]
                 })
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 });
         });
@@ -210,9 +339,56 @@ describe('Posts API', function () {
                 })
                 .matchHeaderSnapshot({
                     etag: anyEtag,
+                    'content-version': anyContentVersion,
                     'content-length': anyStringNumber
                 });
         });
+
+        it('Errors if feature_image_alt is too long', async function () {
+            const post = {
+                title: 'Feature image alt too long',
+                feature_image_alt: 'a'.repeat(201)
+            };
+
+            await agent
+                .post('/posts/?formats=mobiledoc,lexical,html')
+                .body({posts: [post]})
+                .expectStatus(422)
+                .matchBodySnapshot({
+                    errors: [{
+                        id: anyErrorId,
+                        // TODO: this should be `posts.feature_image_alt` but we're hitting revision errors first
+                        context: stringMatching(/.*post_revisions\.feature_image_alt] exceeds maximum length of 191 characters.*/)
+                    }]
+                });
+        });
+
+        it('invalidates preview cache when updating a draft post', async function () {
+            const post = {
+                title: 'Cache invalidation test',
+                status: 'draft'
+            };
+
+            const {body: postBody} = await agent
+                .post('/posts/?formats=mobiledoc,lexical,html')
+                .body({posts: [post]})
+                .expectStatus(201);
+
+            const [postResponse] = postBody.posts;
+
+            // check that header contains the correct cache invalidation pattern which is the post url and the post url with member_status=anonymous, free, paid
+            await agent
+                .put(`/posts/${postResponse.id}/?formats=mobiledoc,lexical,html`)
+                .body({posts: [Object.assign({}, postResponse, {status: 'draft'})]})
+                .expectStatus(200)
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag,
+                    'x-cache-invalidate': stringMatching(/^\/p\/[a-z0-9-]+\/, \/p\/[a-z0-9-]+\/\?member_status=anonymous, \/p\/[a-z0-9-]+\/\?member_status=free, \/p\/[a-z0-9-]+\/\?member_status=paid$/)
+                });
+        });
+
+        // update when updating a scheduled post
     });
 
     describe('Update', function () {
@@ -228,9 +404,10 @@ describe('Posts API', function () {
                 }]})
                 .expectStatus(201)
                 .matchBodySnapshot({
-                    posts: [Object.assign(matchPostShallowIncludes, {published_at: null})]
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
                 })
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag,
                     location: anyLocationFor('posts')
                 });
@@ -242,11 +419,12 @@ describe('Posts API', function () {
                 .body({posts: [Object.assign({}, postResponse, {mobiledoc: updatedMobiledoc})]})
                 .expectStatus(200)
                 .matchBodySnapshot({
-                    posts: [Object.assign(matchPostShallowIncludes, {published_at: null})]
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
                 })
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag,
-                    'x-cache-invalidate': anyString
+                    'x-cache-invalidate': stringMatching(/^\/p\/[a-z0-9-]+\/, \/p\/[a-z0-9-]+\/\?member_status=anonymous, \/p\/[a-z0-9-]+\/\?member_status=free, \/p\/[a-z0-9-]+\/\?member_status=paid$/)
                 });
 
             // mobiledoc revisions are created
@@ -255,9 +433,9 @@ describe('Posts API', function () {
                 .orderBy('created_at_ts', 'desc')
                 .fetchAll();
 
-            mobiledocRevisions.length.should.equal(2);
-            mobiledocRevisions.at(0).get('mobiledoc').should.equal(updatedMobiledoc);
-            mobiledocRevisions.at(1).get('mobiledoc').should.equal(originalMobiledoc);
+            assert.equal(mobiledocRevisions.length, 2);
+            assert.equal(mobiledocRevisions.at(0).get('mobiledoc'), updatedMobiledoc);
+            assert.equal(mobiledocRevisions.at(1).get('mobiledoc'), originalMobiledoc);
 
             // post revisions are not created
             const postRevisions = await models.PostRevision
@@ -265,7 +443,7 @@ describe('Posts API', function () {
                 .orderBy('created_at_ts', 'desc')
                 .fetchAll();
 
-            postRevisions.length.should.equal(0);
+            assert.equal(postRevisions.length, 0);
         });
 
         it('Can update a post with lexical', async function () {
@@ -280,9 +458,10 @@ describe('Posts API', function () {
                 }]})
                 .expectStatus(201)
                 .matchBodySnapshot({
-                    posts: [Object.assign(matchPostShallowIncludes, {published_at: null})]
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
                 })
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag,
                     location: anyLocationFor('posts')
                 });
@@ -290,15 +469,16 @@ describe('Posts API', function () {
             const [postResponse] = postBody.posts;
 
             await agent
-                .put(`/posts/${postResponse.id}/?formats=mobiledoc,lexical,html`)
+                .put(`/posts/${postResponse.id}/?formats=mobiledoc,lexical,html&save_revision=true`)
                 .body({posts: [Object.assign({}, postResponse, {lexical: updatedLexical})]})
                 .expectStatus(200)
                 .matchBodySnapshot({
-                    posts: [Object.assign(matchPostShallowIncludes, {published_at: null})]
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
                 })
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag,
-                    'x-cache-invalidate': anyString
+                    'x-cache-invalidate': stringMatching(/^\/p\/[a-z0-9-]+\/, \/p\/[a-z0-9-]+\/\?member_status=anonymous, \/p\/[a-z0-9-]+\/\?member_status=free, \/p\/[a-z0-9-]+\/\?member_status=paid$/)
                 });
 
             // post revisions are created
@@ -307,9 +487,9 @@ describe('Posts API', function () {
                 .orderBy('created_at_ts', 'desc')
                 .fetchAll();
 
-            postRevisions.length.should.equal(2);
-            postRevisions.at(0).get('lexical').should.equal(updatedLexical);
-            postRevisions.at(1).get('lexical').should.equal(originalLexical);
+            assert.equal(postRevisions.length, 2);
+            assert.equal(postRevisions.at(0).get('lexical'), updatedLexical);
+            assert.equal(postRevisions.at(1).get('lexical'), originalLexical);
 
             // mobiledoc revisions are not created
             const mobiledocRevisions = await models.MobiledocRevision
@@ -317,7 +497,63 @@ describe('Posts API', function () {
                 .orderBy('created_at_ts', 'desc')
                 .fetchAll();
 
-            mobiledocRevisions.length.should.equal(0);
+            assert.equal(mobiledocRevisions.length, 0);
+        });
+
+        describe('Access', function () {
+            describe('Visibility is set to tiers', function () {
+                it('Saves only paid tiers', async function () {
+                    const post = {
+                        title: 'Test Page',
+                        status: 'draft'
+                    };
+
+                    // @ts-ignore
+                    const products = await models.Product.findAll();
+
+                    const freeTier = products.models[0];
+                    const paidTier = products.models[1];
+
+                    const {body: pageBody} = await agent
+                        .post('/posts/', {
+                            headers: {
+                                'content-type': 'application/json'
+                            }
+                        })
+                        .body({posts: [post]})
+                        .expectStatus(201);
+
+                    const [pageResponse] = pageBody.posts;
+
+                    await agent
+                        .put(`/posts/${pageResponse.id}`)
+                        .body({
+                            posts: [{
+                                id: pageResponse.id,
+                                updated_at: pageResponse.updated_at,
+                                visibility: 'tiers',
+                                tiers: [
+                                    {id: freeTier.id},
+                                    {id: paidTier.id}
+                                ]
+                            }]
+                        })
+                        .expectStatus(200)
+                        .matchHeaderSnapshot({
+                            'content-version': anyContentVersion,
+                            etag: anyEtag,
+                            'x-cache-invalidate': stringMatching(/^\/p\/[a-z0-9-]+\/, \/p\/[a-z0-9-]+\/\?member_status=anonymous, \/p\/[a-z0-9-]+\/\?member_status=free, \/p\/[a-z0-9-]+\/\?member_status=paid$/)
+                        })
+                        .matchBodySnapshot({
+                            posts: [Object.assign({}, matchPostShallowIncludes, {
+                                published_at: null,
+                                tiers: [
+                                    {type: paidTier.get('type'), ...tierSnapshot}
+                                ]
+                            })]
+                        });
+                });
+            });
         });
     });
 
@@ -328,6 +564,7 @@ describe('Posts API', function () {
                 .expectStatus(204)
                 .expectEmptyBody()
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 });
         });
@@ -339,6 +576,7 @@ describe('Posts API', function () {
                 .delete('/posts/abcd1234abcd1234abcd1234/')
                 .expectStatus(404)
                 .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
                     etag: anyEtag
                 })
                 .matchBodySnapshot({
@@ -346,6 +584,269 @@ describe('Posts API', function () {
                         id: anyErrorId
                     }]
                 });
+        });
+    });
+
+    describe('Copy', function () {
+        it('Can copy a post', async function () {
+            const post = {
+                title: 'Test Post',
+                status: 'published'
+            };
+
+            const {body: postBody} = await agent
+                .post('/posts/?formats=mobiledoc,lexical,html', {
+                    headers: {
+                        'content-type': 'application/json'
+                    }
+                })
+                .body({posts: [post]})
+                .expectStatus(201);
+
+            const [postResponse] = postBody.posts;
+
+            await agent
+                .post(`/posts/${postResponse.id}/copy?formats=mobiledoc,lexical`)
+                .expectStatus(201)
+                .matchBodySnapshot({
+                    posts: [Object.assign({}, matchPostShallowIncludes, {published_at: null})]
+                })
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag,
+                    location: anyLocationFor('posts')
+                });
+        });
+    });
+
+    describe('Convert', function () {
+        it('can convert a mobiledoc post to lexical', async function () {
+            const mobiledoc = createMobiledoc('This is some great content.');
+            const expectedLexical = createLexical('This is some great content.');
+            const postData = {
+                title: 'Test Post',
+                status: 'published',
+                mobiledoc: mobiledoc,
+                lexical: null
+            };
+
+            const {body} = await agent
+                .post('/posts/?formats=mobiledoc,lexical,html', {
+                    headers: {
+                        'content-type': 'application/json'
+                    }
+                })
+                .body({posts: [postData]})
+                .expectStatus(201);
+
+            const [postResponse] = body.posts;
+
+            const conversionResponse = await agent
+                .put(`/posts/${postResponse.id}/?formats=mobiledoc,lexical,html&convert_to_lexical=true`)
+                .body({posts: [Object.assign({}, postResponse)]})
+                .expectStatus(200)
+                .matchBodySnapshot({
+                    posts: [Object.assign({}, matchPostShallowIncludes, {lexical: expectedLexical, mobiledoc: null})]
+                })
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag
+                });
+
+            const convertedPost = conversionResponse.body.posts[0];
+            const expectedConvertedLexical = convertedPost.lexical;
+            await agent
+                .put(`/posts/${postResponse.id}/?formats=mobiledoc,lexical,html&convert_to_lexical=true`)
+                .body({posts: [Object.assign({}, convertedPost)]})
+                .expectStatus(200)
+                .matchBodySnapshot({
+                    posts: [Object.assign({}, matchPostShallowIncludes, {lexical: expectedConvertedLexical, mobiledoc: null})]
+                })
+                .matchHeaderSnapshot({
+                    'content-version': anyContentVersion,
+                    etag: anyEtag
+                });
+        });
+    });
+
+    describe('With integration auth', function () {
+        it('can create and update a post with revisions', async function () {
+            // Use Zapier integration to test integration auth scenario
+            await agent.useZapierAdminAPIKey();
+
+            const lexical = createLexical('This is content for revision testing.');
+            const postData = {
+                title: 'Integration Auth Test Post',
+                status: 'published',
+                lexical: lexical,
+                mobiledoc: null
+            };
+
+            // Create post using integration auth - this should trigger the revision creation
+            // with author fallback to owner user when contextUser returns integration context
+            const {body} = await agent
+                .post('/posts/?formats=lexical')
+                .body({posts: [postData]})
+                .expectStatus(201);
+
+            const [postResponse] = body.posts;
+            assert.equal(postResponse.title, 'Integration Auth Test Post');
+            assert.equal(postResponse.status, 'published');
+            assert.equal(postResponse.lexical, lexical);
+
+            // Verify the post revision was created with owner user as author
+            const ownerUser = await models.User.getOwnerUser();
+            const postRevisions = await models.PostRevision
+                .where('post_id', postResponse.id)
+                .fetchAll();
+
+            assert.equal(postRevisions.length, 1);
+            const revision = postRevisions.at(0);
+            assert.equal(revision.get('lexical'), lexical);
+            assert.equal(revision.get('author_id'), ownerUser.get('id'));
+
+            // Update the post to ensure revision creation works properly
+            const updatedLexical = createLexical('Updated content for revision testing.');
+            await agent
+                .put(`/posts/${postResponse.id}/?formats=lexical&save_revision=true`)
+                .body({posts: [{
+                    ...postResponse,
+                    lexical: updatedLexical
+                }]})
+                .expectStatus(200);
+
+            // Verify updated revision also has owner user as author
+            const updatedRevisions = await models.PostRevision
+                .where('post_id', postResponse.id)
+                .orderBy('created_at_ts', 'desc')
+                .fetchAll();
+
+            assert.equal(updatedRevisions.length, 2);
+            const latestRevision = updatedRevisions.at(0);
+            assert.equal(latestRevision.get('lexical'), updatedLexical);
+            assert.equal(latestRevision.get('author_id'), ownerUser.get('id'));
+
+            // Verify the post was updated successfully
+            await agent
+                .get(`/posts/${postResponse.id}/?formats=lexical`)
+                .expectStatus(200)
+                .matchBodySnapshot({
+                    posts: [Object.assign({}, matchPostShallowIncludes, {
+                        lexical: updatedLexical
+                    })]
+                });
+        });
+    });
+
+    describe('URL transformations', function () {
+        const siteUrl = config.get('url');
+        const cdnUrl = 'https://cdn.example.com';
+
+        afterEach(function () {
+            sinon.restore();
+        });
+
+        it('Can read Mobiledoc post with all URLs as absolute site URLs', async function () {
+            const res = await agent
+                .get('posts/slug/post-with-all-media-types-mobiledoc/?formats=mobiledoc')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+            const mobiledoc = JSON.parse(post.mobiledoc);
+
+            assert.equal(post.feature_image, `${siteUrl}/content/images/feature.jpg`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'image')[1].src, `${siteUrl}/content/images/inline.jpg`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'file')[1].src, `${siteUrl}/content/files/document.pdf`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'video')[1].src, `${siteUrl}/content/media/video.mp4`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'audio')[1].src, `${siteUrl}/content/media/audio.mp3`);
+            assert(post.mobiledoc.includes(`${siteUrl}/content/images/snippet-inline.jpg`));
+            assert(post.mobiledoc.includes(`${siteUrl}/content/files/snippet-document.pdf`));
+            assert(post.mobiledoc.includes(`${siteUrl}/content/media/snippet-video.mp4`));
+            assert(post.mobiledoc.includes(`${siteUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.mobiledoc.includes('__GHOST_URL__'));
+        });
+
+        it('Can read Lexical post with all URLs as absolute site URLs', async function () {
+            const res = await agent
+                .get('posts/slug/post-with-all-media-types-lexical/?formats=lexical')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+
+            assert.equal(post.feature_image, `${siteUrl}/content/images/feature.jpg`);
+            assert(post.lexical.includes(`${siteUrl}/content/images/inline.jpg`));
+            assert(post.lexical.includes(`${siteUrl}/content/files/document.pdf`));
+            assert(post.lexical.includes(`${siteUrl}/content/media/video.mp4`));
+            assert(post.lexical.includes(`${siteUrl}/content/media/audio.mp3`));
+            assert(post.lexical.includes(`${siteUrl}/content/images/snippet-inline.jpg`));
+            assert(post.lexical.includes(`${siteUrl}/content/files/snippet-document.pdf`));
+            assert(post.lexical.includes(`${siteUrl}/content/media/snippet-video.mp4`));
+            assert(post.lexical.includes(`${siteUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.lexical.includes('__GHOST_URL__'));
+        });
+
+        it('Can read Mobiledoc post with CDN URLs when configured', async function () {
+            urlUtilsHelper.stubUrlUtilsWithCdn({
+                assetBaseUrls: {media: cdnUrl, files: cdnUrl, image: cdnUrl}
+            }, sinon);
+
+            const res = await agent
+                .get('posts/slug/post-with-all-media-types-mobiledoc/?formats=mobiledoc')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+            const mobiledoc = JSON.parse(post.mobiledoc);
+
+            // All assets use CDN URL
+            assert.equal(post.feature_image, `${cdnUrl}/content/images/feature.jpg`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'image')[1].src, `${cdnUrl}/content/images/inline.jpg`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'file')[1].src, `${cdnUrl}/content/files/document.pdf`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'video')[1].src, `${cdnUrl}/content/media/video.mp4`);
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'audio')[1].src, `${cdnUrl}/content/media/audio.mp3`);
+            // Video/audio thumbnails use CDN URL
+            assert.equal(mobiledoc.cards.find(c => c[0] === 'video')[1].thumbnailSrc, `${cdnUrl}/content/images/video-thumb.jpg`);
+            // Gallery images use CDN URL
+            const galleryCard = mobiledoc.cards.find(c => c[0] === 'gallery');
+            galleryCard[1].images.forEach((image) => {
+                assert(image.src.startsWith(cdnUrl));
+            });
+            // Inserted snippet images use CDN URL
+            assert(post.mobiledoc.includes(`${cdnUrl}/content/images/snippet-inline.jpg`));
+            assert(post.mobiledoc.includes(`${cdnUrl}/content/files/snippet-document.pdf`));
+            assert(post.mobiledoc.includes(`${cdnUrl}/content/media/snippet-video.mp4`));
+            assert(post.mobiledoc.includes(`${cdnUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.mobiledoc.includes('__GHOST_URL__'));
+        });
+
+        it('Can read Lexical post with CDN URLs when configured', async function () {
+            urlUtilsHelper.stubUrlUtilsWithCdn({
+                assetBaseUrls: {media: cdnUrl, files: cdnUrl, image: cdnUrl}
+            }, sinon);
+
+            const res = await agent
+                .get('posts/slug/post-with-all-media-types-lexical/?formats=lexical')
+                .expectStatus(200);
+
+            const post = res.body.posts[0];
+
+            // All assets use CDN URL
+            assert.equal(post.feature_image, `${cdnUrl}/content/images/feature.jpg`);
+            assert(post.lexical.includes(`${cdnUrl}/content/images/inline.jpg`));
+            assert(post.lexical.includes(`${cdnUrl}/content/files/document.pdf`));
+            assert(post.lexical.includes(`${cdnUrl}/content/media/video.mp4`));
+            assert(post.lexical.includes(`${cdnUrl}/content/media/audio.mp3`));
+            // Video/audio thumbnails use CDN URL
+            assert(post.lexical.includes(`${cdnUrl}/content/images/video-thumb.jpg`));
+            assert(post.lexical.includes(`${cdnUrl}/content/images/audio-thumb.jpg`));
+            // Gallery images use CDN URL
+            assert(post.lexical.includes(`${cdnUrl}/content/images/gallery-1.jpg`));
+            assert(post.lexical.includes(`${cdnUrl}/content/images/gallery-2.jpg`));
+            // Inserted snippet images use CDN URL
+            assert(post.lexical.includes(`${cdnUrl}/content/images/snippet-inline.jpg`));
+            assert(post.lexical.includes(`${cdnUrl}/content/files/snippet-document.pdf`));
+            assert(post.lexical.includes(`${cdnUrl}/content/media/snippet-video.mp4`));
+            assert(post.lexical.includes(`${cdnUrl}/content/media/snippet-audio.mp3`));
+            assert(!post.lexical.includes('__GHOST_URL__'));
         });
     });
 });

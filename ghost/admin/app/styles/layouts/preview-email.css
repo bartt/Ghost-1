@@ -133,12 +133,79 @@
 .gh-pe-emailclient-sender p {
     padding: 0;
     margin: 0;
-    color: var(--midlightgrey);
+    color: var(--midgrey-l1);
+    font-weight: 500;
     line-height: 1.8em;
 }
 
-.gh-pe-emailclient-sender span {
-    color: var(--darkgrey);
+.gh-email-preview-newsletter-select p.gh-preview-newsletter-name {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    min-height: 38px;
+    padding: 4px 0;
+    line-height: 1.15;
+}
+
+.gh-post-preview-email-mockup-mobile p.gh-preview-newsletter-name {
+    min-height: unset;
+    font-size: 1.3rem;
+}
+
+p .gh-preview-email-address {
+    color: var(--midgrey-l1);
+}
+
+.gh-post-preview-email-mockup-mobile .gh-preview-email-address {
+    display: none;
+}
+
+.gh-preview-email-subject {
+    display: flex;
+    align-items: center;
+    color: var(--black);
+    font-size: 1.4rem;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.gh-preview-email-subject:focus-visible {
+    outline: 2px solid #0360CC;
+}
+
+.gh-preview-email-subject:hover svg,
+.gh-preview-email-subject:focus-visible svg {
+    opacity: 1;
+}
+
+.gh-preview-email-subject svg {
+    flex-shrink: 0;
+    width: 16px;
+    height: auto;
+    margin-left: 4px;
+    padding: 2px;
+    opacity: 0;
+    transition: opacity .06s ease;
+}
+
+.gh-preview-email-subject svg path {
+    stroke-width: 2px;
+}
+
+.gh-preview-email-subject-text {
+    margin: 0;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    font-size: 1.3rem;
+}
+
+.gh-email-subject {
+    display: flex;
+    align-items: center;
+    width: 100%;
 }
 
 .gh-pe-emailclient-sender span.strong {
@@ -150,7 +217,7 @@
     flex-direction: column;
     flex-grow: 1;
     align-items: center;
-    background: var(--white);
+    background: var(--whitegrey-l2);
     padding: 8vmin 30px 30px;
     height: calc(100vh - 119px);
     border-bottom-left-radius: 5px;
@@ -160,9 +227,9 @@
 .gh-pe-mobile-bezel {
     width: 320px;
     height: 657px;
-    border-radius: 40px;
+    border-radius: 32px;
     display: flex;
-    background: var(--whitegrey-l2);
+    background: var(--white);
     box-shadow:
         0 0 0 1px rgba(0,0,0,0.02),
         0 2.8px 2.2px rgba(0, 0, 0, 0.02),
@@ -176,10 +243,10 @@
 
 .gh-pe-mobile-screen {
     width: 100%;
-    margin: 14px;
+    margin: 12px;
     border: 1px solid var(--whitegrey-l1);
     background: var(--white);
-    border-radius: 28px;
+    border-radius: 24px;
     flex-grow: 1;
     overflow: hidden;
     -webkit-mask-image: -webkit-radial-gradient(white, black);
@@ -190,7 +257,7 @@
     transform: scale(0.8);
     transform-origin: 0 0;
     overflow-x: hidden;
-    width: 361px;
+    width: 368px;
     height: 706px;
 }
 
@@ -216,4 +283,45 @@
     .gh-pe-header h2 {
         display: none
     }
+}
+
+.gh-email-preview-clip-container {
+    display: flex;
+    background-color: var(--whitegrey-l2);
+    border-bottom: 1px solid var(--whitegrey);
+    padding: 20px;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.gh-email-preview-clip-container svg {
+    margin-top: 3px;
+    width: 16px;
+    min-width: 16px;
+    height: auto;
+}
+
+.gh-email-preview-clip-container svg path {
+    stroke: var(--yellow-d1);
+}
+
+.gh-email-preview-clip-title {
+    font-weight: 600;
+    font-size: 1.4rem;
+    color: var(--black);
+}
+
+.gh-email-preview-clip-title.mb {
+    margin-bottom: 4px;
+}
+
+.gh-email-preview-clip-description {
+    font-size: 1.3rem;
+    text-wrap: pretty;
+    color: var(--middarkgrey)
+}
+
+.gh-email-preview-clip-used {
+    font-size: 1.3rem;
+    font-weight: 600;
 }

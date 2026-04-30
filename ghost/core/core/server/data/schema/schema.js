@@ -1,9 +1,10 @@
 /* String Column Sizes Information
  * (From: https://github.com/TryGhost/Ghost/pull/7932)
+ * New/Updated column maxlengths should meet these guidlines
  *
  * Small strings = length 50
  * Medium strings = length 191
- * Large strings = length 1000-2000
+ * Large strings = length 2000 (use soft limits via validation for 191-2000)
  * Text = length 65535 (64 KiB)
  * Long text = length 1,000,000,000
  */
@@ -17,7 +18,7 @@ module.exports = {
         slug: {type: 'string', maxlength: 191, nullable: false, unique: true},
         sender_name: {type: 'string', maxlength: 191, nullable: true},
         sender_email: {type: 'string', maxlength: 191, nullable: true},
-        sender_reply_to: {type: 'string', maxlength: 191, nullable: false, defaultTo: 'newsletter', validations: {isIn: [['newsletter', 'support']]}},
+        sender_reply_to: {type: 'string', maxlength: 191, nullable: false, defaultTo: 'newsletter'},
         status: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'active', validations: {isIn: [['active', 'archived']]}},
         visibility: {
             type: 'string',
@@ -30,6 +31,7 @@ module.exports = {
         header_image: {type: 'string', maxlength: 2000, nullable: true},
         show_header_icon: {type: 'boolean', nullable: false, defaultTo: true},
         show_header_title: {type: 'boolean', nullable: false, defaultTo: true},
+        show_excerpt: {type: 'boolean', nullable: false, defaultTo: false},
         title_font_category: {type: 'string', maxlength: 191, nullable: false, defaultTo: 'sans_serif', validations: {isIn: [['serif', 'sans_serif']]}},
         title_alignment: {type: 'string', maxlength: 191, nullable: false, defaultTo: 'center', validations: {isIn: [['center', 'left']]}},
         show_feature_image: {type: 'boolean', nullable: false, defaultTo: true},
@@ -37,12 +39,29 @@ module.exports = {
         footer_content: {type: 'text', maxlength: 1000000000, nullable: true},
         show_badge: {type: 'boolean', nullable: false, defaultTo: true},
         show_header_name: {type: 'boolean', nullable: false, defaultTo: true},
+        show_post_title_section: {type: 'boolean', nullable: false, defaultTo: true},
+        show_comment_cta: {type: 'boolean', nullable: false, defaultTo: true},
+        show_subscription_details: {type: 'boolean', nullable: false, defaultTo: false},
+        show_latest_posts: {type: 'boolean', nullable: false, defaultTo: false},
+        show_share_button: {type: 'boolean', nullable: false, defaultTo: false},
+        background_color: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'light'},
+        post_title_color: {type: 'string', maxlength: 50, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        updated_at: {type: 'dateTime', nullable: true}
+        updated_at: {type: 'dateTime', nullable: true},
+        button_corners: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'rounded', validations: {isIn: [['square', 'rounded', 'pill']]}},
+        button_style: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'fill', validations: {isIn: [['fill', 'outline']]}},
+        title_font_weight: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'bold', validations: {isIn: [['normal', 'medium', 'semibold', 'bold']]}},
+        link_style: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'underline', validations: {isIn: [['underline', 'regular', 'bold']]}},
+        image_corners: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'square', validations: {isIn: [['square', 'rounded']]}},
+        header_background_color: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'transparent'},
+        section_title_color: {type: 'string', maxlength: 50, nullable: true},
+        divider_color: {type: 'string', maxlength: 50, nullable: true},
+        button_color: {type: 'string', maxlength: 50, nullable: true, defaultTo: 'accent'},
+        link_color: {type: 'string', maxlength: 50, nullable: true, defaultTo: 'accent'}
     },
     posts: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
-        uuid: {type: 'string', maxlength: 36, nullable: false, validations: {isUUID: true}},
+        uuid: {type: 'string', maxlength: 36, nullable: false, index: true, validations: {isUUID: true}},
         title: {type: 'string', maxlength: 2000, nullable: false, validations: {isLength: {max: 255}}},
         slug: {type: 'string', maxlength: 191, nullable: false},
         mobiledoc: {type: 'text', maxlength: 1000000000, fieldtype: 'long', nullable: true},
@@ -68,15 +87,8 @@ module.exports = {
             nullable: false
         },
         created_at: {type: 'dateTime', nullable: false},
-        /**
-         * @deprecated: https://github.com/TryGhost/Ghost/issues/10286
-         *
-         * This is valid for all x_by fields.
-         */
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true},
-        published_at: {type: 'dateTime', nullable: true},
+        updated_at: {type: 'dateTime', nullable: true, index: true},
+        published_at: {type: 'dateTime', nullable: true, index: true},
         published_by: {type: 'string', maxlength: 24, nullable: true},
         custom_excerpt: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 300}}},
         codeinjection_head: {type: 'text', maxlength: 65535, nullable: true},
@@ -84,6 +96,10 @@ module.exports = {
         custom_template: {type: 'string', maxlength: 100, nullable: true},
         canonical_url: {type: 'text', maxlength: 2000, nullable: true},
         newsletter_id: {type: 'string', maxlength: 24, nullable: true, references: 'newsletters.id'},
+        show_title_and_feature_image: {type: 'boolean', nullable: false, defaultTo: true},
+        '@@INDEXES@@': [
+            ['type','status','updated_at']
+        ],
         '@@UNIQUE_CONSTRAINTS@@': [
             ['slug', 'type']
         ]
@@ -101,7 +117,7 @@ module.exports = {
         meta_description: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 500}}},
         email_subject: {type: 'string', maxlength: 300, nullable: true},
         frontmatter: {type: 'text', maxlength: 65535, nullable: true},
-        feature_image_alt: {type: 'string', maxlength: 191, nullable: true, validations: {isLength: {max: 125}}},
+        feature_image_alt: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 191}}},
         feature_image_caption: {type: 'text', maxlength: 65535, nullable: true},
         email_only: {type: 'boolean', nullable: false, defaultTo: false}
     },
@@ -114,11 +130,18 @@ module.exports = {
         email: {type: 'string', maxlength: 191, nullable: false, unique: true, validations: {isEmail: true}},
         profile_image: {type: 'string', maxlength: 2000, nullable: true},
         cover_image: {type: 'string', maxlength: 2000, nullable: true},
-        bio: {type: 'text', maxlength: 65535, nullable: true, validations: {isLength: {max: 200}}},
+        bio: {type: 'text', maxlength: 65535, nullable: true, validations: {isLength: {max: 250}}},
         website: {type: 'string', maxlength: 2000, nullable: true, validations: {isEmptyOrURL: true}},
         location: {type: 'text', maxlength: 65535, nullable: true, validations: {isLength: {max: 150}}},
         facebook: {type: 'string', maxlength: 2000, nullable: true},
         twitter: {type: 'string', maxlength: 2000, nullable: true},
+        threads: {type: 'string', maxlength: 191, nullable: true},
+        bluesky: {type: 'string', maxlength: 191, nullable: true},
+        mastodon: {type: 'string', maxlength: 191, nullable: true},
+        tiktok: {type: 'string', maxlength: 191, nullable: true},
+        youtube: {type: 'string', maxlength: 191, nullable: true},
+        instagram: {type: 'string', maxlength: 191, nullable: true},
+        linkedin: {type: 'string', maxlength: 191, nullable: true},
         accessibility: {type: 'text', maxlength: 65535, nullable: true},
         status: {
             type: 'string',
@@ -149,15 +172,19 @@ module.exports = {
         meta_title: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 300}}},
         meta_description: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 500}}},
         tour: {type: 'text', maxlength: 65535, nullable: true},
+        // NOTE: Used to determine whether a user has logged in previously
         last_seen: {type: 'dateTime', nullable: true},
         comment_notifications: {type: 'boolean', nullable: false, defaultTo: true},
         free_member_signup_notification: {type: 'boolean', nullable: false, defaultTo: true},
         paid_subscription_started_notification: {type: 'boolean', nullable: false, defaultTo: true},
         paid_subscription_canceled_notification: {type: 'boolean', nullable: false, defaultTo: false},
+        mention_notifications: {type: 'boolean', nullable: false, defaultTo: true},
+        recommendation_notifications: {type: 'boolean', nullable: false, defaultTo: true},
+        milestone_notifications: {type: 'boolean', nullable: false, defaultTo: true},
+        donation_notifications: {type: 'boolean', nullable: false, defaultTo: true},
+        gift_subscription_purchase_notification: {type: 'boolean', nullable: false, defaultTo: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     posts_authors: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -170,9 +197,7 @@ module.exports = {
         name: {type: 'string', maxlength: 50, nullable: false, unique: true},
         description: {type: 'string', maxlength: 2000, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     roles_users: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -186,9 +211,7 @@ module.exports = {
         action_type: {type: 'string', maxlength: 50, nullable: false},
         object_id: {type: 'string', maxlength: 24, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     permissions_users: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -209,7 +232,6 @@ module.exports = {
             defaultTo: 'core',
             validations: {
                 isIn: [[
-                    'amp',
                     'core',
                     'email',
                     'labs',
@@ -243,9 +265,7 @@ module.exports = {
         },
         flags: {type: 'string', maxlength: 50, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     tags: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -274,15 +294,16 @@ module.exports = {
         canonical_url: {type: 'string', maxlength: 2000, nullable: true},
         accent_color: {type: 'string', maxlength: 50, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     posts_tags: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
         post_id: {type: 'string', maxlength: 24, nullable: false, references: 'posts.id'},
         tag_id: {type: 'string', maxlength: 24, nullable: false, references: 'tags.id'},
-        sort_order: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0}
+        sort_order: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0},
+        '@@INDEXES@@': [
+            ['post_id','tag_id']
+        ]
     },
     invites: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -298,9 +319,7 @@ module.exports = {
         email: {type: 'string', maxlength: 191, nullable: false, unique: true, validations: {isEmail: true}},
         expires: {type: 'bigInteger', nullable: false},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     brute: {
         key: {type: 'string', maxlength: 191, primary: true},
@@ -331,9 +350,7 @@ module.exports = {
         icon_image: {type: 'string', maxlength: 2000, nullable: true},
         description: {type: 'string', maxlength: 2000, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     webhooks: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -351,9 +368,7 @@ module.exports = {
         last_triggered_status: {type: 'string', maxlength: 50, nullable: true},
         last_triggered_error: {type: 'string', maxlength: 50, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     api_keys: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -377,9 +392,7 @@ module.exports = {
         last_seen_at: {type: 'dateTime', nullable: true},
         last_seen_version: {type: 'string', maxlength: 50, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     mobiledoc_revisions: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -393,15 +406,24 @@ module.exports = {
         post_id: {type: 'string', maxlength: 24, nullable: false, index: true},
         lexical: {type: 'text', maxlength: 1000000000, fieldtype: 'long', nullable: true},
         created_at_ts: {type: 'bigInteger', nullable: false},
-        created_at: {type: 'dateTime', nullable: false}
+        created_at: {type: 'dateTime', nullable: false},
+        author_id: {type: 'string', maxlength: 24, nullable: true, references: 'users.id', cascadeDelete: false, constraintName: 'post_revs_author_id_foreign'},
+        title: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 255}}},
+        post_status: {type: 'string', maxlength: 50, nullable: true, validations: {isIn: [['draft', 'published', 'scheduled', 'sent']]}},
+        reason: {type: 'string', maxlength: 50, nullable: true},
+        feature_image: {type: 'string', maxlength: 2000, nullable: true},
+        feature_image_alt: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 191}}},
+        feature_image_caption: {type: 'text', maxlength: 65535, nullable: true},
+        custom_excerpt: {type: 'string', maxlength: 2000, nullable: true, validations: {isLength: {max: 300}}}
     },
     members: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
-        uuid: {type: 'string', maxlength: 36, nullable: true, unique: true, validations: {isUUID: true}},
+        uuid: {type: 'string', maxlength: 36, nullable: false, unique: true, validations: {isUUID: true}},
+        transient_id: {type: 'string', maxlength: 191, nullable: false, unique: true},
         email: {type: 'string', maxlength: 191, nullable: false, unique: true, validations: {isEmail: true}},
         status: {
             type: 'string', maxlength: 50, nullable: false, defaultTo: 'free', validations: {
-                isIn: [['free', 'paid', 'comped']]
+                isIn: [['free', 'paid', 'comped', 'gift']]
             }
         },
         name: {type: 'string', maxlength: 191, nullable: true},
@@ -412,12 +434,15 @@ module.exports = {
         email_count: {type: 'integer', unsigned: true, nullable: false, defaultTo: 0},
         email_opened_count: {type: 'integer', unsigned: true, nullable: false, defaultTo: 0},
         email_open_rate: {type: 'integer', unsigned: true, nullable: true, index: true},
+        email_disabled: {type: 'boolean', nullable: false, defaultTo: false},
         last_seen_at: {type: 'dateTime', nullable: true},
         last_commented_at: {type: 'dateTime', nullable: true},
+        commenting: {type: 'text', maxlength: 65535, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
         updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        '@@INDEXES@@': [
+            ['email_disabled']
+        ]
     },
     // NOTE: this is the tiers table
     products: {
@@ -460,7 +485,7 @@ module.exports = {
         active: {type: 'boolean', nullable: false, defaultTo: true},
         name: {type: 'string', maxlength: 191, nullable: false, unique: true},
         code: {type: 'string', maxlength: 191, nullable: false, unique: true},
-        product_id: {type: 'string', maxlength: 24, nullable: false, references: 'products.id'},
+        product_id: {type: 'string', maxlength: 24, nullable: true, references: 'products.id'},
         stripe_coupon_id: {type: 'string', maxlength: 255, nullable: true, unique: true},
         interval: {type: 'string', maxlength: 50, nullable: false, validations: {isIn: [['month', 'year']]}},
         currency: {type: 'string', maxlength: 50, nullable: true},
@@ -470,6 +495,7 @@ module.exports = {
         duration_in_months: {type: 'integer', nullable: true},
         portal_title: {type: 'string', maxlength: 191, nullable: true},
         portal_description: {type: 'string', maxlength: 2000, nullable: true},
+        redemption_type: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'signup', validations: {isIn: [['signup', 'retention']]}},
         created_at: {type: 'dateTime', nullable: false},
         updated_at: {type: 'dateTime', nullable: true}
     },
@@ -503,16 +529,24 @@ module.exports = {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
         created_at: {type: 'dateTime', nullable: false},
         member_id: {type: 'string', maxlength: 24, nullable: false, references: 'members.id', cascadeDelete: true},
-        attribution_id: {type: 'string', maxlength: 24, nullable: true},
+        // attribution values from ghost-history (member attribution tracking script)
+        attribution_id: {type: 'string', maxlength: 24, nullable: true, index: true},
         attribution_type: {
             type: 'string', maxlength: 50, nullable: true, validations: {
                 isIn: [['url', 'post', 'page', 'author', 'tag']]
             }
         },
         attribution_url: {type: 'string', maxlength: 2000, nullable: true},
+        // referrer values from browser, processed by our referrerParser library
         referrer_source: {type: 'string', maxlength: 191, nullable: true},
         referrer_medium: {type: 'string', maxlength: 191, nullable: true},
         referrer_url: {type: 'string', maxlength: 2000, nullable: true},
+        // raw values from URL query parameters
+        utm_source: {type: 'string', maxlength: 191, nullable: true},
+        utm_medium: {type: 'string', maxlength: 191, nullable: true},
+        utm_campaign: {type: 'string', maxlength: 191, nullable: true},
+        utm_term: {type: 'string', maxlength: 191, nullable: true},
+        utm_content: {type: 'string', maxlength: 191, nullable: true},
         source: {
             type: 'string', maxlength: 50, nullable: false, validations: {
                 isIn: [['member', 'import', 'system', 'api', 'admin']]
@@ -553,15 +587,16 @@ module.exports = {
         member_id: {type: 'string', maxlength: 24, nullable: false, references: 'members.id', cascadeDelete: true},
         from_status: {
             type: 'string', maxlength: 50, nullable: true, validations: {
-                isIn: [['free', 'paid', 'comped']]
+                isIn: [['free', 'paid', 'comped', 'gift']]
             }
         },
         to_status: {
             type: 'string', maxlength: 50, nullable: true, validations: {
-                isIn: [['free', 'paid', 'comped']]
+                isIn: [['free', 'paid', 'comped', 'gift']]
             }
         },
-        created_at: {type: 'dateTime', nullable: false}
+        created_at: {type: 'dateTime', nullable: false},
+        batch_id: {type: 'string', maxlength: 24, nullable: true}
     },
     members_product_events: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -597,9 +632,7 @@ module.exports = {
         name: {type: 'string', maxlength: 191, nullable: false, unique: true},
         slug: {type: 'string', maxlength: 191, nullable: false, unique: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     members_labels: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -614,9 +647,7 @@ module.exports = {
         name: {type: 'string', maxlength: 191, nullable: true},
         email: {type: 'string', maxlength: 191, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     subscriptions: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -668,11 +699,11 @@ module.exports = {
         start_date: {type: 'dateTime', nullable: false},
         default_payment_card_last4: {type: 'string', maxlength: 4, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
         updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true},
         mrr: {type: 'integer', unsigned: true, nullable: false, defaultTo: 0},
         offer_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'offers.id'},
+        discount_start: {type: 'dateTime', nullable: true},
+        discount_end: {type: 'dateTime', nullable: true},
         trial_start_at: {type: 'dateTime', nullable: true},
         trial_end_at: {type: 'dateTime', nullable: true},
         /* Below fields are now redundant as we link stripe_price_id to stripe_prices table */
@@ -689,16 +720,24 @@ module.exports = {
         created_at: {type: 'dateTime', nullable: false},
         member_id: {type: 'string', maxlength: 24, nullable: false, references: 'members.id', cascadeDelete: true},
         subscription_id: {type: 'string', maxlength: 24, nullable: false, references: 'members_stripe_customers_subscriptions.id', cascadeDelete: true},
-        attribution_id: {type: 'string', maxlength: 24, nullable: true},
+        // attribution values from ghost-history (member attribution tracking script)
+        attribution_id: {type: 'string', maxlength: 24, nullable: true, index: true},
         attribution_type: {
             type: 'string', maxlength: 50, nullable: true, validations: {
                 isIn: [['url', 'post', 'page', 'author', 'tag']]
             }
         },
         attribution_url: {type: 'string', maxlength: 2000, nullable: true},
+        // referrer values from browser, processed by our referrerParser library
         referrer_source: {type: 'string', maxlength: 191, nullable: true},
         referrer_medium: {type: 'string', maxlength: 191, nullable: true},
         referrer_url: {type: 'string', maxlength: 2000, nullable: true},
+        // raw values from URL query parameters
+        utm_source: {type: 'string', maxlength: 191, nullable: true},
+        utm_medium: {type: 'string', maxlength: 191, nullable: true},
+        utm_campaign: {type: 'string', maxlength: 191, nullable: true},
+        utm_term: {type: 'string', maxlength: 191, nullable: true},
+        utm_content: {type: 'string', maxlength: 191, nullable: true},
         batch_id: {type: 'string', maxlength: 24, nullable: true}
     },
     offer_redemptions: {
@@ -718,11 +757,42 @@ module.exports = {
                 isIn: [['member', 'import', 'system', 'api', 'admin']]
             }
         },
-        newsletter_id: {type: 'string', maxlength: 24, nullable: true, references: 'newsletters.id', cascadeDelete: false}
+        newsletter_id: {type: 'string', maxlength: 24, nullable: true, references: 'newsletters.id', cascadeDelete: false},
+        '@@INDEXES@@': [
+            ['newsletter_id', 'created_at']
+        ]
+    },
+    donation_payment_events: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        name: {type: 'string', maxlength: 191, nullable: true},
+        email: {type: 'string', maxlength: 191, nullable: false, unique: false, validations: {isEmail: true}},
+        member_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'members.id', setNullDelete: true},
+        amount: {type: 'integer', nullable: false},
+        currency: {type: 'string', maxlength: 50, nullable: false},
+        // attribution values from ghost-history (member attribution tracking script)
+        attribution_id: {type: 'string', maxlength: 24, nullable: true},
+        attribution_type: {
+            type: 'string', maxlength: 50, nullable: true, validations: {
+                isIn: [['url', 'post', 'page', 'author', 'tag']]
+            }
+        },
+        attribution_url: {type: 'string', maxlength: 2000, nullable: true},
+        // referrer values from browser, processed by our referrerParser library
+        referrer_source: {type: 'string', maxlength: 191, nullable: true},
+        referrer_medium: {type: 'string', maxlength: 191, nullable: true},
+        referrer_url: {type: 'string', maxlength: 2000, nullable: true},
+        // raw values from URL query parameters
+        utm_source: {type: 'string', maxlength: 191, nullable: true},
+        utm_medium: {type: 'string', maxlength: 191, nullable: true},
+        utm_campaign: {type: 'string', maxlength: 191, nullable: true},
+        utm_term: {type: 'string', maxlength: 191, nullable: true},
+        utm_content: {type: 'string', maxlength: 191, nullable: true},
+        created_at: {type: 'dateTime', nullable: false},
+        donation_message: {type: 'string', maxlength: 255, nullable: true} // https://docs.stripe.com/payments/checkout/custom-fields
     },
     stripe_products: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
-        product_id: {type: 'string', maxlength: 24, nullable: false, unique: false, references: 'products.id'},
+        product_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'products.id'},
         stripe_product_id: {type: 'string', maxlength: 255, nullable: false, unique: true},
         created_at: {type: 'dateTime', nullable: false},
         updated_at: {type: 'dateTime', nullable: true}
@@ -732,12 +802,12 @@ module.exports = {
         stripe_price_id: {type: 'string', maxlength: 255, nullable: false, unique: true},
         stripe_product_id: {type: 'string', maxlength: 255, nullable: false, unique: false, references: 'stripe_products.stripe_product_id'},
         active: {type: 'boolean', nullable: false},
-        nickname: {type: 'string', maxlength: 50, nullable: true},
+        nickname: {type: 'string', maxlength: 255, nullable: true},
         // @note: this is longer than originally intended due to a bug - https://github.com/TryGhost/Ghost/pull/15606
         // so we should decide whether we should reduce it down in the future
         currency: {type: 'string', maxlength: 191, nullable: false},
         amount: {type: 'integer', nullable: false},
-        type: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'recurring', validations: {isIn: [['recurring', 'one_time']]}},
+        type: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'recurring', validations: {isIn: [['recurring', 'one_time', 'donation']]}},
         interval: {type: 'string', maxlength: 50, nullable: true},
         description: {type: 'string', maxlength: 191, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
@@ -775,6 +845,7 @@ module.exports = {
         error: {type: 'string', maxlength: 2000, nullable: true},
         error_data: {type: 'text', maxlength: 1000000000, fieldtype: 'long', nullable: true},
         email_count: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0},
+        csd_email_count: {type: 'integer', nullable: true, unsigned: true},
         delivered_count: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0},
         opened_count: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0},
         failed_count: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0},
@@ -797,14 +868,13 @@ module.exports = {
         submitted_at: {type: 'dateTime', nullable: false},
         newsletter_id: {type: 'string', maxlength: 24, nullable: true, references: 'newsletters.id'},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     email_batches: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
         email_id: {type: 'string', maxlength: 24, nullable: false, references: 'emails.id'},
         provider_id: {type: 'string', maxlength: 255, nullable: true},
+        fallback_sending_domain: {type: 'boolean', nullable: false, defaultTo: false},
         status: {
             type: 'string',
             maxlength: 50,
@@ -825,14 +895,17 @@ module.exports = {
         member_id: {type: 'string', maxlength: 24, nullable: false, index: true},
         batch_id: {type: 'string', maxlength: 24, nullable: false, references: 'email_batches.id'},
         processed_at: {type: 'dateTime', nullable: true},
-        delivered_at: {type: 'dateTime', nullable: true, index: true},
-        opened_at: {type: 'dateTime', nullable: true, index: true},
-        failed_at: {type: 'dateTime', nullable: true, index: true},
+        delivered_at: {type: 'dateTime', nullable: true},
+        opened_at: {type: 'dateTime', nullable: true},
+        failed_at: {type: 'dateTime', nullable: true},
         member_uuid: {type: 'string', maxlength: 36, nullable: false},
         member_email: {type: 'string', maxlength: 191, nullable: false},
         member_name: {type: 'string', maxlength: 191, nullable: true},
         '@@INDEXES@@': [
-            ['email_id', 'member_email']
+            ['email_id', 'member_email'],
+            ['email_id', 'delivered_at'],
+            ['email_id', 'opened_at'],
+            ['email_id', 'failed_at']
         ]
     },
     email_recipient_failures: {
@@ -856,18 +929,21 @@ module.exports = {
     tokens: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
         token: {type: 'string', maxlength: 32, nullable: false, index: true},
+        uuid: {type: 'string', maxlength: 36, nullable: false, unique: true, validations: {isUUID: true}},
         data: {type: 'string', maxlength: 2000, nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false}
+        updated_at: {type: 'dateTime', nullable: true},
+        first_used_at: {type: 'dateTime', nullable: true},
+        used_count: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0},
+        otc_used_count: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0}
     },
     snippets: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
         name: {type: 'string', maxlength: 191, nullable: false, unique: true},
         mobiledoc: {type: 'text', maxlength: 1000000000, fieldtype: 'long', nullable: false},
+        lexical: {type: 'text', maxlength: 1000000000, fieldtype: 'long', nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        created_by: {type: 'string', maxlength: 24, nullable: false},
-        updated_at: {type: 'dateTime', nullable: true},
-        updated_by: {type: 'string', maxlength: 24, nullable: true}
+        updated_at: {type: 'dateTime', nullable: true}
     },
     custom_theme_settings: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
@@ -892,13 +968,17 @@ module.exports = {
     members_newsletters: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
         member_id: {type: 'string', maxlength: 24, nullable: false, references: 'members.id', cascadeDelete: true},
-        newsletter_id: {type: 'string', maxlength: 24, nullable: false, references: 'newsletters.id', cascadeDelete: true}
+        newsletter_id: {type: 'string', maxlength: 24, nullable: false, references: 'newsletters.id', cascadeDelete: true},
+        '@@INDEXES@@': [
+            ['newsletter_id', 'member_id']
+        ]
     },
     comments: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
         post_id: {type: 'string', maxlength: 24, nullable: false, unique: false, references: 'posts.id', cascadeDelete: true},
         member_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'members.id', setNullDelete: true},
         parent_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'comments.id', cascadeDelete: true},
+        in_reply_to_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'comments.id', setNullDelete: true},
         status: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'published', validations: {isIn: [['published', 'hidden', 'deleted']]}},
         html: {type: 'text', maxlength: 1000000000, fieldtype: 'long', nullable: true},
         edited_at: {type: 'dateTime', nullable: true},
@@ -926,11 +1006,13 @@ module.exports = {
         started_at: {type: 'dateTime', nullable: true},
         finished_at: {type: 'dateTime', nullable: true},
         created_at: {type: 'dateTime', nullable: false},
-        updated_at: {type: 'dateTime', nullable: true}
+        updated_at: {type: 'dateTime', nullable: true},
+        metadata: {type: 'string', maxlength: 2000, nullable: true},
+        queue_entry: {type: 'integer', nullable: true, unsigned: true}
     },
     redirects: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
-        from: {type: 'string', maxlength: 2000, nullable: false},
+        from: {type: 'string', maxlength: 191, nullable: false, index: true},
         to: {type: 'string', maxlength: 2000, nullable: false},
         post_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'posts.id', setNullDelete: true},
         created_at: {type: 'dateTime', nullable: false},
@@ -952,7 +1034,7 @@ module.exports = {
     },
     suppressions: {
         id: {type: 'string', maxlength: 24, nullable: false, primary: true},
-        email_address: {type: 'string', maxlength: 191, nullable: false, unique: true, validations: {isEmail: true}},
+        email: {type: 'string', maxlength: 191, nullable: false, unique: true, validations: {isEmail: true}},
         email_id: {type: 'string', maxlength: 24, nullable: true, references: 'emails.id'},
         reason: {
             type: 'string',
@@ -975,6 +1057,206 @@ module.exports = {
         created_at: {type: 'dateTime', nullable: false},
         '@@UNIQUE_CONSTRAINTS@@': [
             ['email_id', 'member_id']
+        ]
+    },
+    mentions: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        source: {type: 'string', maxlength: 2000, nullable: false},
+        source_title: {type: 'string', maxlength: 2000, nullable: true},
+        source_site_title: {type: 'string', maxlength: 2000, nullable: true},
+        source_excerpt: {type: 'string', maxlength: 2000, nullable: true},
+        source_author: {type: 'string', maxlength: 2000, nullable: true},
+        source_featured_image: {type: 'string', maxlength: 2000, nullable: true},
+        source_favicon: {type: 'string', maxlength: 2000, nullable: true},
+        target: {type: 'string', maxlength: 2000, nullable: false},
+        resource_id: {type: 'string', maxlength: 24, nullable: true},
+        resource_type: {type: 'string', maxlength: 50, nullable: true},
+        created_at: {type: 'dateTime', nullable: false},
+        payload: {type: 'text', maxlength: 65535, nullable: true},
+        deleted: {type: 'boolean', nullable: false, defaultTo: false},
+        verified: {type: 'boolean', nullable: false, defaultTo: false}
+    },
+    milestones: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        type: {type: 'string', maxlength: 24, nullable: false},
+        value: {type: 'integer', nullable: false},
+        currency: {type: 'string', maxlength: 24, nullable: true},
+        created_at: {type: 'dateTime', nullable: false},
+        email_sent_at: {type: 'dateTime', nullable: true}
+    },
+    collections: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        title: {type: 'string', maxlength: 191, nullable: false},
+        slug: {type: 'string', maxlength: 191, nullable: false, unique: true},
+        description: {type: 'string', maxlength: 2000, nullable: true},
+        type: {type: 'string', maxlength: 50, nullable: false},
+        filter: {type: 'text', maxlength: 1000000000, nullable: true},
+        feature_image: {type: 'string', maxlength: 2000, nullable: true},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true}
+    },
+    collections_posts: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        collection_id: {type: 'string', maxlength: 24, nullable: false, references: 'collections.id', cascadeDelete: true},
+        post_id: {type: 'string', maxlength: 24, nullable: false, references: 'posts.id', cascadeDelete: true},
+        sort_order: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0}
+    },
+    recommendations: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        url: {type: 'string', maxlength: 2000, nullable: false},
+        title: {type: 'string', maxlength: 2000, nullable: false},
+        excerpt: {type: 'string', maxlength: 2000, nullable: true},
+        featured_image: {type: 'string', maxlength: 2000, nullable: true},
+        favicon: {type: 'string', maxlength: 2000, nullable: true},
+        description: {type: 'string', maxlength: 2000, nullable: true},
+        one_click_subscribe: {type: 'boolean', nullable: false, defaultTo: false},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true}
+    },
+    recommendation_click_events: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        recommendation_id: {type: 'string', maxlength: 24, nullable: false, references: 'recommendations.id', unique: false, cascadeDelete: true},
+        member_id: {type: 'string', maxlength: 24, nullable: true, references: 'members.id', unique: false, setNullDelete: true},
+        created_at: {type: 'dateTime', nullable: false}
+    },
+    recommendation_subscribe_events: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        recommendation_id: {type: 'string', maxlength: 24, nullable: false, references: 'recommendations.id', unique: false, cascadeDelete: true},
+        member_id: {type: 'string', maxlength: 24, nullable: true, references: 'members.id', unique: false, setNullDelete: true},
+        created_at: {type: 'dateTime', nullable: false}
+    },
+    outbox: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        event_type: {type: 'string', maxlength: 50, nullable: false},
+        status: {
+            type: 'string',
+            maxlength: 50,
+            nullable: false,
+            defaultTo: 'pending',
+            validations: {isIn: [['pending', 'processing', 'failed', 'completed']]}
+        },
+        payload: {type: 'text', maxlength: 65535, nullable: false},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true},
+        retry_count: {type: 'integer', nullable: false, unsigned: true, defaultTo: 0},
+        last_retry_at: {type: 'dateTime', nullable: true},
+        message: {type: 'string', maxlength: 2000, nullable: true},
+        '@@INDEXES@@': [
+            ['event_type', 'status', 'created_at']
+        ]
+    },
+    email_design_settings: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        slug: {type: 'string', maxlength: 191, nullable: false, unique: true},
+        background_color: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'light'},
+        header_background_color: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'transparent'},
+        header_image: {type: 'string', maxlength: 2000, nullable: true},
+        show_header_icon: {type: 'boolean', nullable: false, defaultTo: true},
+        show_header_title: {type: 'boolean', nullable: false, defaultTo: true},
+        footer_content: {type: 'text', maxlength: 1000000000, nullable: true},
+        button_color: {type: 'string', maxlength: 50, nullable: true, defaultTo: 'accent'},
+        button_corners: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'rounded', validations: {isIn: [['square', 'rounded', 'pill']]}},
+        button_style: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'fill', validations: {isIn: [['fill', 'outline']]}},
+        link_color: {type: 'string', maxlength: 50, nullable: true, defaultTo: 'accent'},
+        link_style: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'underline', validations: {isIn: [['underline', 'regular', 'bold']]}},
+        body_font_category: {type: 'string', maxlength: 191, nullable: false, defaultTo: 'sans_serif', validations: {isIn: [['serif', 'sans_serif']]}},
+        // Named "title_*" to match the newsletters table; applies to headings (and post title in newsletters)
+        title_font_category: {type: 'string', maxlength: 191, nullable: false, defaultTo: 'sans_serif', validations: {isIn: [['serif', 'sans_serif']]}},
+        title_font_weight: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'bold', validations: {isIn: [['normal', 'medium', 'semibold', 'bold']]}},
+        image_corners: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'square', validations: {isIn: [['square', 'rounded']]}},
+        divider_color: {type: 'string', maxlength: 50, nullable: true},
+        section_title_color: {type: 'string', maxlength: 50, nullable: true},
+        show_badge: {type: 'boolean', nullable: false, defaultTo: true},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true}
+    },
+    welcome_email_automations: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        status: {type: 'string', maxlength: 50, nullable: false, defaultTo: 'inactive', validations: {isIn: [['active', 'inactive']]}},
+        name: {type: 'string', maxlength: 191, nullable: false, unique: true},
+        slug: {type: 'string', maxlength: 191, nullable: false, unique: true},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true}
+    },
+    welcome_email_automated_emails: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        welcome_email_automation_id: {type: 'string', maxlength: 24, nullable: false, references: 'welcome_email_automations.id', constraintName: 'weae_automation_id_foreign', cascadeDelete: true},
+        next_welcome_email_automated_email_id: {type: 'string', maxlength: 24, nullable: true, references: 'welcome_email_automated_emails.id', constraintName: 'weae_next_email_id_foreign', cascadeDelete: false},
+        delay_days: {type: 'integer', nullable: false, unsigned: true},
+        subject: {type: 'string', maxlength: 300, nullable: false},
+        lexical: {type: 'text', maxlength: 1000000000, fieldtype: 'long', nullable: true},
+        sender_name: {type: 'string', maxlength: 191, nullable: true},
+        sender_email: {type: 'string', maxlength: 191, nullable: true, validations: {isEmail: true}},
+        sender_reply_to: {type: 'string', maxlength: 191, nullable: true, validations: {isEmail: true}},
+        email_design_setting_id: {type: 'string', maxlength: 24, nullable: false, references: 'email_design_settings.id'},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true}
+    },
+    welcome_email_automation_runs: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        welcome_email_automation_id: {type: 'string', maxlength: 24, nullable: false, references: 'welcome_email_automations.id', constraintName: 'wear_automation_id_foreign', cascadeDelete: true},
+        member_id: {type: 'string', maxlength: 24, nullable: false, references: 'members.id', constraintName: 'wear_member_id_foreign', cascadeDelete: true},
+        next_welcome_email_automated_email_id: {type: 'string', maxlength: 24, nullable: true, references: 'welcome_email_automated_emails.id', constraintName: 'wear_next_email_id_foreign', cascadeDelete: false},
+        ready_at: {type: 'dateTime', nullable: true},
+        step_started_at: {type: 'dateTime', nullable: true},
+        step_attempts: {type: 'integer', unsigned: true, nullable: false, defaultTo: 0},
+        exit_reason: {type: 'string', maxlength: 50, nullable: true, validations: {isIn: [['email send failed', 'member unsubscribed', 'member changed status', 'finished', 'automation disabled']]}},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true},
+        '@@INDEXES@@': [
+            ['ready_at']
+        ]
+    },
+    automated_email_recipients: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        automated_email_id: {type: 'string', maxlength: 24, nullable: false, references: 'welcome_email_automated_emails.id'},
+        member_id: {type: 'string', maxlength: 24, nullable: false, index: true},
+        member_uuid: {type: 'string', maxlength: 36, nullable: false},
+        member_email: {type: 'string', maxlength: 191, nullable: false},
+        member_name: {type: 'string', maxlength: 191, nullable: true},
+        created_at: {type: 'dateTime', nullable: false},
+        updated_at: {type: 'dateTime', nullable: true}
+    },
+    gifts: {
+        id: {type: 'string', maxlength: 24, nullable: false, primary: true},
+        token: {type: 'string', maxlength: 48, nullable: false, unique: true},
+
+        buyer_email: {type: 'string', maxlength: 191, nullable: false, validations: {isEmail: true}},
+        buyer_member_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'members.id', setNullDelete: true},
+
+        redeemer_member_id: {type: 'string', maxlength: 24, nullable: true, unique: false, references: 'members.id', setNullDelete: true},
+
+        tier_id: {type: 'string', maxlength: 24, nullable: false, unique: false, references: 'products.id'},
+        cadence: {
+            type: 'string', maxlength: 50, nullable: false, validations: {
+                isIn: [['month', 'year']]
+            }
+        },
+        duration: {type: 'integer', nullable: false, unsigned: true},
+
+        currency: {type: 'string', maxlength: 50, nullable: false},
+        amount: {type: 'integer', nullable: false, unsigned: true},
+
+        stripe_checkout_session_id: {type: 'string', maxlength: 255, nullable: false, unique: true},
+        stripe_payment_intent_id: {type: 'string', maxlength: 255, nullable: false, unique: true},
+
+        consumes_at: {type: 'dateTime', nullable: true},
+        expires_at: {type: 'dateTime', nullable: false},
+
+        status: {
+            type: 'string', maxlength: 50, nullable: false, validations: {
+                isIn: [['purchased', 'redeemed', 'consumed', 'expired', 'refunded']]
+            }
+        },
+        purchased_at: {type: 'dateTime', nullable: false},
+        redeemed_at: {type: 'dateTime', nullable: true},
+        consumed_at: {type: 'dateTime', nullable: true},
+        expired_at: {type: 'dateTime', nullable: true},
+        refunded_at: {type: 'dateTime', nullable: true},
+        consumes_soon_reminder_sent_at: {type: 'dateTime', nullable: true},
+        '@@INDEXES@@': [
+            ['status', 'consumes_at'],
+            ['status', 'expires_at']
         ]
     }
 };

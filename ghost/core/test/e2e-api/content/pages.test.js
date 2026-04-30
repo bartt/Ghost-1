@@ -1,10 +1,11 @@
-const assert = require('assert');
+const assert = require('node:assert/strict');
 const moment = require('moment');
 
 const testUtils = require('../../utils');
 const models = require('../../../core/server/models');
+const config = require('../../../core/shared/config');
 const {agentProvider, fixtureManager, matchers} = require('../../utils/e2e-framework');
-const {anyEtag, anyUuid, anyISODateTimeWithTZ} = matchers;
+const {anyContentVersion, anyEtag, anyUuid, anyISODateTimeWithTZ} = matchers;
 
 const pageMatcher = {
     published_at: anyISODateTimeWithTZ,
@@ -26,6 +27,7 @@ describe('Pages Content API', function () {
         const res = await agent.get(`pages/`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -36,8 +38,9 @@ describe('Pages Content API', function () {
         assert.equal(res.body.pages[0].slug, 'about');
 
         const urlParts = new URL(res.body.pages[0].url);
-        assert.equal(urlParts.protocol, 'http:');
-        assert.equal(urlParts.host, '127.0.0.1:2369');
+        const configUrl = new URL(config.get('url'));
+        assert.equal(urlParts.protocol, configUrl.protocol);
+        assert.equal(urlParts.host, configUrl.host);
     });
 
     it('Cannot request pages with mobiledoc or lexical formats', async function () {
@@ -49,10 +52,20 @@ describe('Pages Content API', function () {
             });
     });
 
+    it('Cannot request pages with mobiledoc or lexical fields', async function () {
+        await agent
+            .get(`pages/?fields=mobiledoc,lexical,published_at,created_at,updated_at,uuid`)
+            .expectStatus(200)
+            .matchBodySnapshot({
+                pages: new Array(5).fill(pageMatcher)
+            });
+    });
+
     it('Can request page', async function () {
         const res = await agent.get(`pages/${fixtureManager.get('posts', 5).id}/`)
             .expectStatus(200)
             .matchHeaderSnapshot({
+                'content-version': anyContentVersion,
                 etag: anyEtag
             })
             .matchBodySnapshot({
@@ -63,8 +76,9 @@ describe('Pages Content API', function () {
         assert.equal(res.body.pages[0].slug, fixtureManager.get('posts', 5).slug);
 
         const urlParts = new URL(res.body.pages[0].url);
-        assert.equal(urlParts.protocol, 'http:');
-        assert.equal(urlParts.host, '127.0.0.1:2369');
+        const configUrl = new URL(config.get('url'));
+        assert.equal(urlParts.protocol, configUrl.protocol);
+        assert.equal(urlParts.host, configUrl.host);
     });
 
     it('Can include free and paid tiers for public post', async function () {
@@ -80,7 +94,7 @@ describe('Pages Content API', function () {
             .get(`pages/${publicPost.id}/?include=tiers`)
             .expectStatus(200);
         const publicPostData = publicPostRes.body.pages[0];
-        publicPostData.tiers.length.should.eql(2);
+        assert.equal(publicPostData.tiers.length, 2);
     });
 
     it('Can include free and paid tiers for members only post', async function () {
@@ -96,7 +110,7 @@ describe('Pages Content API', function () {
             .get(`pages/${membersPost.id}/?include=tiers`)
             .expectStatus(200);
         const membersPostData = membersPostRes.body.pages[0];
-        membersPostData.tiers.length.should.eql(2);
+        assert.equal(membersPostData.tiers.length, 2);
     });
 
     it('Can include only paid tier for paid post', async function () {
@@ -112,7 +126,7 @@ describe('Pages Content API', function () {
             .get(`pages/${paidPost.id}/?include=tiers`)
             .expectStatus(200);
         const paidPostData = paidPostRes.body.pages[0];
-        paidPostData.tiers.length.should.eql(1);
+        assert.equal(paidPostData.tiers.length, 1);
     });
 
     it('Can include specific tier for page with tiers visibility', async function () {
@@ -140,6 +154,6 @@ describe('Pages Content API', function () {
 
         const tiersPostData = tiersPostRes.body.pages[0];
 
-        tiersPostData.tiers.length.should.eql(1);
+        assert.equal(tiersPostData.tiers.length, 1);
     });
 });

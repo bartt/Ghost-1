@@ -11,12 +11,15 @@ module.exports = {
                 'description',
                 'logo',
                 'icon',
+                'cover_image',
                 'accent_color',
                 'locale',
                 'url',
                 'version',
+                'allow_external_signup',
                 'sentry_dsn',
-                'sentry_env'
+                'sentry_env',
+                'site_uuid'
             ])
         };
     }

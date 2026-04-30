@@ -1,7 +1,8 @@
-const should = require('should');
+const assert = require('node:assert/strict');
 const sinon = require('sinon');
 const _ = require('lodash');
 const foreach = require('../../../../core/frontend/helpers/foreach');
+const {assertExists, assertObjectMatches} = require('../../../utils/assertions');
 const {registerHelper, shouldCompileToExpected} = require('./utils/handlebars');
 
 describe('{{#foreach}} helper', function () {
@@ -46,12 +47,12 @@ describe('{{#foreach}} helper', function () {
 
             runTest(_this, context, options);
 
-            options.fn.called.should.be.true();
-            options.fn.getCalls().length.should.eql(_.size(context));
+            sinon.assert.called(options.fn);
+            sinon.assert.callCount(options.fn, _.size(context));
 
             _.each(context, function (value, index) {
-                options.fn.getCall(index).args[0].should.eql(value);
-                should(options.fn.getCall(index).args[1].data).be.undefined();
+                assert.equal(options.fn.getCall(index).args[0], value);
+                assert.equal(options.fn.getCall(index).args[1].data, undefined);
             });
         });
 
@@ -71,12 +72,12 @@ describe('{{#foreach}} helper', function () {
 
             runTest(_this, context, options);
 
-            options.fn.called.should.be.true();
-            options.fn.getCalls().length.should.eql(_.size(context));
+            sinon.assert.called(options.fn);
+            sinon.assert.callCount(options.fn, _.size(context));
 
             _.each(_.keys(context), function (value, index) {
-                options.fn.getCall(index).args[0].should.eql(context[value]);
-                should(options.fn.getCall(index).args[1].data).be.undefined();
+                assert.equal(options.fn.getCall(index).args[0], context[value]);
+                assert.equal(options.fn.getCall(index).args[1].data, undefined);
             });
         });
 
@@ -97,23 +98,23 @@ describe('{{#foreach}} helper', function () {
 
             runTest(_this, context, options);
 
-            options.fn.called.should.be.true();
-            options.fn.getCalls().length.should.eql(_.size(context));
+            sinon.assert.called(options.fn);
+            sinon.assert.callCount(options.fn, _.size(context));
 
             _.each(context, function (value, index) {
-                options.fn.getCall(index).args[0].should.eql(value);
-                should(options.fn.getCall(index).args[1].data).not.be.undefined();
+                assert.equal(options.fn.getCall(index).args[0], value);
+                assertExists(options.fn.getCall(index).args[1].data);
 
                 // Expected properties
-                resultData[index].data.should.containEql(expected[index]);
+                assertObjectMatches(resultData[index].data, expected[index]);
 
                 // Incrementing properties
-                resultData[index].data.should.have.property('key', index);
-                resultData[index].data.should.have.property('index', index);
-                resultData[index].data.should.have.property('number', index + 1);
+                assert.equal(resultData[index].data.key, index);
+                assert.equal(resultData[index].data.index, index);
+                assert.equal(resultData[index].data.number, index + 1);
             });
 
-            resultData[_.size(context) - 1].data.should.eql(options.fn.lastCall.args[1].data);
+            assert.deepEqual(resultData[_.size(context) - 1].data, options.fn.lastCall.args[1].data);
         });
 
         it('should populate data when private data is supplied (object)', function () {
@@ -139,23 +140,23 @@ describe('{{#foreach}} helper', function () {
 
             runTest(_this, context, options);
 
-            options.fn.called.should.be.true();
-            options.fn.getCalls().length.should.eql(_.size(context));
+            sinon.assert.called(options.fn);
+            sinon.assert.callCount(options.fn, _.size(context));
 
             _.each(_.keys(context), function (value, index) {
-                options.fn.getCall(index).args[0].should.eql(context[value]);
-                should(options.fn.getCall(index).args[1].data).not.be.undefined();
+                assert.equal(options.fn.getCall(index).args[0], context[value]);
+                assertExists(options.fn.getCall(index).args[1].data);
 
                 // Expected properties
-                resultData[index].data.should.containEql(expected[index]);
+                assertObjectMatches(resultData[index].data, expected[index]);
 
                 // Incrementing properties
-                resultData[index].data.should.have.property('key', value);
-                resultData[index].data.should.have.property('index', index);
-                resultData[index].data.should.have.property('number', index + 1);
+                assert.equal(resultData[index].data.key, value);
+                assert.equal(resultData[index].data.index, index);
+                assert.equal(resultData[index].data.number, index + 1);
             });
 
-            resultData[_.size(context) - 1].data.should.eql(options.fn.lastCall.args[1].data);
+            assert.deepEqual(resultData[_.size(context) - 1].data, options.fn.lastCall.args[1].data);
         });
 
         it('should handle rowStart and rowEnd for multiple columns (array)', function () {
@@ -174,26 +175,26 @@ describe('{{#foreach}} helper', function () {
             context = 'hello world this is ghost'.split(' ');
             runTest(_this, context, options);
 
-            options.fn.called.should.be.true();
-            options.fn.getCalls().length.should.eql(_.size(context));
+            sinon.assert.called(options.fn);
+            sinon.assert.callCount(options.fn, _.size(context));
 
             _.each(context, function (value, index) {
-                options.fn.getCall(index).args[0].should.eql(value);
-                should(options.fn.getCall(index).args[1].data).not.be.undefined();
+                assert.equal(options.fn.getCall(index).args[0], value);
+                assertExists(options.fn.getCall(index).args[1].data);
 
                 // Expected properties
-                resultData[index].data.should.containEql(expected[index]);
+                assertObjectMatches(resultData[index].data, expected[index]);
 
                 // Incrementing properties
-                resultData[index].data.should.have.property('key', index);
-                resultData[index].data.should.have.property('index', index);
-                resultData[index].data.should.have.property('number', index + 1);
+                assert.equal(resultData[index].data.key, index);
+                assert.equal(resultData[index].data.index, index);
+                assert.equal(resultData[index].data.number, index + 1);
             });
 
-            resultData[_.size(context) - 1].data.should.eql(options.fn.lastCall.args[1].data);
+            assert.deepEqual(resultData[_.size(context) - 1].data, options.fn.lastCall.args[1].data);
         });
 
-        it('should handle rowStart and rowEnd for multiple columns (array)', function () {
+        it('should handle rowStart and rowEnd for multiple columns (object)', function () {
             const expected = [
                 {first: true, last: false, even: false, odd: true, rowStart: true, rowEnd: false},
                 {first: false, last: false, even: true, odd: false, rowStart: false, rowEnd: true},
@@ -216,23 +217,23 @@ describe('{{#foreach}} helper', function () {
 
             runTest(_this, context, options);
 
-            options.fn.called.should.be.true();
-            options.fn.getCalls().length.should.eql(_.size(context));
+            sinon.assert.called(options.fn);
+            sinon.assert.callCount(options.fn, _.size(context));
 
             _.each(_.keys(context), function (value, index) {
-                options.fn.getCall(index).args[0].should.eql(context[value]);
-                should(options.fn.getCall(index).args[1].data).not.be.undefined();
+                assert.equal(options.fn.getCall(index).args[0], context[value]);
+                assertExists(options.fn.getCall(index).args[1].data);
 
                 // Expected properties
-                resultData[index].data.should.containEql(expected[index]);
+                assertObjectMatches(resultData[index].data, expected[index]);
 
                 // Incrementing properties
-                resultData[index].data.should.have.property('key', value);
-                resultData[index].data.should.have.property('index', index);
-                resultData[index].data.should.have.property('number', index + 1);
+                assert.equal(resultData[index].data.key, value);
+                assert.equal(resultData[index].data.index, index);
+                assert.equal(resultData[index].data.number, index + 1);
             });
 
-            resultData[_.size(context) - 1].data.should.eql(options.fn.lastCall.args[1].data);
+            assert.deepEqual(resultData[_.size(context) - 1].data, options.fn.lastCall.args[1].data);
         });
 
         it('should return the correct inverse result if no context is provided', function () {
@@ -243,9 +244,9 @@ describe('{{#foreach}} helper', function () {
 
             runTest(_this, context, options);
 
-            options.fn.called.should.be.false();
-            options.inverse.called.should.be.true();
-            options.inverse.calledOnce.should.be.true();
+            sinon.assert.notCalled(options.fn);
+            sinon.assert.called(options.inverse);
+            sinon.assert.calledOnce(options.inverse);
         });
     });
 
@@ -400,6 +401,27 @@ describe('{{#foreach}} helper', function () {
             const expected = '<ul><li>first</li><li>second</li><li>third</li></ul>';
             shouldCompileToExpected(templateString, arrayHashWithVis, expected);
             shouldCompileToExpected(templateString, objectHashWithVis, expected);
+        });
+
+        it('foreach with newsletters with members visibility', function () {
+            const newsletterObjectHashWithVisibility = {
+                newsletters: {
+                    first: {name: 'first', visibility: 'members', subscribe_on_signup: true},
+                    second: {name: 'second', visibility: 'members', subscribe_on_signup: true},
+                    third: {name: 'third', visibility: 'paid', subscribe_on_signup: false}
+                }
+            };
+            const newsletterArrayHashWithVisibility = {
+                newsletters: [
+                    {name: 'first', visibility: 'members', subscribe_on_signup: true},
+                    {name: 'second', visibility: 'members', subscribe_on_signup: true},
+                    {name: 'third', visibility: 'paid', subscribe_on_signup: false}
+                ]
+            };
+            const templateString = '<ul>{{#foreach newsletters}}<li>{{name}}</li>{{else}}not this{{/foreach}}</ul>';
+            const expected = '<ul><li>first</li><li>second</li><li>third</li></ul>';
+            shouldCompileToExpected(templateString, newsletterObjectHashWithVisibility, expected);
+            shouldCompileToExpected(templateString, newsletterArrayHashWithVisibility, expected);
         });
 
         it('foreach with from 2', function () {

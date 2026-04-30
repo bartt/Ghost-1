@@ -1,7 +1,8 @@
-const should = require('should');
+const assert = require('node:assert/strict');
+const {assertExists} = require('../../../../../utils/assertions');
 const sinon = require('sinon');
 const testUtils = require('../../../../../utils');
-const configUtils = require('../../../../../utils/configUtils');
+const configUtils = require('../../../../../utils/config-utils');
 const urlUtils = require('../../../../../../core/shared/url-utils');
 const routerManager = require('../../../../../../core/frontend/services/routing/').routerManager;
 const controllers = require('../../../../../../core/frontend/services/routing/controllers');
@@ -14,14 +15,14 @@ describe('Unit - services/routing/controllers/entry', function () {
     let res;
     let entryLookUpStub;
     let renderStub;
+    let urlUtilsRedirect301Stub;
+    let routerManagerGetResourceByIdStub;
+    let urlUtilsRedirectToAdminStub;
     let post;
-    let page;
 
     beforeEach(function () {
         post = testUtils.DataGenerator.forKnex.createPost();
         post.url = '/does-exist/';
-
-        page = testUtils.DataGenerator.forKnex.createPost({page: 1});
 
         entryLookUpStub = sinon.stub();
         renderStub = sinon.stub();
@@ -34,9 +35,9 @@ describe('Unit - services/routing/controllers/entry', function () {
             return renderStub;
         });
 
-        sinon.stub(urlUtils, 'redirectToAdmin');
-        sinon.stub(urlUtils, 'redirect301');
-        sinon.stub(routerManager, 'getResourceById');
+        urlUtilsRedirectToAdminStub = sinon.stub(urlUtils, 'redirectToAdmin');
+        urlUtilsRedirect301Stub = sinon.stub(urlUtils, 'redirect301');
+        routerManagerGetResourceByIdStub = sinon.stub(routerManager, 'getResourceById');
 
         req = {
             path: '/',
@@ -65,7 +66,7 @@ describe('Unit - services/routing/controllers/entry', function () {
             .resolves(null);
 
         controllers.entry(req, res, function (err) {
-            should.not.exist(err);
+            assert.equal(err, undefined);
             done();
         });
     });
@@ -76,7 +77,7 @@ describe('Unit - services/routing/controllers/entry', function () {
 
         res.routerOptions.resourceType = 'posts';
 
-        routerManager.getResourceById.withArgs(post.id).returns({
+        routerManagerGetResourceByIdStub.withArgs(post.id).returns({
             config: {
                 type: 'posts'
             }
@@ -103,7 +104,7 @@ describe('Unit - services/routing/controllers/entry', function () {
                 });
 
             controllers.entry(req, res, function (err) {
-                should.not.exist(err);
+                assert.equal(err, undefined);
                 done();
             });
         });
@@ -117,9 +118,9 @@ describe('Unit - services/routing/controllers/entry', function () {
                     entry: post
                 });
 
-            urlUtils.redirectToAdmin.callsFake(function (statusCode, _res, editorUrl) {
-                statusCode.should.eql(302);
-                editorUrl.should.eql(EDITOR_URL + post.id);
+            urlUtilsRedirectToAdminStub.callsFake(function (statusCode, _res, editorUrl) {
+                assert.equal(statusCode, 302);
+                assert.equal(editorUrl, EDITOR_URL + post.id);
                 done();
             });
 
@@ -139,15 +140,15 @@ describe('Unit - services/routing/controllers/entry', function () {
                     entry: post
                 });
 
-            urlUtils.redirectToAdmin.callsFake(function (statusCode, _res, editorUrl) {
-                configUtils.restore();
+            urlUtilsRedirectToAdminStub.callsFake(async function () {
+                await configUtils.restore();
                 done(new Error('redirectToAdmin was called'));
             });
 
-            controllers.entry(req, res, (err) => {
-                configUtils.restore();
-                urlUtils.redirectToAdmin.called.should.eql(false);
-                should.not.exist(err);
+            controllers.entry(req, res, async (err) => {
+                await configUtils.restore();
+                sinon.assert.notCalled(urlUtilsRedirectToAdminStub);
+                assert.equal(err, undefined);
                 done(err);
             });
         });
@@ -156,7 +157,7 @@ describe('Unit - services/routing/controllers/entry', function () {
             req.path = post.url;
             res.routerOptions.resourceType = 'posts';
 
-            routerManager.getResourceById.withArgs(post.id).returns({
+            routerManagerGetResourceByIdStub.withArgs(post.id).returns({
                 config: {
                     type: 'pages'
                 }
@@ -168,7 +169,7 @@ describe('Unit - services/routing/controllers/entry', function () {
                 });
 
             controllers.entry(req, res, function (err) {
-                should.not.exist(err);
+                assert.equal(err, undefined);
                 done();
             });
         });
@@ -180,7 +181,7 @@ describe('Unit - services/routing/controllers/entry', function () {
 
             res.routerOptions.resourceType = 'posts';
 
-            routerManager.getResourceById.withArgs(post.id).returns({
+            routerManagerGetResourceByIdStub.withArgs(post.id).returns({
                 config: {
                     type: 'posts'
                 }
@@ -191,13 +192,13 @@ describe('Unit - services/routing/controllers/entry', function () {
                     entry: post
                 });
 
-            urlUtils.redirect301.callsFake(function (_res, postUrl) {
-                postUrl.should.eql(post.url);
+            urlUtilsRedirect301Stub.callsFake(function (_res, postUrl) {
+                assert.equal(postUrl, post.url);
                 done();
             });
 
             controllers.entry(req, res, function (err) {
-                should.exist(err);
+                assertExists(err);
                 done(err);
             });
         });
@@ -209,7 +210,7 @@ describe('Unit - services/routing/controllers/entry', function () {
 
             res.routerOptions.resourceType = 'posts';
 
-            routerManager.getResourceById.withArgs(post.id).returns({
+            routerManagerGetResourceByIdStub.withArgs(post.id).returns({
                 config: {
                     type: 'posts'
                 }
@@ -220,8 +221,8 @@ describe('Unit - services/routing/controllers/entry', function () {
                     entry: post
                 });
 
-            urlUtils.redirect301.callsFake(function (_res, postUrl) {
-                postUrl.should.eql(post.url + '?query=true');
+            urlUtilsRedirect301Stub.callsFake(function (_res, postUrl) {
+                assert.equal(postUrl, post.url + '?query=true');
                 done();
             });
 

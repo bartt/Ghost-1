@@ -8,7 +8,7 @@ export default class GhMembersSegmentSelect extends Component {
     @service store;
     @service feature;
 
-    @tracked _options = [];
+    @tracked _baseOptions = [];
 
     get renderInPlace() {
         return this.args.renderInPlace === undefined ? false : this.args.renderInPlace;
@@ -19,36 +19,23 @@ export default class GhMembersSegmentSelect extends Component {
         this.fetchOptionsTask.perform();
     }
 
-    get options() {
+    get nonLabelOptions() {
         if (this.args.hideOptionsWhenAllSelected) {
-            const selectedSegments = this.selectedOptions.mapBy('segment');
-            if (selectedSegments.includes('status:free') && selectedSegments.includes('status:-free')) {
-                return this._options.filter(option => !option.groupName);
+            const segments = (this.args.segment || '').split(',');
+            if (segments.includes('status:free') && segments.includes('status:-free')) {
+                return this._baseOptions.filter(option => !option.groupName);
             }
         }
 
-        return this._options;
+        return this._baseOptions;
     }
 
-    get flatOptions() {
-        const options = [];
-
-        function getOptions(option) {
-            if (option.options) {
-                return option.options.forEach(getOptions);
-            }
-
-            options.push(option);
-        }
-
-        this._options.forEach(getOptions);
-
-        return options;
+    get selectedSegments() {
+        return (this.args.segment || '').split(',').filter(Boolean);
     }
 
-    get selectedOptions() {
-        const segments = (this.args.segment || '').split(',');
-        return this.flatOptions.filter(option => segments.includes(option.segment));
+    get hideLabelsComputed() {
+        return !!this.args.hideLabels;
     }
 
     @action
@@ -68,7 +55,7 @@ export default class GhMembersSegmentSelect extends Component {
                 class: 'segment-status-free'
             }, {
                 name: 'Paid members',
-                segment: 'status:-free', // paid & comped
+                segment: 'status:-free', // paid & comped & gift
                 class: 'segment-status-paid'
             });
         }
@@ -78,48 +65,59 @@ export default class GhMembersSegmentSelect extends Component {
         const tiers = yield this.store.query('tier', {filter: 'type:paid', limit: 'all', include: 'monthly_price,yearly_price,benefits'});
 
         if (tiers.length > 0) {
-            const tiersGroup = {
-                groupName: 'Tiers',
+            const activeTiersGroup = {
+                groupName: 'Active tiers',
+                options: []
+            };
+
+            const archivedTiersGroup = {
+                groupName: 'Archived tiers',
                 options: []
             };
 
             tiers.forEach((tier) => {
-                tiersGroup.options.push({
+                const tierData = {
                     name: tier.name,
-                    segment: `tier:${tier.slug}`,
+                    segment: `${tier.id}`,
                     count: tier.count?.members,
                     class: 'segment-tier'
-                });
+                };
+
+                if (tier.active) {
+                    activeTiersGroup.options.push(tierData);
+                } else {
+                    archivedTiersGroup.options.push(tierData);
+                }
             });
 
-            options.push(tiersGroup);
+            options.push(activeTiersGroup);
+            options.push(archivedTiersGroup);
+
             if (this.args.selectDefaultTier && !this.args.segment) {
-                this.args.onChange?.(tiersGroup.options[0].segment);
+                this.args.onChange?.(activeTiersGroup.options[0].segment);
             }
         }
 
-        // fetch all labels w̶i̶t̶h̶ c̶o̶u̶n̶t̶s̶
-        // TODO: add `include: 'count.members` to query once API is fixed
-        const labels = yield this.store.query('label', {limit: 'all'});
+        const offers = yield this.store.findAll('offer');
 
-        if (labels.length > 0 && !this.args.hideLabels) {
-            const labelsGroup = {
-                groupName: 'Labels',
+        if (offers.length > 0) {
+            const offersGroup = {
+                groupName: 'Offers',
                 options: []
             };
 
-            labels.forEach((label) => {
-                labelsGroup.options.push({
-                    name: label.name,
-                    segment: `label:${label.slug}`,
-                    count: label.count?.members,
-                    class: 'segment-label'
+            offers.forEach((offer) => {
+                offersGroup.options.push({
+                    name: offer.name,
+                    segment: `offer_redemptions:${offer.id}`,
+                    count: offer.count?.members,
+                    class: 'segment-offer'
                 });
             });
 
-            options.push(labelsGroup);
+            options.push(offersGroup);
         }
 
-        this._options = options;
+        this._baseOptions = options;
     }
 }

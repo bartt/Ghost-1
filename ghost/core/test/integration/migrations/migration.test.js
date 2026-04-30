@@ -1,245 +1,314 @@
-const should = require('should');
+const assert = require('node:assert/strict');
 const sinon = require('sinon');
 const testUtils = require('../../utils');
 const _ = require('lodash');
-const Promise = require('bluebird');
 const Models = require('../../../core/server/models');
 
-describe('Database Migration (special functions)', function () {
-    before(testUtils.teardownDb);
-    afterEach(testUtils.teardownDb);
+const KnexMigrator = require('knex-migrator');
+const path = require('path');
+const semver = require('semver');
+
+const knexMigrator = new KnexMigrator({
+    knexMigratorFilePath: path.join(__dirname, '../../../')
+});
+
+const db = require('../../../core/server/data/db');
+const dbUtils = require('../../utils/db-utils');
+
+const currentVersion = require('@tryghost/version');
+const currentMajor = semver.major(currentVersion.original);
+const previousMinor = semver.minor(currentVersion.original) - 1;
+const previousVersion = `${currentMajor}.${previousMinor}`;
+
+describe('Migrations', function () {
+    beforeEach(async function () {
+        await dbUtils.teardown();
+    });
+
     afterEach(function () {
         sinon.restore();
     });
 
+    describe('Database initialization + rollback', function () {
+        beforeEach(async function () {
+            await knexMigrator.reset({force: true});
+            await knexMigrator.init();
+        });
+
+        it('can rollback to the previous minor version', async function () {
+            await knexMigrator.rollback({
+                version: previousVersion,
+                force: true
+            });
+        });
+
+        it('can rollback to the previous minor version and then forwards again', async function () {
+            await knexMigrator.rollback({
+                version: previousVersion,
+                force: true
+            });
+            await knexMigrator.migrate({
+                force: true
+            });
+        });
+
+        it('should have idempotent migrations', async function () {
+            // Delete all knowledge that we've run migrations so we can run them again
+            if (dbUtils.isMySQL()) {
+                await db.knex('migrations').whereILike('version', `${currentMajor}.%`).del();
+            } else {
+                await db.knex('migrations').whereLike('version', `${currentMajor}.%`).del();
+            }
+
+            await knexMigrator.migrate({
+                force: true
+            });
+        });
+    });
+
     describe('Fixtures', function () {
         // Custom assertion for detection that a permissions is assigned to the correct roles
-        should.Assertion.add('AssignedToRoles', function (roles) {
-            let roleNames;
-            this.params = {operator: 'to have role'};
-
-            should.exist(this.obj);
-
-            this.obj.should.be.an.Object().with.property(['roles']);
-            this.obj.roles.should.be.an.Array();
+        function assertAssignedToRoles(permission, roles) {
+            assert('roles' in permission);
+            assert(Array.isArray(permission.roles));
 
             // Ensure the roles are in id order
-            roleNames = _(this.obj.roles).sortBy('id').map('name').value();
-            roleNames.should.eql(roles);
-        });
+            const roleNames = _(permission.roles).sortBy('id').map('name').value();
+            assert.deepEqual(roleNames, roles);
+        }
 
-        should.Assertion.add('havePermission', function (name, roles = null) {
-            const permission = this.obj.find((p) => {
+        function assertHavePermission(permissions, name, roles = null) {
+            const permission = permissions.find((p) => {
                 return p.name === name;
             });
-            should.exist(permission, `Could not find permission ${name}`);
+            assert(permission, `Could not find permission ${name}`);
 
             if (roles) {
-                permission.should.be.AssignedToRoles(roles);
+                assertAssignedToRoles(permission, roles);
             }
-        });
+        }
 
         // Custom assertion to wrap all permissions
-        should.Assertion.add('CompletePermissions', function () {
-            this.params = {operator: 'to have a complete set of permissions'};
-            const permissions = this.obj;
+        function assertCompletePermissions(permissions) {
+            // If you have to change this number, please add the relevant `assertHavePermission` checks below
+            assert.equal(permissions.length, 135);
 
-            // If you have to change this number, please add the relevant `havePermission` checks below
-            permissions.length.should.eql(108);
+            assertHavePermission(permissions, 'Export database', ['Administrator', 'DB Backup Integration']);
+            assertHavePermission(permissions, 'Import database', ['Administrator', 'Self-Serve Migration Integration', 'DB Backup Integration']);
+            assertHavePermission(permissions, 'Delete all content', ['Administrator', 'DB Backup Integration']);
+            assertHavePermission(permissions, 'Backup database', ['Administrator', 'DB Backup Integration']);
 
-            permissions.should.havePermission('Export database', ['Administrator', 'DB Backup Integration']);
-            permissions.should.havePermission('Import database', ['Administrator', 'DB Backup Integration']);
-            permissions.should.havePermission('Delete all content', ['Administrator', 'DB Backup Integration']);
-            permissions.should.havePermission('Backup database', ['Administrator', 'DB Backup Integration']);
+            assertHavePermission(permissions, 'Send mail', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Send mail', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse notifications', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add notifications', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete notifications', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Browse notifications', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Add notifications', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Delete notifications', ['Administrator', 'Editor', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Publish posts', ['Administrator', 'Editor', 'Admin Integration', 'Scheduler Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Flush gift reminders', ['Scheduler Integration']);
 
-            permissions.should.havePermission('Browse posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Read posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Edit posts', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Add posts', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Delete posts', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Publish posts', ['Administrator', 'Editor', 'Admin Integration', 'Scheduler Integration']);
+            assertHavePermission(permissions, 'Browse settings', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read settings', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit settings', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Browse settings', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Read settings', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Edit settings', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Generate slugs', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Generate slugs', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse tags', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read tags', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Self-Serve Migration Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit tags', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add tags', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete tags', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Browse tags', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Read tags', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Edit tags', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Add tags', ['Administrator', 'Editor', 'Author', 'Admin Integration']);
-            permissions.should.havePermission('Delete tags', ['Administrator', 'Editor', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse themes', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit themes', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Activate themes', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'View active theme details', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Upload themes', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Download themes', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Delete themes', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Browse themes', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Edit themes', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Activate themes', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Upload themes', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Download themes', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Delete themes', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse users', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read users', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit users', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add users', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete users', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Browse users', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Read users', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Edit users', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Add users', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Delete users', ['Administrator', 'Editor', 'Admin Integration']);
+            assertHavePermission(permissions, 'Assign a role', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Browse roles', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Browse invites', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read invites', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit invites', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add invites', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete invites', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Assign a role', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Browse roles', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Browse invites', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Read invites', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Edit invites', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Add invites', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Delete invites', ['Administrator', 'Editor', 'Admin Integration']);
+            assertHavePermission(permissions, 'Download redirects', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Upload redirects', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Download redirects', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Upload redirects', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Add webhooks', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Edit webhooks', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Delete webhooks', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Add webhooks', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Edit webhooks', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Delete webhooks', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse integrations', ['Administrator']);
+            assertHavePermission(permissions, 'Read integrations', ['Administrator']);
+            assertHavePermission(permissions, 'Edit integrations', ['Administrator']);
+            assertHavePermission(permissions, 'Add integrations', ['Administrator']);
+            assertHavePermission(permissions, 'Delete integrations', ['Administrator']);
 
-            permissions.should.havePermission('Browse integrations', ['Administrator']);
-            permissions.should.havePermission('Read integrations', ['Administrator']);
-            permissions.should.havePermission('Edit integrations', ['Administrator']);
-            permissions.should.havePermission('Add integrations', ['Administrator']);
-            permissions.should.havePermission('Delete integrations', ['Administrator']);
+            assertHavePermission(permissions, 'Browse API keys', ['Administrator']);
+            assertHavePermission(permissions, 'Read API keys', ['Administrator']);
+            assertHavePermission(permissions, 'Edit API keys', ['Administrator']);
+            assertHavePermission(permissions, 'Add API keys', ['Administrator']);
+            assertHavePermission(permissions, 'Delete API keys', ['Administrator']);
 
-            permissions.should.havePermission('Browse API keys', ['Administrator']);
-            permissions.should.havePermission('Read API keys', ['Administrator']);
-            permissions.should.havePermission('Edit API keys', ['Administrator']);
-            permissions.should.havePermission('Add API keys', ['Administrator']);
-            permissions.should.havePermission('Delete API keys', ['Administrator']);
+            assertHavePermission(permissions, 'Browse Actions', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Browse Actions', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Email preview', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Send test email', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Browse emails', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read emails', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Retry emails', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Email preview', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Send test email', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Browse emails', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Read emails', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Retry emails', ['Administrator', 'Editor', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse snippets', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read snippets', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit snippets', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add snippets', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete snippets', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Browse snippets', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Read snippets', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration']);
-            permissions.should.havePermission('Edit snippets', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Add snippets', ['Administrator', 'Editor', 'Admin Integration']);
-            permissions.should.havePermission('Delete snippets', ['Administrator', 'Editor', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse labels', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read labels', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit labels', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add labels', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete labels', ['Administrator', 'Admin Integration', 'Super Editor']);
 
-            permissions.should.havePermission('Browse labels', ['Administrator', 'Editor', 'Author', 'Admin Integration']);
-            permissions.should.havePermission('Read labels', ['Administrator', 'Editor', 'Author', 'Admin Integration']);
-            permissions.should.havePermission('Edit labels', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Add labels', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Delete labels', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Read member signin urls');
+            assertHavePermission(permissions, 'Read identities');
+            assertHavePermission(permissions, 'Auth Stripe Connect for Members');
 
-            permissions.should.havePermission('Read member signin urls');
-            permissions.should.havePermission('Read identities');
-            permissions.should.havePermission('Auth Stripe Connect for Members');
+            assertHavePermission(permissions, 'Browse Members');
+            assertHavePermission(permissions, 'Read Members');
+            assertHavePermission(permissions, 'Edit Members');
+            assertHavePermission(permissions, 'Add Members', ['Administrator', 'Admin Integration', 'Self-Serve Migration Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete Members');
 
-            permissions.should.havePermission('Browse Members');
-            permissions.should.havePermission('Read Members');
-            permissions.should.havePermission('Edit Members');
-            permissions.should.havePermission('Add Members');
-            permissions.should.havePermission('Delete Members');
+            assertHavePermission(permissions, 'Browse offers');
+            assertHavePermission(permissions, 'Read offers');
+            assertHavePermission(permissions, 'Edit offers');
+            assertHavePermission(permissions, 'Add offers');
 
-            permissions.should.havePermission('Browse offers');
-            permissions.should.havePermission('Read offers');
-            permissions.should.havePermission('Edit offers');
-            permissions.should.havePermission('Add offers');
+            assertHavePermission(permissions, 'Browse Products', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read Products', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit Products', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Add Products', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Delete Products', ['Administrator']);
 
-            permissions.should.havePermission('Browse Products', ['Administrator', 'Editor', 'Author', 'Admin Integration']);
-            permissions.should.havePermission('Read Products', ['Administrator', 'Editor', 'Author', 'Admin Integration']);
-            permissions.should.havePermission('Edit Products', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Add Products', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Delete Products', ['Administrator']);
+            assertHavePermission(permissions, 'Reset all passwords', ['Administrator']);
 
-            permissions.should.havePermission('Reset all passwords', ['Administrator']);
+            assertHavePermission(permissions, 'Browse custom theme settings', ['Administrator']);
+            assertHavePermission(permissions, 'Edit custom theme settings', ['Administrator']);
 
-            permissions.should.havePermission('Browse custom theme settings', ['Administrator']);
-            permissions.should.havePermission('Edit custom theme settings', ['Administrator']);
+            assertHavePermission(permissions, 'Browse newsletters', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read newsletters', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit newsletters', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Add newsletters', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Browse newsletters', ['Administrator', 'Editor', 'Author', 'Admin Integration']);
-            permissions.should.havePermission('Read newsletters', ['Administrator', 'Editor', 'Author', 'Admin Integration']);
-            permissions.should.havePermission('Edit newsletters', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Add newsletters', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Read explore data', ['Administrator', 'Admin Integration', 'Ghost Explore Integration']);
 
-            permissions.should.havePermission('Read explore data', ['Administrator', 'Admin Integration', 'Ghost Explore Integration']);
+            assertHavePermission(permissions, 'Browse comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Moderate comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Like comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Unlike comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Report comments', ['Administrator', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Browse links', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse mentions', ['Administrator', 'Admin Integration']);
 
-            permissions.should.havePermission('Browse comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Read comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Edit comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Add comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Delete comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Moderate comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Like comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Unlike comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Report comments', ['Administrator', 'Admin Integration']);
-            permissions.should.havePermission('Browse links', ['Administrator', 'Admin Integration']);
-        });
+            assertHavePermission(permissions, 'Browse collections', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read collections', ['Administrator', 'Editor', 'Author', 'Contributor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Edit collections', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Add collections', ['Administrator', 'Editor', 'Author', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Delete collections', ['Administrator', 'Editor', 'Admin Integration', 'Super Editor']);
+            assertHavePermission(permissions, 'Read member signin urls', ['Administrator', 'Admin Integration', 'Super Editor']);
+
+            assertHavePermission(permissions, 'Browse automated emails', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Read automated emails', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Edit automated emails', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Add automated emails', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Delete automated emails', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Browse automations', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Read automations', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Edit automations', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Poll automations', ['Scheduler Integration']);
+
+            assertHavePermission(permissions, 'Browse email design settings', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Read email design settings', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Edit email design settings', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Add email design settings', ['Administrator', 'Admin Integration']);
+            assertHavePermission(permissions, 'Delete email design settings', ['Administrator', 'Admin Integration']);
+        }
 
         describe('Populate', function () {
             beforeEach(testUtils.setup('default'));
 
-            it('should populate all fixtures correctly', function () {
-                const props = {
-                    posts: Models.Post.findAll({withRelated: ['tags']}),
-                    tags: Models.Tag.findAll(),
-                    users: Models.User.findAll({
+            it('should populate all fixtures correctly', async function () {
+                const [posts, tags, users, roles, permissions] = await Promise.all([
+                    Models.Post.findAll({withRelated: ['tags']}),
+                    Models.Tag.findAll(),
+                    Models.User.findAll({
                         filter: 'status:inactive',
                         context: {internal: true},
                         withRelated: ['roles']
                     }),
-                    roles: Models.Role.findAll(),
-                    permissions: Models.Permission.findAll({withRelated: ['roles']})
-                };
+                    Models.Role.findAll(),
+                    Models.Permission.findAll({withRelated: ['roles']})
+                ]);
+                // Post
+                assert(posts);
+                assert.equal(posts.length, 7);
+                assert.equal(posts.at(0).get('title'), 'Start here for a quick overview of everything you need to know');
+                assert.equal(posts.at(6).get('title'), 'Setting up apps and custom integrations');
 
-                return Promise.props(props).then(function (result) {
-                    should.exist(result);
+                // Tag
+                assert(tags);
+                assert.equal(tags.length, 1);
+                assert.equal(tags.at(0).get('name'), 'Getting Started');
 
-                    // Post
-                    should.exist(result.posts);
-                    result.posts.length.should.eql(7);
-                    result.posts.at(0).get('title').should.eql('Start here for a quick overview of everything you need to know');
-                    result.posts.at(6).get('title').should.eql('Setting up apps and custom integrations');
+                // Post Tag relation
+                assert.equal(posts.at(0).related('tags').length, 1);
+                assert.equal(posts.at(0).related('tags').at(0).get('name'), 'Getting Started');
 
-                    // Tag
-                    should.exist(result.tags);
-                    result.tags.length.should.eql(1);
-                    result.tags.at(0).get('name').should.eql('Getting Started');
+                // User (Owner)
+                assert(users);
+                assert.equal(users.length, 1);
+                assert.equal(users.at(0).get('name'), 'Ghost');
+                assert.equal(users.at(0).get('status'), 'inactive');
+                assert.equal(users.at(0).related('roles').length, 1);
+                assert.equal(users.at(0).related('roles').at(0).get('name'), 'Owner');
 
-                    // Post Tag relation
-                    result.posts.at(0).related('tags').length.should.eql(1);
-                    result.posts.at(0).related('tags').at(0).get('name').should.eql('Getting Started');
+                // Roles
+                assert(roles);
+                assert.equal(roles.length, 11);
+                assert.equal(roles.at(0).get('name'), 'Administrator');
+                assert.equal(roles.at(1).get('name'), 'Editor');
+                assert.equal(roles.at(2).get('name'), 'Author');
+                assert.equal(roles.at(3).get('name'), 'Contributor');
+                assert.equal(roles.at(4).get('name'), 'Owner');
+                assert.equal(roles.at(5).get('name'), 'Admin Integration');
+                assert.equal(roles.at(6).get('name'), 'Ghost Explore Integration');
+                assert.equal(roles.at(7).get('name'), 'Self-Serve Migration Integration');
+                assert.equal(roles.at(8).get('name'), 'DB Backup Integration');
+                assert.equal(roles.at(9).get('name'), 'Scheduler Integration');
+                assert.equal(roles.at(10).get('name'), 'Super Editor');
 
-                    // User (Owner)
-                    should.exist(result.users);
-                    result.users.length.should.eql(1);
-                    result.users.at(0).get('name').should.eql('Ghost');
-                    result.users.at(0).get('status').should.eql('inactive');
-                    result.users.at(0).related('roles').length.should.eql(1);
-                    result.users.at(0).related('roles').at(0).get('name').should.eql('Owner');
-
-                    // Roles
-                    should.exist(result.roles);
-                    result.roles.length.should.eql(9);
-                    result.roles.at(0).get('name').should.eql('Administrator');
-                    result.roles.at(1).get('name').should.eql('Editor');
-                    result.roles.at(2).get('name').should.eql('Author');
-                    result.roles.at(3).get('name').should.eql('Contributor');
-                    result.roles.at(4).get('name').should.eql('Owner');
-                    result.roles.at(5).get('name').should.eql('Admin Integration');
-                    result.roles.at(6).get('name').should.eql('Ghost Explore Integration');
-                    result.roles.at(7).get('name').should.eql('DB Backup Integration');
-                    result.roles.at(8).get('name').should.eql('Scheduler Integration');
-
-                    // Permissions
-                    result.permissions.toJSON().should.be.CompletePermissions();
-                });
+                // Permissions
+                assertCompletePermissions(permissions.toJSON());
             });
         });
     });

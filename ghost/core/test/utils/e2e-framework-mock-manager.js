@@ -1,24 +1,33 @@
 const errors = require('@tryghost/errors');
 const sinon = require('sinon');
-const assert = require('assert');
+const assert = require('node:assert/strict');
 const nock = require('nock');
 
 // Helper services
-const configUtils = require('./configUtils');
+const configUtils = require('./config-utils');
 const WebhookMockReceiver = require('@tryghost/webhook-mock-receiver');
+const EmailMockReceiver = require('@tryghost/email-mock-receiver');
 const {snapshotManager} = require('@tryghost/express-test').snapshot;
 
 let mocks = {};
 let emailCount = 0;
 
 // Mockable services
+const MailgunClient = require('../../core/server/services/lib/mailgun-client');
 const mailService = require('../../core/server/services/mail/index');
+const originalMailServiceSendMail = mailService.GhostMailer.prototype.sendMail;
 const labs = require('../../core/shared/labs');
 const events = require('../../core/server/lib/common/events');
 const settingsCache = require('../../core/shared/settings-cache');
+const limitService = require('../../core/server/services/limits');
+const dns = require('dns');
+const dnsPromises = dns.promises;
+const StripeMocker = require('./stripe-mocker');
 
 let fakedLabsFlags = {};
+let allowedNetworkDomains = [];
 const originalLabsIsSet = labs.isSet;
+const stripeMocker = new StripeMocker();
 
 /**
  * Stripe Mocks
@@ -32,8 +41,76 @@ const disableStripe = async () => {
     await stripeService.disconnect();
 };
 
-const mockStripe = () => {
+const disableNetwork = () => {
     nock.disableNetConnect();
+
+    // externalRequest does dns lookup; stub to make sure we don't fail with fake domain names
+    if (!dnsPromises.lookup.restore) {
+        sinon.stub(dnsPromises, 'lookup').callsFake(() => {
+            return Promise.resolve({address: '123.123.123.123', family: 4});
+        });
+    }
+
+    if (!dns.resolveMx.restore) {
+        // without this, Node will try and resolve the domain name but local DNS
+        // resolvers can take a while to timeout, which causes the tests to timeout
+        // `nodemailer-direct-transport` calls `dns.resolveMx`, so if we stub that
+        // function and return an empty array, we can avoid any real DNS lookups
+        sinon.stub(dns, 'resolveMx').yields(null, []);
+    }
+
+    // Allow localhost
+    // Multiple enableNetConnect with different hosts overwrite each other, so we need to add one and use the allowedNetworkDomains variable
+    nock.enableNetConnect((host) => {
+        if (host.includes('127.0.0.1')) {
+            return true;
+        }
+        for (const h of allowedNetworkDomains) {
+            if (host.includes(h)) {
+                return true;
+            }
+        }
+        return false;
+    });
+};
+
+const allowStripe = () => {
+    disableNetwork();
+    allowedNetworkDomains.push('stripe.com');
+};
+
+const mockGeojs = () => {
+    disableNetwork();
+
+    nock(/get\.geojs\.io/)
+        .persist()
+        .get('/v1/ip/geo/127.0.0.1.json')
+        .reply(200, {
+            latitude: 'nil',
+            longitude: 'nil',
+            organization_name: 'Unknown',
+            ip: '127.0.0.1',
+            asn: 64512,
+            organization: 'AS64512 Unknown',
+            area_code: '0'
+        }, {
+            'Response-Type': 'application/json'
+        });
+};
+
+const mockStripe = () => {
+    disableNetwork();
+    stripeMocker.reset();
+    stripeMocker.stub();
+};
+
+const mockSlack = () => {
+    disableNetwork();
+
+    nock(/hooks.slack.com/)
+        .persist()
+        .post('/')
+        .reply(200, 'ok');
 };
 
 /**
@@ -44,27 +121,47 @@ const mockStripe = () => {
  * @param {String|Object} response
  */
 const mockMail = (response = 'Mail is disabled') => {
-    mocks.mail = sinon
-        .stub(mailService.GhostMailer.prototype, 'send')
-        .resolves(response);
+    const mockMailReceiver = new EmailMockReceiver({
+        snapshotManager: snapshotManager,
+        sendResponse: response
+    });
 
-    return mocks.mail;
+    mailService.GhostMailer.prototype.sendMail = mockMailReceiver.send.bind(mockMailReceiver);
+    mocks.mail = sinon.spy(mailService.GhostMailer.prototype, 'sendMail');
+    mocks.mockMailReceiver = mockMailReceiver;
+
+    return mockMailReceiver;
+};
+
+/**
+ * A reference to the send method when MailGun is mocked (required for some tests)
+ */
+let mailgunCreateMessageStub;
+
+const mockMailgun = (customStubbedSend) => {
+    mockSetting('mailgun_api_key', 'test');
+    mockSetting('mailgun_domain', 'example.com');
+    mockSetting('mailgun_base_url', 'test');
+
+    mailgunCreateMessageStub = customStubbedSend ? sinon.stub().callsFake(customStubbedSend) : sinon.fake.resolves({
+        id: `<${new Date().getTime()}.${0}.5817@samples.mailgun.org>`
+    });
+
+    // We need to stub the Mailgun client before starting Ghost
+    sinon.stub(MailgunClient.prototype, 'getInstance').returns({
+        // @ts-ignore
+        messages: {
+            create: async function () {
+                return await mailgunCreateMessageStub.call(this, ...arguments);
+            }
+        }
+    });
 };
 
 const mockWebhookRequests = () => {
     mocks.webhookMockReceiver = new WebhookMockReceiver({snapshotManager});
 
     return mocks.webhookMockReceiver;
-};
-
-const sentEmailCount = (count) => {
-    if (!mocks.mail) {
-        throw new errors.IncorrectUsageError({
-            message: 'Cannot assert on mail when mail has not been mocked'
-        });
-    }
-
-    sinon.assert.callCount(mocks.mail, count);
 };
 
 const sentEmail = (matchers) => {
@@ -93,11 +190,21 @@ const sentEmail = (matchers) => {
             assert.match(spyCall.args[0][key], value, `Expected Email ${emailCount} to have ${key} that matches ${value}, got ${spyCall.args[0][key]}`);
             return;
         }
-        
+
         assert.equal(spyCall.args[0][key], value, `Expected Email ${emailCount} to have ${key} of ${value}`);
     });
 
     return spyCall.args[0];
+};
+
+const sentEmailCount = (expectedCount) => {
+    if (!mocks.mail) {
+        throw new errors.IncorrectUsageError({
+            message: 'Cannot assert on mail when mail has not been mocked'
+        });
+    }
+
+    assert.equal(mocks.mail.callCount, expectedCount, `Expected ${expectedCount} emails to be sent, but ${mocks.mail.callCount} were sent.`);
 };
 
 /**
@@ -173,19 +280,105 @@ const mockLabsDisabled = (flag, alpha = true) => {
     fakedLabsFlags[flag] = false;
 };
 
+const mockLimitService = (limit, options) => {
+    if (!mocks.limitService) {
+        mocks.limitService = {
+            isLimited: sinon.stub(limitService, 'isLimited'),
+            isDisabled: sinon.stub(limitService, 'isDisabled'),
+            checkWouldGoOverLimit: sinon.stub(limitService, 'checkWouldGoOverLimit'),
+            errorIfWouldGoOverLimit: sinon.stub(limitService, 'errorIfWouldGoOverLimit'),
+            originalLimits: limitService.limits || {},
+            mockedLimits: new Set() // Track which limits we've mocked
+        };
+    }
+
+    mocks.limitService.isLimited.withArgs(limit).returns(options.isLimited);
+    mocks.limitService.isDisabled.withArgs(limit).returns(options.isDisabled);
+    mocks.limitService.checkWouldGoOverLimit.withArgs(limit).resolves(options.wouldGoOverLimit);
+
+    // Mock the limits property for checking allowlist
+    if (!limitService.limits) {
+        limitService.limits = {};
+    }
+    limitService.limits[limit] = {
+        allowlist: options.allowlist || []
+    };
+    mocks.limitService.mockedLimits.add(limit); // Track this limit
+
+    // If errorIfWouldGoOverLimit is true, reject with HostLimitError
+    if (options.errorIfWouldGoOverLimit === true) {
+        mocks.limitService.errorIfWouldGoOverLimit.withArgs(limit).rejects(
+            new errors.HostLimitError({
+                message: `Upgrade to use ${limit} feature.`
+            })
+        );
+    } else {
+        // Otherwise, resolve normally
+        mocks.limitService.errorIfWouldGoOverLimit.withArgs(limit).resolves();
+    }
+};
+
+const restoreLimitService = () => {
+    if (mocks.limitService) {
+        if (mocks.limitService.isLimited) {
+            mocks.limitService.isLimited.restore();
+        }
+        if (mocks.limitService.checkWouldGoOverLimit) {
+            mocks.limitService.checkWouldGoOverLimit.restore();
+        }
+        if (mocks.limitService.errorIfWouldGoOverLimit) {
+            mocks.limitService.errorIfWouldGoOverLimit.restore();
+        }
+        if (mocks.limitService.isDisabled) {
+            mocks.limitService.isDisabled.restore();
+        }
+
+        // Remove any limits we mocked
+        if (mocks.limitService.mockedLimits && limitService.limits) {
+            for (const limit of mocks.limitService.mockedLimits) {
+                delete limitService.limits[limit];
+            }
+        }
+
+        // If limits object is now empty and was originally empty, restore it
+        if (mocks.limitService.originalLimits !== undefined) {
+            if (Object.keys(mocks.limitService.originalLimits).length === 0 &&
+                limitService.limits && Object.keys(limitService.limits).length === 0) {
+                limitService.limits = mocks.limitService.originalLimits;
+            }
+        }
+
+        delete mocks.limitService;
+    }
+};
+
 const restore = () => {
-    configUtils.restore();
+    // eslint-disable-next-line no-console
+    configUtils.restore().catch(console.error);
+
+    // Restore limit service limits if we mocked them
+    if (mocks.limitService && mocks.limitService.originalLimits) {
+        limitService.limits = mocks.limitService.originalLimits;
+    }
+
     sinon.restore();
     mocks = {};
     fakedLabsFlags = {};
     fakedSettings = {};
     emailCount = 0;
+    allowedNetworkDomains = [];
     nock.cleanAll();
     nock.enableNetConnect();
+    stripeMocker.reset();
 
     if (mocks.webhookMockReceiver) {
         mocks.webhookMockReceiver.reset();
     }
+
+    mailService.GhostMailer.prototype.sendMail = originalMailServiceSendMail;
+
+    // Disable network again after restoring sinon
+    disableNetwork();
 };
 
 module.exports = {
@@ -193,14 +386,23 @@ module.exports = {
     mockMail,
     disableStripe,
     mockStripe,
+    mockSlack,
+    allowStripe,
+    mockGeojs,
+    mockMailgun,
     mockLabsEnabled,
     mockLabsDisabled,
     mockWebhookRequests,
     mockSetting,
+    mockLimitService,
+    restoreLimitService,
+    disableNetwork,
     restore,
+    stripeMocker,
     assert: {
-        sentEmailCount,
         sentEmail,
+        sentEmailCount,
         emittedEvent
-    }
+    },
+    getMailgunCreateMessageStub: () => mailgunCreateMessageStub
 };
